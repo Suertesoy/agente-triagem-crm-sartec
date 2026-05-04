@@ -314,6 +314,7 @@
       -webkit-box-orient: vertical;
       overflow: hidden;
       line-height: 1.4;
+      word-break: break-word;
     }
     .card-title:hover { background: #f0f4ff; }
     .card-title:focus {
@@ -327,6 +328,7 @@
       color: var(--text-muted);
       font-style: italic;
       font-weight: 400;
+      font-size: .75rem;
     }
 
     /* ─ Tags ─ */
@@ -1630,6 +1632,64 @@
       margin-left: auto;
       flex-shrink: 0;
     }
+
+    /* ══════════════════════════════════════════════════
+       BADGES DE PRIORIDADE
+    ══════════════════════════════════════════════════ */
+    .priority-badge {
+      font-size: .55rem;
+      font-weight: 800;
+      padding: 2px 6px;
+      border-radius: 20px;
+      text-transform: uppercase;
+      letter-spacing: .05em;
+      flex-shrink: 0;
+      white-space: nowrap;
+    }
+    .pb-critica { background: #fee2e2; color: #dc2626; }
+    .pb-alta    { background: #ffedd5; color: #ea580c; }
+    .pb-media   { background: #fef3c7; color: #d97706; }
+
+    /* ══════════════════════════════════════════════════
+       RESUMO DA CONVERSA — modal do atendente
+    ══════════════════════════════════════════════════ */
+    .modal-summary {
+      background: #f0f7ff;
+      border-left: 3px solid var(--brand-navy);
+      border-bottom: 1px solid var(--border);
+      flex-shrink: 0;
+    }
+    .modal-summary summary {
+      padding: 7px 14px;
+      font-size: .72rem;
+      font-weight: 700;
+      color: var(--brand-navy);
+      cursor: pointer;
+      user-select: none;
+      list-style: none;
+      display: flex;
+      align-items: center;
+      gap: 5px;
+    }
+    .modal-summary summary::before { content: "▶"; font-size: .55rem; transition: transform .2s; }
+    .modal-summary[open] summary::before { transform: rotate(90deg); }
+    .modal-summary summary::-webkit-details-marker { display: none; }
+    .modal-summary-body {
+      padding: 2px 14px 10px;
+      display: flex;
+      flex-direction: column;
+      gap: 5px;
+    }
+    .modal-summary-item {
+      display: flex;
+      gap: 6px;
+      line-height: 1.45;
+      font-size: .72rem;
+      color: var(--text-primary);
+    }
+    .modal-summary-item .sum-icon { flex-shrink: 0; }
+    .modal-summary-item .sum-text { flex: 1; word-break: break-word; }
+    .sum-label { font-weight: 700; color: var(--text-secondary); margin-right: 3px; }
   </style>
 </head>
 <body>
@@ -2103,6 +2163,33 @@ function isUrgent(iso) {
   return iso && (Date.now() - new Date(iso)) > 10 * 60 * 1000;
 }
 
+// ── Sistema de prioridade ────────────────────────────────────────
+const PRIORITY_ORDER = { critica: 0, alta: 1, media: 2, baixa: 3 };
+const IRRITATION_SIGNALS = [
+  "absurdo","irritad","rid\u00edculo","ridiculo","vergonha","demora",
+  "p\u00e9ssimo","pessimo","horr\u00edvel","horrivel","cancelar",
+  "desistir","reclamar","inaceit\u00e1vel","inaceitavel","deploravel",
+];
+
+function computePriority(conv) {
+  const waitMs      = conv.handoffAt ? Date.now() - new Date(conv.handoffAt) : 0;
+  const lastMsgLow  = (conv.lastMessage || "").toLowerCase();
+  const isPJ        = conv.clientType === "pj";
+  const isHandoff   = conv.status === "aguardando_humano";
+  const hasAnger    = IRRITATION_SIGNALS.some(s => lastMsgLow.includes(s));
+
+  if (isHandoff && (hasAnger || (isPJ && waitMs > 30 * 60 * 1000))) {
+    return { level: "critica", label: "Cr\u00edtica", cls: "pb-critica" };
+  }
+  if (isPJ || waitMs > 20 * 60 * 1000 || conv.messageCount > 15 || conv.demandType === "cotacao_pj") {
+    return { level: "alta", label: "Alta", cls: "pb-alta" };
+  }
+  if (waitMs > 5 * 60 * 1000 || (conv.demandType && conv.demandType !== "outro")) {
+    return { level: "media", label: "M\u00e9dia", cls: "pb-media" };
+  }
+  return { level: "baixa", label: "Baixa", cls: "" };
+}
+
 function initials(name) {
   if (!name || name === "—") return "?";
   const parts = name.trim().split(" ");
@@ -2138,7 +2225,25 @@ function playNotificationSound() {
     gain.gain.exponentialRampToValueAtTime(0.001, audioCtx.currentTime + 0.3);
     osc.start(audioCtx.currentTime);
     osc.stop(audioCtx.currentTime + 0.3);
-  } catch (e) { /* sem suporte a áudio */ }
+  } catch (e) { /* sem suporte a \u00e1udio */ }
+}
+
+function playPrioritySound() {
+  try {
+    if (!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+    [1100, 820].forEach((freq, i) => {
+      const osc  = audioCtx.createOscillator();
+      const gain = audioCtx.createGain();
+      osc.connect(gain);
+      gain.connect(audioCtx.destination);
+      const t = audioCtx.currentTime + i * 0.28;
+      osc.frequency.setValueAtTime(freq, t);
+      gain.gain.setValueAtTime(0.3, t);
+      gain.gain.exponentialRampToValueAtTime(0.001, t + 0.24);
+      osc.start(t);
+      osc.stop(t + 0.24);
+    });
+  } catch (e) { /* sem suporte a \u00e1udio */ }
 }
 
 function updateDocTitle(convs) {
@@ -2203,10 +2308,21 @@ function updateHeader(convs) {
 function detectNewCards(convs) {
   const newPhones = new Set(convs.map(c => c.phone));
   let hasNew = false;
+  let hasHighPriority = false;
   for (const p of newPhones) {
-    if (!knownPhones.has(p)) { hasNew = true; break; }
+    if (!knownPhones.has(p)) {
+      hasNew = true;
+      const conv = convs.find(c => c.phone === p);
+      if (conv) {
+        const { level } = computePriority(conv);
+        if (level === "critica" || level === "alta") hasHighPriority = true;
+      }
+    }
   }
-  if (hasNew && knownPhones.size > 0) playNotificationSound();
+  if (hasNew && knownPhones.size > 0) {
+    if (hasHighPriority) playPrioritySound();
+    else playNotificationSound();
+  }
   knownPhones = newPhones;
 }
 
@@ -2258,6 +2374,15 @@ function renderPipelineTab(tabId, cols, convs) {
 
   for (const col of cols) {
     const cards = byCol[col.key] || [];
+    // Ordena por prioridade (crítica primeiro) e depois por tempo de espera
+    cards.sort((a, b) => {
+      const pa = PRIORITY_ORDER[computePriority(a).level] ?? 3;
+      const pb = PRIORITY_ORDER[computePriority(b).level] ?? 3;
+      if (pa !== pb) return pa - pb;
+      if (!a.handoffAt) return 1;
+      if (!b.handoffAt) return -1;
+      return new Date(a.handoffAt) - new Date(b.handoffAt);
+    });
     const hasUrgent = !col.resolved && cards.some(c =>
       c.status === "aguardando_humano" && isUrgent(c.handoffAt)
     );
@@ -2312,7 +2437,11 @@ function buildCard(c, col, cols) {
     `<option value="${col.key}"${col.key === (c.pipelineStatus||"novo") ? " selected" : ""}>${col.label}</option>`
   ).join("");
 
-  const cardTitle = c.cardTitle || "";
+  const cardTitle  = c.cardTitle || "";
+  const priority   = computePriority(c);
+  const priBadge   = priority.cls
+    ? `<span class="priority-badge ${priority.cls}">${priority.label}</span>`
+    : "";
 
   card.innerHTML = `
     <div class="card-top">
@@ -2320,16 +2449,17 @@ function buildCard(c, col, cols) {
       <span class="card-name" contenteditable="true" data-phone="${esc(c.phone)}"
         onblur="saveCardField(this,'clientName')"
         onkeydown="if(event.key==='Enter'){event.preventDefault();this.blur()}"
-        title="Clique para editar o nome">${esc(c.clientName)}</span>
+        title="${esc(c.clientName)} — clique para editar">${esc(c.clientName)}</span>
       ${urgent
         ? `<span class="card-time urgent">⚠️ ${relTime(c.handoffAt)}</span>`
         : `<span class="card-time">${relTime(c.handoffAt)}</span>`}
+      ${priBadge}
     </div>
 
     <div class="card-title" contenteditable="true" data-phone="${esc(c.phone)}"
       onblur="saveCardField(this,'cardTitle')"
       onkeydown="if(event.key==='Enter'){event.preventDefault();this.blur()}"
-      title="Clique para editar o resumo do pedido">${esc(cardTitle)}</div>
+      title="${cardTitle ? esc(cardTitle) + ' — clique para editar' : 'Clique para adicionar resumo do pedido'}">${esc(cardTitle)}</div>
 
     <div style="display:flex;align-items:center;gap:3px;flex-wrap:wrap;margin-bottom:2px">
       <select class="demand-select ${demandClass(c.demandType)}"
@@ -2497,6 +2627,34 @@ async function refreshModal() {
   } catch (e) { console.error("[refreshModal]", e); }
 }
 
+// ── Gera resumo para o atendente (dados já carregados, sem chamada extra à IA) ──
+function buildSummaryHTML(data) {
+  const titleStr  = data.cardTitle
+    ? esc(data.cardTitle)
+    : esc(demandLabel(data.demandType));
+
+  const lastUserMsg = [...(data.history || [])].reverse().find(m => m.role === "user");
+  const lastMsgRaw  = lastUserMsg && typeof lastUserMsg.content === "string"
+    ? lastUserMsg.content.replace(/\s+/g, " ").trim()
+    : null;
+  const lastMsgStr  = lastMsgRaw
+    ? '\u201c' + esc(lastMsgRaw.substring(0, 90)) + (lastMsgRaw.length > 90 ? "\u2026" : "") + '\u201d'
+    : null;
+
+  const waitStr   = data.handoffAt ? relTime(data.handoffAt) : "\u2014";
+  const statusStr = pipelineLabel(data.pipelineStatus, data.clientType);
+
+  const rows = [
+    `<div class="modal-summary-item"><span class="sum-icon">🎯</span><span class="sum-text"><span class="sum-label">Quer:</span>${titleStr}</span></div>`,
+    lastMsgStr
+      ? `<div class="modal-summary-item"><span class="sum-icon">💬</span><span class="sum-text"><span class="sum-label">\u00daltima msg:</span>${lastMsgStr}</span></div>`
+      : "",
+    `<div class="modal-summary-item"><span class="sum-icon">\u23F1</span><span class="sum-text"><span class="sum-label">Aguardando:</span>${waitStr} \u00b7 ${statusStr}</span></div>`,
+  ].filter(Boolean).join("");
+
+  return `<summary>\uD83D\uDCCB Resumo para o atendente</summary><div class="modal-summary-body">${rows}</div>`;
+}
+
 function renderModal(data) {
   document.getElementById("modal-chat-name").textContent =
     data.clientName || data.phone || "—";
@@ -2511,6 +2669,23 @@ function renderModal(data) {
   updateWindowUI("modal", data);
 
   populateDadosForm("modal", data);
+
+  // ── Resumo colapsável para o atendente ──
+  let summaryBlock = document.getElementById("modal-summary-block");
+  if (!summaryBlock) {
+    summaryBlock = document.createElement("details");
+    summaryBlock.id        = "modal-summary-block";
+    summaryBlock.className = "modal-summary";
+    const dadosSection = document.getElementById("modal-dados-section");
+    dadosSection.insertAdjacentElement("afterend", summaryBlock);
+  }
+  if (data.status === "aguardando_humano") {
+    summaryBlock.style.display = "";
+    summaryBlock.open = true;
+    summaryBlock.innerHTML = buildSummaryHTML(data);
+  } else {
+    summaryBlock.style.display = "none";
+  }
 
   const container = document.getElementById("modal-messages");
 
