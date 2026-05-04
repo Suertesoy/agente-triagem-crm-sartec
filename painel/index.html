@@ -2216,6 +2216,19 @@ function renderPipeline(convs) {
 
 function renderPipelineTab(tabId, cols, convs) {
   const container = document.getElementById(`pipeline-${tabId}`);
+
+  // Guard: se um campo editável dentro deste pipeline estiver em foco,
+  // adia a re-renderização para depois do blur — evita sobrescrever o que está sendo digitado.
+  const active = document.activeElement;
+  if (active && active.isContentEditable && container.contains(active)) {
+    const deferred = () => {
+      active.removeEventListener('blur', deferred);
+      renderPipelineTab(tabId, cols, convs);
+    };
+    active.addEventListener('blur', deferred);
+    return;
+  }
+
   container.innerHTML = "";
 
   if (!convs.length) {
