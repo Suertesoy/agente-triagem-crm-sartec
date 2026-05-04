@@ -18,7 +18,21 @@ function getRedis() {
   return redisClient;
 }
 
-const SESSION_TTL = 60 * 60 * 48;
+const SESSION_TTL = 60 * 60 * 24 * 30; // 30 dias
+
+async function withSessionLock(redis, phone, fn) {
+  const lockKey = `lock:sartec:${phone}`;
+  for (let i = 0; i < 20; i++) {
+    const ok = await redis.set(lockKey, "1", "NX", "EX", 15);
+    if (ok) {
+      try { return await fn(); }
+      finally { await redis.del(lockKey); }
+    }
+    await new Promise((r) => setTimeout(r, 150));
+  }
+  console.warn(`[Lock] ⚠️ Timeout +${phone}`);
+  return fn();
+}
 
 const VALID_PF = ["novo", "em_atendimento", "orcamento_enviado", "confirmado", "finalizado"];
 const VALID_PJ = ["novo", "cadastro", "em_cotacao", "proposta_enviada", "confirmado", "entregue"];
@@ -45,37 +59,41 @@ export default async function handler(req, res) {
   }
 
   try {
-    const redis   = getRedis();
-    const raw     = await redis.get(`sartec:${phone}`);
+    const redis = getRedis();
+    let notFound = false;
+    let savedSession;
+    await withSessionLock(redis, phone, async () => {
+      const raw = await redis.get(`sartec:${phone}`);
+      if (!raw) { notFound = true; return; }
 
-    if (!raw) {
-      return res.status(404).json({ error: "Conversa não encontrada" });
-    }
+      const session    = JSON.parse(raw);
+      const prevStatus = session.status;
 
-    const session          = JSON.parse(raw);
-    const prevStatus       = session.status;
+      session.pipelineStatus = pipelineStatus;
+      session.clientType     = type;
 
-    session.pipelineStatus = pipelineStatus;
-    session.clientType     = type;
+      // Reabrir: se estava resolvido/triagem_incompleta e voltou ao pipeline ativo
+      if (
+        (prevStatus === "resolvido" || prevStatus === "triagem_incompleta") &&
+        pipelineStatus !== "resolvido"
+      ) {
+        session.status     = "aguardando_humano";
+        session.resolvedAt = null;
+        console.log(`[update-status] 🔄 Reabertura: +${phone}`);
+      }
 
-    // Reabrir: se estava resolvido/triagem_incompleta e voltou ao pipeline ativo
-    if (
-      (prevStatus === "resolvido" || prevStatus === "triagem_incompleta") &&
-      pipelineStatus !== "resolvido"
-    ) {
-      session.status = "aguardando_humano";
-      session.resolvedAt = null;
-      console.log(`[update-status] 🔄 Reabertura: +${phone}`);
-    }
+      await redis.set(`sartec:${phone}`, JSON.stringify(session), "EX", SESSION_TTL);
+      savedSession = session;
+    });
 
-    await redis.set(`sartec:${phone}`, JSON.stringify(session), "EX", SESSION_TTL);
+    if (notFound) return res.status(404).json({ error: "Conversa não encontrada" });
 
     console.log(`[update-status] ✅ +${phone} → ${pipelineStatus} (${type})`);
     return res.status(200).json({
       success: true,
       pipelineStatus,
       clientType: type,
-      status: session.status,
+      status: savedSession.status,
     });
   } catch (err) {
     console.error("[update-status] ❌", err.message);

@@ -159,7 +159,19 @@
       gap: 12px;
       min-width: max-content;
     }
-    .pipe-col { width: 272px; flex-shrink: 0; display: flex; flex-direction: column; }
+    .pipe-col {
+      width: 272px;
+      flex-shrink: 0;
+      display: flex;
+      flex-direction: column;
+      border-radius: 12px;
+      transition: background .15s, outline .15s;
+    }
+    .pipe-col.drag-over {
+      background: #eef2ff;
+      outline: 2px dashed var(--brand-navy-mid);
+      outline-offset: -3px;
+    }
 
     .pipe-col-header {
       display: flex;
@@ -195,12 +207,8 @@
       flex-direction: column;
       gap: 8px;
       min-height: 60px;
-    }
-    .pipe-col-cards.drag-over {
-      background: #eef2ff;
-      outline: 2px dashed var(--brand-navy-mid);
-      outline-offset: -3px;
-      border-radius: 10px;
+      flex: 1;
+      padding-bottom: 8px;
     }
     .card.dragging { opacity: .45; pointer-events: none; }
 
@@ -2565,39 +2573,26 @@ function renderPipelineTab(tabId, cols, convs) {
 
     const colEl = document.createElement("div");
     colEl.className = "pipe-col" + (col.resolved ? " col-resolvido" : "");
-
-    // Header
-    const hdr = document.createElement("div");
-    hdr.className = "pipe-col-header";
-    const countEl = document.createElement("span");
-    countEl.className = "pipe-col-count" + (hasUrgent ? " has-urgent" : "");
-    countEl.textContent = cards.length;
-    hdr.innerHTML = `<span class="pipe-col-dot" style="background:${col.color}"></span><span class="pipe-col-label">${esc(col.label)}</span>`;
-    hdr.appendChild(countEl);
-    colEl.appendChild(hdr);
-
-    const cardsEl = document.createElement("div");
-    cardsEl.className = "pipe-col-cards";
-    cardsEl.dataset.colKey      = col.key;
-    cardsEl.dataset.colResolved = col.resolved ? "1" : "0";
-    cardsEl.addEventListener("dragover", (e) => {
+    colEl.dataset.colKey      = col.key;
+    colEl.dataset.colResolved = col.resolved ? "1" : "0";
+    colEl.addEventListener("dragover", (e) => {
       if (!_dragPhone) return;
       e.preventDefault();
       e.dataTransfer.dropEffect = "move";
-      cardsEl.classList.add("drag-over");
+      colEl.classList.add("drag-over");
     });
-    cardsEl.addEventListener("dragleave", (e) => {
-      if (!cardsEl.contains(e.relatedTarget)) cardsEl.classList.remove("drag-over");
+    colEl.addEventListener("dragleave", (e) => {
+      if (!colEl.contains(e.relatedTarget)) colEl.classList.remove("drag-over");
     });
-    cardsEl.addEventListener("drop", async (e) => {
+    colEl.addEventListener("drop", async (e) => {
       e.preventDefault();
-      cardsEl.classList.remove("drag-over");
+      colEl.classList.remove("drag-over");
       if (!_dragPhone) return;
       const phone      = _dragPhone;
       const clientType = _dragClientType;
       _dragPhone = null;
-      const targetKey     = cardsEl.dataset.colKey;
-      const isResolvedCol = cardsEl.dataset.colResolved === "1";
+      const targetKey     = colEl.dataset.colKey;
+      const isResolvedCol = colEl.dataset.colResolved === "1";
       const conv = allConvs.find(c => c.phone === phone);
       if (!conv || conv.status === "resolvido") return;
       if ((conv.pipelineStatus || "novo") === targetKey && !isResolvedCol) return;
@@ -2616,6 +2611,19 @@ function renderPipelineTab(tabId, cols, convs) {
         } catch { showToast("Erro ao mover card", "t-err"); loadQueue(); }
       }
     });
+
+    // Header
+    const hdr = document.createElement("div");
+    hdr.className = "pipe-col-header";
+    const countEl = document.createElement("span");
+    countEl.className = "pipe-col-count" + (hasUrgent ? " has-urgent" : "");
+    countEl.textContent = cards.length;
+    hdr.innerHTML = `<span class="pipe-col-dot" style="background:${col.color}"></span><span class="pipe-col-label">${esc(col.label)}</span>`;
+    hdr.appendChild(countEl);
+    colEl.appendChild(hdr);
+
+    const cardsEl = document.createElement("div");
+    cardsEl.className = "pipe-col-cards";
 
     if (!cards.length) {
       const empty = document.createElement("div");

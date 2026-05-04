@@ -19,7 +19,21 @@ function getRedis() {
   return redisClient;
 }
 
-const SESSION_TTL = 60 * 60 * 48;
+const SESSION_TTL = 60 * 60 * 24 * 30; // 30 dias
+
+async function withSessionLock(redis, phone, fn) {
+  const lockKey = `lock:sartec:${phone}`;
+  for (let i = 0; i < 20; i++) {
+    const ok = await redis.set(lockKey, "1", "NX", "EX", 15);
+    if (ok) {
+      try { return await fn(); }
+      finally { await redis.del(lockKey); }
+    }
+    await new Promise((r) => setTimeout(r, 150));
+  }
+  console.warn(`[Lock] ⚠️ Timeout +${phone}`);
+  return fn();
+}
 
 export default async function handler(req, res) {
   if (req.method !== "POST") {
@@ -34,17 +48,21 @@ export default async function handler(req, res) {
 
   try {
     const redis = getRedis();
-    const raw   = await redis.get(`sartec:${phone}`);
+    let notFound = false;
+    let resolvedAt;
+    await withSessionLock(redis, phone, async () => {
+      const raw = await redis.get(`sartec:${phone}`);
+      if (!raw) { notFound = true; return; }
 
-    if (!raw) {
-      return res.status(404).json({ error: "Conversa não encontrada" });
-    }
+      const session      = JSON.parse(raw);
+      session.status     = "resolvido";
+      session.resolvedAt = new Date().toISOString();
+      resolvedAt         = session.resolvedAt;
 
-    const session      = JSON.parse(raw);
-    session.status     = "resolvido";
-    session.resolvedAt = new Date().toISOString();
+      await redis.set(`sartec:${phone}`, JSON.stringify(session), "EX", SESSION_TTL);
+    });
 
-    await redis.set(`sartec:${phone}`, JSON.stringify(session), "EX", SESSION_TTL);
+    if (notFound) return res.status(404).json({ error: "Conversa não encontrada" });
 
     // Arquivar em background — não bloqueia a resposta
     archiveSession(phone).catch((err) =>
@@ -52,7 +70,7 @@ export default async function handler(req, res) {
     );
 
     console.log(`[resolve] ✅ +${phone} marcado como resolvido`);
-    return res.status(200).json({ success: true, resolvedAt: session.resolvedAt });
+    return res.status(200).json({ success: true, resolvedAt });
   } catch (err) {
     console.error("[resolve] ❌", err.message);
     return res.status(500).json({ error: "Erro ao resolver conversa", detail: err.message });

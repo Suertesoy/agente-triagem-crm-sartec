@@ -129,6 +129,7 @@ export default async function handler(req, res) {
         cardTitle:      session.cardTitle       || "",
         lastMessage:    lastMessage.substring(0, 200),
         messageCount:   (session.history || []).length,
+        priorityManual: session.priorityManual  || null,
         ...computeWindowInfo(session),
       });
     }

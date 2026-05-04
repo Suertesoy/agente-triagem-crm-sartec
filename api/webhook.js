@@ -234,7 +234,7 @@ Após coletar, faça handoff.
 ## SITUAÇÕES ESPECIAIS
 
 **Fora do horário:**
-> "Estamos fechados agora 🕐 Horário: Seg-sex 8h30-18h30, Sáb 9h-14h. Posso adiantar coletando sua lista, dados ou tirando dúvidas. A equipe retoma quando abrirmos."
+> "Estamos fechados agora 🕐 Eu sou o assistente virtual da Sartec e posso adiantar seu atendimento por aqui. Me manda o que você precisa, que eu organizo as informações para a equipe continuar quando a loja abrir."
 
 **Cliente pede humano:**
 > "Claro! Vou passar você para nossa equipe agora 🤝"
@@ -335,6 +335,20 @@ async function saveSession(phone, session) {
   } catch (err) {
     console.error("[Sessão] ❌ Erro ao salvar:", err.message);
   }
+}
+
+async function withSessionLock(redis, phone, fn) {
+  const lockKey = `lock:sartec:${phone}`;
+  for (let i = 0; i < 20; i++) {
+    const ok = await redis.set(lockKey, "1", "NX", "EX", 15);
+    if (ok) {
+      try { return await fn(); }
+      finally { await redis.del(lockKey); }
+    }
+    await new Promise((r) => setTimeout(r, 150));
+  }
+  console.warn(`[Lock] ⚠️ Timeout +${phone}`);
+  return fn();
 }
 
 // ============================================================
@@ -629,6 +643,7 @@ async function downloadMedia(mediaId) {
 // ============================================================
 
 async function chatWithAgent(phone, userText, mediaPayload = null, name = "") {
+  return withSessionLock(getRedis(), phone, async () => {
   const session  = await loadSession(phone);
 
   // ── Janela de 24h ─────────────────────────────────────────────────────────
@@ -709,6 +724,7 @@ async function chatWithAgent(phone, userText, mediaPayload = null, name = "") {
   );
 
   return reply;
+  });
 }
 
 // ============================================================
@@ -783,34 +799,37 @@ async function handleIncomingMessage(req, res) {
 
           // ── ÁUDIO — dois estágios, sem chamar Claude ─────────
           if (type === "audio") {
-            const session = await loadSession(from);
-            // Áudio é mensagem do cliente → reinicia janela de 24h
-            const _audioNow = new Date();
-            session.lastUserMessageAt = _audioNow.toISOString();
-            session.windowExpiresAt   = new Date(_audioNow.getTime() + 24 * 60 * 60 * 1000).toISOString();
-            if (session.templateWaitingReply) {
-              session.templateWaitingReply = false;
-              console.log(`[Audio] 🔓 Template respondido (áudio) — janela reaberta: +${from}`);
-            }
-            session.audioCount = (session.audioCount || 0) + 1;
+            const audioReply = await withSessionLock(getRedis(), from, async () => {
+              const session = await loadSession(from);
+              // Áudio é mensagem do cliente → reinicia janela de 24h
+              const _audioNow = new Date();
+              session.lastUserMessageAt = _audioNow.toISOString();
+              session.windowExpiresAt   = new Date(_audioNow.getTime() + 24 * 60 * 60 * 1000).toISOString();
+              if (session.templateWaitingReply) {
+                session.templateWaitingReply = false;
+                console.log(`[Audio] 🔓 Template respondido (áudio) — janela reaberta: +${from}`);
+              }
+              session.audioCount = (session.audioCount || 0) + 1;
 
-            let reply;
-            if (session.audioCount === 1) {
-              reply = "Tive dificuldade pra entender seu áudio 🙏 Consegue mandar por escrito?";
-            } else {
-              reply = "Não consigo ouvir áudios por aqui 🙏 Vou te passar para nossa equipe que vai te atender diretamente 🤝";
-              session.handoffDone          = true;
-              session.postHandoffReplySent = false;
-              session.status               = "aguardando_humano";
-              session.clientName           = name;
-              session.clientPhone          = from;
-              session.demandType           = session.demandType || "outro";
-              session.handoffAt            = session.handoffAt  || new Date().toISOString();
-              if (!session.cardTitle)      session.cardTitle    = generateCardTitle(session);
-            }
+              let reply;
+              if (session.audioCount === 1) {
+                reply = "Tive dificuldade pra entender seu áudio 🙏 Consegue mandar por escrito?";
+              } else {
+                reply = "Não consigo ouvir áudios por aqui 🙏 Vou te passar para nossa equipe que vai te atender diretamente 🤝";
+                session.handoffDone          = true;
+                session.postHandoffReplySent = false;
+                session.status               = "aguardando_humano";
+                session.clientName           = name;
+                session.clientPhone          = from;
+                session.demandType           = session.demandType || "outro";
+                session.handoffAt            = session.handoffAt  || new Date().toISOString();
+                if (!session.cardTitle)      session.cardTitle    = generateCardTitle(session);
+              }
 
-            await saveSession(from, session);
-            await sendTextMessage(from, reply);
+              await saveSession(from, session);
+              return reply;
+            });
+            await sendTextMessage(from, audioReply);
             continue;
           }
 
@@ -845,15 +864,17 @@ async function handleIncomingMessage(req, res) {
           if (type === "document") {
             // Mensagem do cliente → reinicia janela de 24h
             try {
-              const _docSession = await loadSession(from);
-              const _docNow = new Date();
-              _docSession.lastUserMessageAt = _docNow.toISOString();
-              _docSession.windowExpiresAt   = new Date(_docNow.getTime() + 24 * 60 * 60 * 1000).toISOString();
-              if (_docSession.templateWaitingReply) {
-                _docSession.templateWaitingReply = false;
-                console.log(`[Doc] 🔓 Template respondido (doc) — janela reaberta: +${from}`);
-              }
-              await saveSession(from, _docSession);
+              await withSessionLock(getRedis(), from, async () => {
+                const _docSession = await loadSession(from);
+                const _docNow = new Date();
+                _docSession.lastUserMessageAt = _docNow.toISOString();
+                _docSession.windowExpiresAt   = new Date(_docNow.getTime() + 24 * 60 * 60 * 1000).toISOString();
+                if (_docSession.templateWaitingReply) {
+                  _docSession.templateWaitingReply = false;
+                  console.log(`[Doc] 🔓 Template respondido (doc) — janela reaberta: +${from}`);
+                }
+                await saveSession(from, _docSession);
+              });
             } catch (_e) { console.error("[Doc/window] ❌", _e.message); }
             await sendTextMessage(from, "Recebi seu arquivo 📎 Vou passar para a equipe dar uma olhada 🤝");
             continue;

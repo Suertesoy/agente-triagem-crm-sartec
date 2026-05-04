@@ -21,7 +21,7 @@ function getRedis() {
   return redisClient;
 }
 
-const SESSION_TTL = 60 * 60 * 48;
+const SESSION_TTL = 60 * 60 * 24 * 30; // 30 dias
 
 // Vercel: aceita body até 10 MB para suportar imagens em base64
 export const config = {
@@ -283,19 +283,35 @@ async function sendDocument(req, res, body, PHONE_NUMBER_ID, ACCESS_TOKEN) {
   return res.status(200).json({ success: true });
 }
 
+async function withSessionLock(redis, phone, fn) {
+  const lockKey = `lock:sartec:${phone}`;
+  for (let i = 0; i < 20; i++) {
+    const ok = await redis.set(lockKey, "1", "NX", "EX", 15);
+    if (ok) {
+      try { return await fn(); }
+      finally { await redis.del(lockKey); }
+    }
+    await new Promise((r) => setTimeout(r, 150));
+  }
+  console.warn(`[Lock] ⚠️ Timeout +${phone}`);
+  return fn();
+}
+
 // ── Salvar no Redis ───────────────────────────────────────
 async function saveToHistory(phone, message) {
   try {
     const redis = getRedis();
-    const raw   = await redis.get(`sartec:${phone}`);
-    if (!raw) return;
+    await withSessionLock(redis, phone, async () => {
+      const raw = await redis.get(`sartec:${phone}`);
+      if (!raw) return;
 
-    const session = JSON.parse(raw);
-    session.history.push(message);
-    session.lastHumanReply = new Date().toISOString();
-    session.lastDate       = new Date().toISOString().slice(0, 10);
+      const session = JSON.parse(raw);
+      session.history.push(message);
+      session.lastHumanReply = new Date().toISOString();
+      session.lastDate       = new Date().toISOString().slice(0, 10);
 
-    await redis.set(`sartec:${phone}`, JSON.stringify(session), "EX", SESSION_TTL);
+      await redis.set(`sartec:${phone}`, JSON.stringify(session), "EX", SESSION_TTL);
+    });
   } catch (err) {
     console.error("[send/saveToHistory] ❌", err.message);
   }

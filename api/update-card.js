@@ -19,7 +19,21 @@ function getRedis() {
   return redisClient;
 }
 
-const SESSION_TTL = 60 * 60 * 48;
+const SESSION_TTL = 60 * 60 * 24 * 30; // 30 dias
+
+async function withSessionLock(redis, phone, fn) {
+  const lockKey = `lock:sartec:${phone}`;
+  for (let i = 0; i < 20; i++) {
+    const ok = await redis.set(lockKey, "1", "NX", "EX", 15);
+    if (ok) {
+      try { return await fn(); }
+      finally { await redis.del(lockKey); }
+    }
+    await new Promise((r) => setTimeout(r, 150));
+  }
+  console.warn(`[Lock] ⚠️ Timeout +${phone}`);
+  return fn();
+}
 
 // Campos aceitos — merge parcial
 const ALLOWED_FIELDS = [
@@ -34,6 +48,7 @@ const ALLOWED_FIELDS = [
   "cardTitle",
   "demandType",
   "clientType",
+  "priorityManual",
 ];
 
 export default async function handler(req, res) {
@@ -50,34 +65,38 @@ export default async function handler(req, res) {
 
   try {
     const redis = getRedis();
-    const raw   = await redis.get(`sartec:${phone}`);
+    let notFound = false;
+    let savedSession;
+    let updated = [];
+    await withSessionLock(redis, phone, async () => {
+      const raw = await redis.get(`sartec:${phone}`);
+      if (!raw) { notFound = true; return; }
 
-    if (!raw) {
-      return res.status(404).json({ error: "Conversa não encontrada" });
-    }
+      const session = JSON.parse(raw);
 
-    const session = JSON.parse(raw);
-
-    const updated = [];
-    for (const field of ALLOWED_FIELDS) {
-      if (body[field] !== undefined) {
-        session[field] = body[field];
-        updated.push(field);
+      for (const field of ALLOWED_FIELDS) {
+        if (body[field] !== undefined) {
+          session[field] = body[field];
+          updated.push(field);
+        }
       }
-    }
 
-    await redis.set(`sartec:${phone}`, JSON.stringify(session), "EX", SESSION_TTL);
+      await redis.set(`sartec:${phone}`, JSON.stringify(session), "EX", SESSION_TTL);
+      savedSession = session;
+    });
+
+    if (notFound) return res.status(404).json({ error: "Conversa não encontrada" });
 
     console.log(`[update-card] ✅ +${phone} | ${updated.join(", ")}`);
     return res.status(200).json({
       success: true,
       updated,
       // Retorna os campos atuais para o painel atualizar sem novo polling
-      clientName:     session.clientName     || "—",
-      cardTitle:      session.cardTitle      || "",
-      demandType:     session.demandType     || "outro",
-      clientType:     session.clientType     || "pf",
-      pipelineStatus: session.pipelineStatus || "novo",
+      clientName:     savedSession.clientName     || "—",
+      cardTitle:      savedSession.cardTitle      || "",
+      demandType:     savedSession.demandType     || "outro",
+      clientType:     savedSession.clientType     || "pf",
+      pipelineStatus: savedSession.pipelineStatus || "novo",
     });
   } catch (err) {
     console.error("[update-card] ❌", err.message);

@@ -71,6 +71,25 @@
 - Mensagens de commit devem ser claras e descritivas
 - Sempre explicar o que será feito antes de executar `git push`
 
+## Git Behavior
+Não sugerir nem executar comandos de Git automaticamente quando:
+
+* Não houver alterações recentes feitas pelo próprio agente
+* O repositório estiver limpo (working tree clean)
+* O usuário não pediu explicitamente algo relacionado a Git
+
+Evitar loops de validação como:
+git status
+git log
+git pull
+
+Após um push bem-sucedido, considerar o fluxo de Git finalizado.
+
+Só interagir com Git novamente se:
+
+* O usuário pedir
+* Uma nova alteração de código for feita
+
 ---
 
 ## Prioridades do projeto
