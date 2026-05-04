@@ -196,6 +196,13 @@
       gap: 8px;
       min-height: 60px;
     }
+    .pipe-col-cards.drag-over {
+      background: #eef2ff;
+      outline: 2px dashed var(--brand-navy-mid);
+      outline-offset: -3px;
+      border-radius: 10px;
+    }
+    .card.dragging { opacity: .45; pointer-events: none; }
 
     /* Coluna resolvidos — visual mais discreto */
     .pipe-col.col-resolvido .pipe-col-label { opacity: .65; }
@@ -251,6 +258,24 @@
       border-left-color: var(--status-resolvido);
     }
     .card.triagem_incompleta { border-left-color: var(--warn-color); }
+    .card.warn-10 {
+      border-left-color: #d97706;
+      background: linear-gradient(to right, #fffbeb 0%, var(--bg-card) 25%);
+    }
+    .card.forgotten {
+      border-left-color: #991b1b;
+      background: linear-gradient(to right, #fef2f2 0%, var(--bg-card) 30%);
+    }
+    .tag-forgotten {
+      font-size: .55rem;
+      font-weight: 800;
+      padding: 2px 6px;
+      border-radius: 20px;
+      background: #fee2e2;
+      color: #991b1b;
+      white-space: nowrap;
+      flex-shrink: 0;
+    }
 
     /* ─ Card top ─ */
     .card-top {
@@ -296,6 +321,7 @@
       flex-shrink: 0;
     }
     .card-time.urgent { color: var(--brand-red); font-weight: 700; }
+    .card-time.warn   { color: #d97706; font-weight: 700; }
 
     /* ─ Card title editável — único resumo do pedido ─ */
     .card-title {
@@ -429,6 +455,89 @@
       margin-top: 7px;
       font-size: .65rem;
       color: var(--text-muted);
+    }
+
+    .card-last-msg {
+      font-size: .68rem;
+      color: var(--text-secondary);
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+      margin: 2px 0 6px;
+      font-style: italic;
+      opacity: .85;
+    }
+    .card-quick-row {
+      display: flex;
+      gap: 5px;
+      margin-top: 5px;
+    }
+    .btn-qr {
+      flex: 1;
+      font-size: .65rem;
+      font-weight: 700;
+      padding: 4px 6px;
+      border-radius: 6px;
+      border: 1px solid var(--border);
+      background: var(--bg-sidebar);
+      color: var(--text-secondary);
+      cursor: pointer;
+      transition: background .12s;
+    }
+    .btn-qr:hover   { background: var(--border); }
+    .btn-qr.btn-qr-resolve { border-color: #fca5a5; color: #b91c1c; background: #fff1f2; }
+    .btn-qr.btn-qr-resolve:hover { background: #fee2e2; }
+    .btn-qr:disabled { opacity: .45; cursor: not-allowed; }
+    .card-quick-reply { margin-top: 6px; display: flex; flex-direction: column; gap: 5px; }
+    .card-quick-reply.hidden { display: none; }
+    .qr-input {
+      width: 100%;
+      font-size: .75rem;
+      padding: 6px 8px;
+      border: 1px solid var(--border);
+      border-radius: 7px;
+      resize: none;
+      font-family: inherit;
+      color: var(--text-primary);
+      box-sizing: border-box;
+    }
+    .qr-input:focus { outline: 2px solid var(--brand-navy); border-color: transparent; }
+    .qr-row { display: flex; gap: 5px; justify-content: flex-end; }
+    .qr-cancel { font-size: .68rem; padding: 3px 9px; border-radius: 5px; border: 1px solid var(--border); background: #fff; cursor: pointer; }
+    .qr-send   { font-size: .68rem; padding: 3px 9px; border-radius: 5px; border: none; background: var(--brand-navy); color: #fff; cursor: pointer; font-weight: 700; }
+    .qr-send:disabled { opacity: .55; cursor: not-allowed; }
+
+    /* ── Toast de feedback ── */
+    #toast-container {
+      position: fixed;
+      bottom: 24px;
+      right: 24px;
+      z-index: 9999;
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+      pointer-events: none;
+    }
+    .toast {
+      background: #1e293b;
+      color: #f8fafc;
+      padding: 10px 16px;
+      border-radius: 9px;
+      font-size: .8rem;
+      font-weight: 600;
+      box-shadow: 0 4px 16px rgba(0,0,0,.2);
+      animation: toast-in .2s ease;
+      pointer-events: auto;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      max-width: 280px;
+    }
+    .toast.t-ok  { border-left: 3px solid #10b981; }
+    .toast.t-err { border-left: 3px solid #ef4444; }
+    @keyframes toast-in {
+      from { opacity: 0; transform: translateY(8px); }
+      to   { opacity: 1; transform: translateY(0); }
     }
 
     /* Demand dropdown inline no card */
@@ -655,6 +764,20 @@
     .ws-icon   { font-size: .95rem; flex-shrink: 0; line-height: 1; }
     .ws-label  { font-weight: 700; }
     .ws-detail { font-size: .7rem; font-weight: 400; opacity: .8; }
+
+    .dupe-tab-warning {
+      background: #fef3c7;
+      border-bottom: 2px solid #f59e0b;
+      color: #92400e;
+      padding: 8px 16px;
+      font-size: .78rem;
+      font-weight: 600;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      flex-shrink: 0;
+    }
+    .dupe-tab-warning.hidden { display: none; }
 
     /* ── Lock do compositor quando janela fechada ── */
     .composer-lock-bar {
@@ -1649,6 +1772,37 @@
     .pb-critica { background: #fee2e2; color: #dc2626; }
     .pb-alta    { background: #ffedd5; color: #ea580c; }
     .pb-media   { background: #fef3c7; color: #d97706; }
+    .pb-baixa   { background: #f1f5f9; color: #64748b; }
+    .priority-badge { cursor: pointer; }
+    .priority-badge.pri-manual { outline: 1px dashed currentColor; outline-offset: 1px; }
+
+    #priority-picker {
+      position: fixed;
+      z-index: 600;
+      background: var(--bg-card);
+      border: 1px solid var(--border);
+      border-radius: 9px;
+      box-shadow: 0 4px 16px rgba(0,0,0,.13);
+      padding: 4px;
+      min-width: 134px;
+    }
+    #priority-picker.hidden { display: none; }
+    .pri-option {
+      display: block;
+      width: 100%;
+      text-align: left;
+      padding: 6px 10px;
+      font-size: .75rem;
+      font-weight: 600;
+      border: none;
+      background: none;
+      border-radius: 6px;
+      cursor: pointer;
+      color: var(--text-primary);
+    }
+    .pri-option:hover { background: var(--bg-sidebar); }
+    .pri-option.pri-reset { color: var(--text-muted); font-weight: 400; font-size: .7rem; }
+    .pri-divider { height: 1px; background: var(--border); margin: 3px 4px; }
 
     /* ══════════════════════════════════════════════════
        RESUMO DA CONVERSA — modal do atendente
@@ -1782,6 +1936,9 @@
 
     <!-- Barra de janela de 24h -->
     <div class="window-status-bar ws-unknown" id="modal-window-bar"></div>
+    <div class="dupe-tab-warning hidden" id="modal-dupe-warning">
+      ⚠️ Esta conversa está aberta em outra aba. Evite editar ao mesmo tempo para não perder informações.
+    </div>
 
     <details class="dados-pedido" id="modal-dados-section">
       <summary>Dados do pedido</summary>
@@ -2020,6 +2177,14 @@
   </button>
 </div>
 
+<div id="priority-picker" class="hidden" role="menu">
+  <button class="pri-option" onclick="setPriorityManual('alta')">🟠 Alta</button>
+  <button class="pri-option" onclick="setPriorityManual('media')">🟡 Média</button>
+  <button class="pri-option" onclick="setPriorityManual('baixa')">⚪ Baixa</button>
+  <div class="pri-divider"></div>
+  <button class="pri-option pri-reset" onclick="setPriorityManual(null)">↺ Automático</button>
+</div>
+
 <!-- ══════ CONFIRM MODAL ══════ -->
 <div id="confirm-modal" class="hidden">
   <div class="confirm-box">
@@ -2110,6 +2275,8 @@ let countdownVal    = 30;
 let countdownTimer  = null;
 let convsPollTimer  = null;
 let resolveCallback = null;   // callback para o confirm modal
+let _dragPhone = null, _dragClientType = null;
+let _priPickerPhone = null;
 
 // mídia modal
 let mediaModalBase64 = null;
@@ -2172,6 +2339,14 @@ const IRRITATION_SIGNALS = [
 ];
 
 function computePriority(conv) {
+  if (conv.priorityManual) {
+    const MAP = {
+      alta:  { level: "alta",  label: "Alta",  cls: "pb-alta" },
+      media: { level: "media", label: "Média", cls: "pb-media" },
+      baixa: { level: "baixa", label: "Baixa", cls: "" },
+    };
+    return MAP[conv.priorityManual] ?? { level: "baixa", label: "Baixa", cls: "" };
+  }
   const waitMs      = conv.handoffAt ? Date.now() - new Date(conv.handoffAt) : 0;
   const lastMsgLow  = (conv.lastMessage || "").toLowerCase();
   const isPJ        = conv.clientType === "pj";
@@ -2258,6 +2433,7 @@ function updateDocTitle(convs) {
 // ╚══════════════════════════════════════════════════════════════╝
 function switchTab(tab) {
   currentTab = tab;
+  closeConvMenu();
   sessionStorage.setItem("activeTab", tab);
 
   ["pf","pj","convs"].forEach(t => {
@@ -2402,6 +2578,44 @@ function renderPipelineTab(tabId, cols, convs) {
 
     const cardsEl = document.createElement("div");
     cardsEl.className = "pipe-col-cards";
+    cardsEl.dataset.colKey      = col.key;
+    cardsEl.dataset.colResolved = col.resolved ? "1" : "0";
+    cardsEl.addEventListener("dragover", (e) => {
+      if (!_dragPhone) return;
+      e.preventDefault();
+      e.dataTransfer.dropEffect = "move";
+      cardsEl.classList.add("drag-over");
+    });
+    cardsEl.addEventListener("dragleave", (e) => {
+      if (!cardsEl.contains(e.relatedTarget)) cardsEl.classList.remove("drag-over");
+    });
+    cardsEl.addEventListener("drop", async (e) => {
+      e.preventDefault();
+      cardsEl.classList.remove("drag-over");
+      if (!_dragPhone) return;
+      const phone      = _dragPhone;
+      const clientType = _dragClientType;
+      _dragPhone = null;
+      const targetKey     = cardsEl.dataset.colKey;
+      const isResolvedCol = cardsEl.dataset.colResolved === "1";
+      const conv = allConvs.find(c => c.phone === phone);
+      if (!conv || conv.status === "resolvido") return;
+      if ((conv.pipelineStatus || "novo") === targetKey && !isResolvedCol) return;
+      if (isResolvedCol) {
+        quickResolveCard(phone);
+      } else {
+        conv.pipelineStatus = targetKey;
+        renderPipeline(allConvs);
+        try {
+          await fetch("/api/update-status", {
+            method: "PUT",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ phone, pipelineStatus: targetKey, clientType }),
+          });
+          showToast("Status atualizado");
+        } catch { showToast("Erro ao mover card", "t-err"); loadQueue(); }
+      }
+    });
 
     if (!cards.length) {
       const empty = document.createElement("div");
@@ -2422,12 +2636,19 @@ function renderPipelineTab(tabId, cols, convs) {
 function buildCard(c, col, cols) {
   const isResolved   = c.status === "resolvido";
   const isIncomplete = c.status === "triagem_incompleta";
-  const urgent       = !isResolved && !isIncomplete && c.pipelineStatus === "novo" && isUrgent(c.handoffAt);
   const clientType   = c.clientType || "pf";
+  const waitMs    = c.handoffAt ? Date.now() - new Date(c.handoffAt) : 0;
+  const isWaiting = !isResolved && !isIncomplete && c.status === "aguardando_humano";
+  const forgotten = isWaiting && waitMs > 120 * 60 * 1000;
+  const urgent    = isWaiting && waitMs > 30 * 60 * 1000 && !forgotten;
+  const warn10    = isWaiting && waitMs > 10 * 60 * 1000 && waitMs <= 30 * 60 * 1000;
+  const windowOpen = !c.conversationWindowStatus || c.conversationWindowStatus === "open";
 
   const card = document.createElement("div");
   let cls = "card";
-  if (urgent) cls += " urgent";
+  if (forgotten)       cls += " forgotten";
+  else if (urgent)     cls += " urgent";
+  else if (warn10)     cls += " warn-10";
   if (isResolved) cls += " resolvido";
   if (isIncomplete) cls += " triagem_incompleta";
   card.className = cls;
@@ -2439,9 +2660,13 @@ function buildCard(c, col, cols) {
 
   const cardTitle  = c.cardTitle || "";
   const priority   = computePriority(c);
-  const priBadge   = priority.cls
-    ? `<span class="priority-badge ${priority.cls}">${priority.label}</span>`
-    : "";
+  const isManual   = !!c.priorityManual;
+  const priBadge   = `<span
+    class="priority-badge ${priority.cls || 'pb-baixa'}${isManual ? ' pri-manual' : ''}"
+    data-phone="${esc(c.phone)}"
+    onclick="event.stopPropagation();openPriorityPicker(event,'${esc(c.phone)}')"
+    title="${isManual ? 'Prioridade manual — clique para alterar' : 'Prioridade automática — clique para definir'}"
+  >${priority.label}</span>`;
 
   card.innerHTML = `
     <div class="card-top">
@@ -2452,7 +2677,10 @@ function buildCard(c, col, cols) {
         title="${esc(c.clientName)} — clique para editar">${esc(c.clientName)}</span>
       ${urgent
         ? `<span class="card-time urgent">⚠️ ${relTime(c.handoffAt)}</span>`
-        : `<span class="card-time">${relTime(c.handoffAt)}</span>`}
+        : warn10
+          ? `<span class="card-time warn">🕐 ${relTime(c.handoffAt)}</span>`
+          : `<span class="card-time">${relTime(c.handoffAt)}</span>`}
+      ${forgotten ? `<span class="tag-forgotten">Sem resposta +2h</span>` : ""}
       ${priBadge}
     </div>
 
@@ -2460,6 +2688,10 @@ function buildCard(c, col, cols) {
       onblur="saveCardField(this,'cardTitle')"
       onkeydown="if(event.key==='Enter'){event.preventDefault();this.blur()}"
       title="${cardTitle ? esc(cardTitle) + ' — clique para editar' : 'Clique para adicionar resumo do pedido'}">${esc(cardTitle)}</div>
+
+    ${c.lastMessage && !isResolved
+      ? `<div class="card-last-msg" title="${esc(c.lastMessage)}">"${esc(c.lastMessage.substring(0, 55))}${c.lastMessage.length > 55 ? '…' : ''}"</div>`
+      : ""}
 
     <div style="display:flex;align-items:center;gap:3px;flex-wrap:wrap;margin-bottom:2px">
       <select class="demand-select ${demandClass(c.demandType)}"
@@ -2495,11 +2727,46 @@ function buildCard(c, col, cols) {
       }
     </div>
 
+    ${!isResolved
+      ? `<div class="card-quick-row" onclick="event.stopPropagation()">
+           <button class="btn-qr btn-qr-resolve"
+             onclick="quickResolveCard('${esc(c.phone)}')"
+             title="Resolver esta conversa">✓ Resolver</button>
+           ${windowOpen
+             ? `<button class="btn-qr" onclick="openQuickReply('${esc(c.phone)}')" title="Resposta rápida">↩ Responder</button>`
+             : `<button class="btn-qr" disabled title="Janela fechada — use template">↩ Responder</button>`}
+         </div>
+         ${windowOpen
+           ? `<div class="card-quick-reply hidden" data-phone="${esc(c.phone)}" onclick="event.stopPropagation()">
+                <textarea class="qr-input" data-phone="${esc(c.phone)}" placeholder="Mensagem rápida..." rows="2"
+                  onkeydown="if(event.key==='Enter'&&!event.shiftKey){event.preventDefault();sendQuickReply('${esc(c.phone)}')}"></textarea>
+                <div class="qr-row">
+                  <button class="qr-cancel" onclick="closeQuickReply('${esc(c.phone)}')">Cancelar</button>
+                  <button class="qr-send" data-phone="${esc(c.phone)}" onclick="sendQuickReply('${esc(c.phone)}')">Enviar</button>
+                </div>
+              </div>`
+           : ""}`
+      : ""}
+
     <div class="card-footer">
       <span>${c.messageCount} msgs</span>
       ${isResolved && c.resolvedAt ? `<span>Resolvido ${relTime(c.resolvedAt)}</span>` : ""}
     </div>
   `;
+
+  if (!isResolved && !isIncomplete) {
+    card.draggable = true;
+    card.addEventListener("dragstart", (e) => {
+      _dragPhone = c.phone;
+      _dragClientType = c.clientType || "pf";
+      e.dataTransfer.effectAllowed = "move";
+      setTimeout(() => card.classList.add("dragging"), 0);
+    });
+    card.addEventListener("dragend", () => {
+      card.classList.remove("dragging");
+      _dragPhone = null;
+    });
+  }
 
   return card;
 }
@@ -2519,6 +2786,7 @@ async function saveCardField(el, field) {
     // Atualiza allConvs localmente
     const conv = allConvs.find(c => c.phone === phone);
     if (conv) conv[field] = value;
+    showToast("Card atualizado");
   } catch (e) { console.error("[saveCardField]", e); }
 }
 
@@ -2533,11 +2801,21 @@ async function saveDemandType(select) {
     });
     const conv = allConvs.find(c => c.phone === phone);
     if (conv) { conv.demandType = demandType; renderPipeline(allConvs); }
+    showToast("Categoria atualizada");
   } catch (e) { console.error("[saveDemandType]", e); }
 }
 
 async function changeStatus(select, phone, clientType) {
   const newStatus = select.value;
+  const TERMINAL = ["finalizado", "entregue"];
+  if (TERMINAL.includes(newStatus)) {
+    const conv = allConvs.find(c => c.phone === phone);
+    const label = select.options[select.selectedIndex]?.text || newStatus;
+    if (!window.confirm(`Mover "${conv?.clientName || phone}" para "${label}"?`)) {
+      select.value = conv?.pipelineStatus || "novo";
+      return;
+    }
+  }
   const conv = allConvs.find(c => c.phone === phone);
   if (conv) { conv.pipelineStatus = newStatus; renderPipeline(allConvs); }
 
@@ -2547,6 +2825,7 @@ async function changeStatus(select, phone, clientType) {
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ phone, pipelineStatus: newStatus, clientType }),
     });
+    showToast("Status atualizado");
   } catch (e) { console.error("[changeStatus]", e); }
 }
 
@@ -2607,6 +2886,9 @@ function stopAutoRefresh() { clearInterval(countdownTimer); countdownTimer = nul
 // ╚══════════════════════════════════════════════════════════════╝
 async function openChat(phone) {
   openModalPhone = phone;
+  if (isConvLockedByOther(phone)) showDupeWarning("modal");
+  else hideDupeWarning("modal");
+  lockConvTab(phone);
   pendingMedia.modal = null;
   clearImage("modal");
 
@@ -2709,6 +2991,7 @@ function renderModal(data) {
 }
 
 function closeModal() {
+  unlockConvTab(openModalPhone);
   openModalPhone = null;
   document.getElementById("chat-modal").classList.add("hidden");
   document.body.style.overflow = "";
@@ -2738,6 +3021,7 @@ function filterConvsList() {
 
 function renderConvsList(convs) {
   const list = document.getElementById("convs-list");
+  closeConvMenu();
   list.innerHTML = "";
 
   // Atualiza contadores das pills
@@ -2822,6 +3106,7 @@ function buildConvItem(c) {
 }
 
 async function openConvsChat(phone, redisKey, isArchive) {
+  if (openConvsPhone && openConvsPhone !== phone) unlockConvTab(openConvsPhone);
   openConvsPhone    = phone;
   openConvsRedisKey = redisKey || `sartec:${phone}`;
 
@@ -2855,6 +3140,9 @@ async function openConvsChat(phone, redisKey, isArchive) {
     </div>
     <!-- Barra de janela de 24h -->
     <div class="window-status-bar ws-unknown" id="convs-window-bar"></div>
+    <div class="dupe-tab-warning hidden" id="convs-dupe-warning">
+      ⚠️ Esta conversa está aberta em outra aba. Evite editar ao mesmo tempo para não perder informações.
+    </div>
     <div class="messages" id="convs-messages" style="flex:1;overflow-y:auto;padding:14px"></div>
     ${!isArchive ? `<div class="composer">
       <div class="img-preview-bar" id="convs-img-preview-bar">
@@ -2876,6 +3164,9 @@ async function openConvsChat(phone, redisKey, isArchive) {
   `;
 
   main.appendChild(chatArea);
+
+  if (isConvLockedByOther(phone)) showDupeWarning("convs");
+  lockConvTab(phone);
 
   await refreshConvsChat(phone, openConvsRedisKey);
   // Não faz polling para archives — o histórico não muda
@@ -3333,6 +3624,7 @@ async function sendTextMessage(prefix, container, text) {
       removeLastOptimistic(container);
     } else {
       prefix === "modal" ? await refreshModal() : await refreshConvsChat(phone);
+      showToast("Mensagem enviada");
     }
   } catch (e) { alert("Falha de rede."); removeLastOptimistic(container); }
 }
@@ -3360,6 +3652,7 @@ async function sendImageMessage(prefix, container, caption) {
       removeLastOptimistic(container);
     } else {
       prefix === "modal" ? await refreshModal() : await refreshConvsChat(phone);
+      showToast("Imagem enviada");
     }
   } catch (e) { alert("Falha de rede."); removeLastOptimistic(container); }
 }
@@ -3388,6 +3681,7 @@ async function sendDocumentMessage(prefix, container, caption) {
       removeLastOptimistic(container);
     } else {
       prefix === "modal" ? await refreshModal() : await refreshConvsChat(phone);
+      showToast("Documento enviado");
     }
   } catch (e) { alert("Falha de rede."); removeLastOptimistic(container); }
 }
@@ -3480,10 +3774,201 @@ document.addEventListener("visibilitychange", () => {
 
 // Cleanup ao fechar aba
 window.addEventListener("beforeunload", () => {
+  unlockConvTab(openModalPhone);
+  unlockConvTab(openConvsPhone);
   stopAutoRefresh();
   stopConvsPoll();
   stopConvsChatPoll();
 });
+
+// ╔══════════════════════════════════════════════════════════════╗
+// ║  TRAVA DE ABA — aviso quando mesma conversa abre em 2 abas  ║
+// ╚══════════════════════════════════════════════════════════════╝
+const TAB_ID = sessionStorage.getItem("sartec_tab_id") || (() => {
+  const id = Math.random().toString(36).slice(2);
+  sessionStorage.setItem("sartec_tab_id", id);
+  return id;
+})();
+
+const CONV_LOCK_TTL = 5 * 60 * 1000; // 5 min — expira se browser fechar sem cleanup
+
+function _convLockKey(phone)  { return `sartec_open_conv_${phone}`; }
+
+function lockConvTab(phone) {
+  if (!phone) return;
+  localStorage.setItem(_convLockKey(phone), JSON.stringify({ tabId: TAB_ID, openedAt: Date.now() }));
+}
+
+function unlockConvTab(phone) {
+  if (!phone) return;
+  try {
+    const raw = localStorage.getItem(_convLockKey(phone));
+    if (!raw) return;
+    if (JSON.parse(raw).tabId === TAB_ID) localStorage.removeItem(_convLockKey(phone));
+  } catch { localStorage.removeItem(_convLockKey(phone)); }
+}
+
+function isConvLockedByOther(phone) {
+  if (!phone) return false;
+  try {
+    const entry = JSON.parse(localStorage.getItem(_convLockKey(phone)));
+    return !!entry && entry.tabId !== TAB_ID && (Date.now() - entry.openedAt) < CONV_LOCK_TTL;
+  } catch { return false; }
+}
+
+function showDupeWarning(prefix) {
+  document.getElementById(`${prefix}-dupe-warning`)?.classList.remove("hidden");
+}
+function hideDupeWarning(prefix) {
+  document.getElementById(`${prefix}-dupe-warning`)?.classList.add("hidden");
+}
+
+// Notificação em tempo real: outra aba mudou o localStorage
+window.addEventListener("storage", (e) => {
+  if (openModalPhone && e.key === _convLockKey(openModalPhone)) {
+    if (!e.newValue) { hideDupeWarning("modal"); lockConvTab(openModalPhone); }
+    else { try { if (JSON.parse(e.newValue).tabId !== TAB_ID) showDupeWarning("modal"); } catch {} }
+  }
+  if (openConvsPhone && e.key === _convLockKey(openConvsPhone)) {
+    if (!e.newValue) { hideDupeWarning("convs"); lockConvTab(openConvsPhone); }
+    else { try { if (JSON.parse(e.newValue).tabId !== TAB_ID) showDupeWarning("convs"); } catch {} }
+  }
+});
+
+// ╔══════════════════════════════════════════════════════════════╗
+// ║  TOAST — feedback de ação                                    ║
+// ╚══════════════════════════════════════════════════════════════╝
+function showToast(msg, type = "t-ok") {
+  const container = document.getElementById("toast-container");
+  if (!container) return;
+  const icons = { "t-ok": "✓", "t-err": "✕" };
+  const toast = document.createElement("div");
+  toast.className = `toast ${type}`;
+  toast.innerHTML = `<span>${icons[type] || "✓"}</span><span>${esc(msg)}</span>`;
+  container.appendChild(toast);
+  setTimeout(() => {
+    toast.style.transition = "opacity .3s, transform .3s";
+    toast.style.opacity = "0";
+    toast.style.transform = "translateY(8px)";
+    setTimeout(() => toast.remove(), 320);
+  }, 2500);
+}
+
+// ╔══════════════════════════════════════════════════════════════╗
+// ║  AÇÕES RÁPIDAS NO CARD                                       ║
+// ╚══════════════════════════════════════════════════════════════╝
+function quickResolveCard(phone) {
+  const conv = allConvs.find(c => c.phone === phone);
+  const name = conv?.clientName || phone;
+  document.getElementById("confirm-title").textContent = "Resolver conversa";
+  document.getElementById("confirm-text").textContent  = `Marcar a conversa de "${name}" como resolvida?`;
+  document.getElementById("confirm-modal").classList.remove("hidden");
+  resolveCallback = async () => {
+    try {
+      const res = await fetch("/api/resolve", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ phone }),
+      });
+      if (res.ok) {
+        showToast("Conversa resolvida");
+        const c = allConvs.find(c => c.phone === phone);
+        if (c) { c.status = "resolvido"; c.resolvedAt = new Date().toISOString(); }
+        renderPipeline(allConvs);
+        updateHeader(allConvs);
+      } else {
+        const err = await res.json();
+        showToast(`Erro: ${err.error}`, "t-err");
+      }
+    } catch { showToast("Falha de rede", "t-err"); }
+  };
+}
+
+function openQuickReply(phone) {
+  const qr = document.querySelector(`.card-quick-reply[data-phone="${phone}"]`);
+  if (!qr) return;
+  qr.classList.remove("hidden");
+  qr.querySelector(".qr-input")?.focus();
+}
+
+function closeQuickReply(phone) {
+  const qr = document.querySelector(`.card-quick-reply[data-phone="${phone}"]`);
+  if (!qr) return;
+  qr.classList.add("hidden");
+  const ta = qr.querySelector(".qr-input");
+  if (ta) ta.value = "";
+}
+
+async function sendQuickReply(phone) {
+  const ta  = document.querySelector(`.qr-input[data-phone="${phone}"]`);
+  const btn = document.querySelector(`.qr-send[data-phone="${phone}"]`);
+  const text = ta?.value.trim();
+  if (!text) return;
+  if (btn) btn.disabled = true;
+  try {
+    const res = await fetch("/api/send", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ to: phone, type: "text", message: text }),
+    });
+    if (!res.ok) {
+      const err = await res.json();
+      showToast(`Erro: ${err.error}`, "t-err");
+    } else {
+      showToast("Mensagem enviada");
+      closeQuickReply(phone);
+      loadQueue();
+    }
+  } catch { showToast("Falha de rede", "t-err"); }
+  if (btn) btn.disabled = false;
+}
+
+// ╔══════════════════════════════════════════════════════════════╗
+// ║  PICKER DE PRIORIDADE MANUAL                                 ║
+// ╚══════════════════════════════════════════════════════════════╝
+function openPriorityPicker(event, phone) {
+  _priPickerPhone = phone;
+  const picker = document.getElementById("priority-picker");
+  picker.classList.remove("hidden");
+  const rect    = event.currentTarget.getBoundingClientRect();
+  const pickerW = picker.offsetWidth || 140;
+  let   left    = rect.left;
+  if (left + pickerW > window.innerWidth - 8) left = window.innerWidth - pickerW - 8;
+  const maxTop  = window.innerHeight - (picker.offsetHeight || 130) - 8;
+  picker.style.left = left + "px";
+  picker.style.top  = Math.min(rect.bottom + 4, maxTop) + "px";
+  setTimeout(() => document.addEventListener("click", _onClickOutsidePriPicker, { once: true }), 0);
+}
+
+function _onClickOutsidePriPicker(e) {
+  const picker = document.getElementById("priority-picker");
+  if (picker && !picker.contains(e.target)) {
+    closePriorityPicker();
+  } else {
+    setTimeout(() => document.addEventListener("click", _onClickOutsidePriPicker, { once: true }), 0);
+  }
+}
+
+function closePriorityPicker() {
+  document.getElementById("priority-picker").classList.add("hidden");
+  _priPickerPhone = null;
+}
+
+async function setPriorityManual(level) {
+  const phone = _priPickerPhone;
+  closePriorityPicker();
+  if (!phone) return;
+  try {
+    await fetch("/api/update-card", {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ phone, priorityManual: level }),
+    });
+    const conv = allConvs.find(c => c.phone === phone);
+    if (conv) { conv.priorityManual = level; renderPipeline(allConvs); }
+    showToast(level ? "Prioridade atualizada" : "Prioridade resetada para automático");
+  } catch { showToast("Erro ao salvar prioridade", "t-err"); }
+}
 
 // ╔══════════════════════════════════════════════════════════════╗
 // ║  JANELA DE 24H — UI                                          ║
@@ -4198,5 +4683,6 @@ switchTab(currentTab);
 loadQueue();
 startAutoRefresh();
 </script>
+<div id="toast-container"></div>
 </body>
 </html>
