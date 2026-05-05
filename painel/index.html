@@ -263,16 +263,17 @@
     .card:hover { box-shadow: 0 5px 16px rgba(0,0,0,.12); transform: translateY(-1px); }
 
     .card.urgent {
-      background: #fff1f2;
       border-left-color: #f87171;
+      box-shadow: 0 1px 4px rgba(0,0,0,.07), 0 0 0 1px #fca5a5;
     }
 
     .card.resolvido {
-      opacity: .72;
-      border-left-color: var(--status-resolvido);
+      opacity: .75;
+      background: #f0fdf4;
+      border-left-color: #86efac;
     }
     .card.triagem_incompleta { border-left-color: var(--warn-color); }
-    .card.warn-10  { border-left-color: #d97706; background: #fefce8; }
+    .card.warn-10  { border-left-color: #d97706; box-shadow: 0 1px 4px rgba(0,0,0,.07), 0 0 0 1px #fbbf24; }
     .card.pri-alta  { border-left-color: #ea580c; background: #fff7ed; }
     .card.pri-media { border-left-color: #ca8a04; background: #fefce8; }
 
@@ -292,44 +293,60 @@
     .priority-dot.pri-manual { outline: 1.5px dashed currentColor; outline-offset: 2px; }
 
     .card.forgotten {
-      background: #dc2626; border-left-color: #991b1b; color: #fff;
+      border-left-color: #f87171;
+      box-shadow: 0 1px 4px rgba(0,0,0,.07), 0 0 0 1px #f87171;
     }
-    .tag-forgotten {
-      font-size: .55rem;
-      font-weight: 800;
-      padding: 2px 6px;
-      border-radius: 20px;
-      background: #fee2e2;
-      color: #991b1b;
-      white-space: nowrap;
+    .forgotten-icon {
+      font-size: .75rem;
       flex-shrink: 0;
+      cursor: default;
+      line-height: 1;
+      opacity: .6;
     }
 
     /* ─ Card top ─ */
-    /* -- Prioridade critica = fundo vermelho -- */
-    .card.card-critica { background: #dc2626; border-left-color: #991b1b; color: #fff; }
+    /* -- Prioridade crítica: pastel vermelho (texto escuro) -- */
+    .card.card-critica { background: #fde2e2; border-left-color: #ef4444; border-left-width: 5px; }
 
-    /* -- Finalizado/Entregue = fundo verde -- */
-    .card.card-finalizado { background: #16a34a; border-left-color: #15803d; color: #fff; }
+    /* -- Finalizado/Entregue: pastel verde (texto escuro) -- */
+    .card.card-finalizado { background: #dcfce7; border-left-color: #86efac; }
 
-    /* -- Contraste para fundos escuros -- */
-    .card.forgotten .card-name, .card.card-critica .card-name, .card.card-finalizado .card-name,
-    .card.forgotten .card-title, .card.card-critica .card-title, .card.card-finalizado .card-title,
-    .card.forgotten .card-time, .card.card-critica .card-time, .card.card-finalizado .card-time { color: rgba(255,255,255,.95); }
-    .card.forgotten .card-footer, .card.card-critica .card-footer, .card.card-finalizado .card-footer { color: rgba(255,255,255,.75); }
-    .card.forgotten .card-title:empty::before, .card.card-critica .card-title:empty::before, .card.card-finalizado .card-title:empty::before { color: rgba(255,255,255,.5); }
-    .card.forgotten .card-title:hover, .card.card-critica .card-title:hover, .card.card-finalizado .card-title:hover,
-    .card.forgotten .card-name:hover, .card.card-critica .card-name:hover, .card.card-finalizado .card-name:hover { background: rgba(255,255,255,.12); }
-    .card.forgotten .type-badge, .card.card-critica .type-badge, .card.card-finalizado .type-badge { background: rgba(255,255,255,.2); color: #fff; }
-    .card.forgotten .status-select, .card.card-critica .status-select, .card.card-finalizado .status-select,
-    .card.forgotten .type-select, .card.card-critica .type-select, .card.card-finalizado .type-select { background: rgba(255,255,255,.18); color: #fff; border-color: rgba(255,255,255,.3); }
-    .card.forgotten .btn-open, .card.card-critica .btn-open, .card.card-finalizado .btn-open { background: rgba(255,255,255,.15); border: 1px solid rgba(255,255,255,.4); color: #fff; }
-    .card.forgotten .btn-open:hover, .card.card-critica .btn-open:hover, .card.card-finalizado .btn-open:hover { background: rgba(255,255,255,.28); }
-    .card.forgotten .priority-dot, .card.card-critica .priority-dot, .card.card-finalizado .priority-dot { background: rgba(255,255,255,.2); color: #fff; }
-    .card.forgotten .btn-resolve-card, .card.card-critica .btn-resolve-card, .card.card-finalizado .btn-resolve-card { background: rgba(255,255,255,.18); border-color: rgba(255,255,255,.35); color: #fff; }
+    /* -- Select PF/PJ compacto no topo do card -- */
+    .type-select-top {
+      font-size: .6rem;
+      font-weight: 800;
+      padding: 2px 5px;
+      border-radius: 5px;
+      border: 1px solid var(--border);
+      background: rgba(255,255,255,.6);
+      color: var(--text-secondary);
+      cursor: pointer;
+      outline: none;
+      flex-shrink: 0;
+      text-transform: uppercase;
+      letter-spacing: .04em;
+    }
+    .type-select-top:focus { border-color: var(--brand-navy); }
+    .type-select-top { transition: opacity .12s; }
+    .type-select-top:hover { opacity: .75; }
+    .type-select-top.pf { background: #e0f2fe; color: #0369a1; border-color: #bae6fd; }
+    .type-select-top.pj { background: #ede9fe; color: #6d28d9; border-color: #ddd6fe; }
 
-    /* -- Botao Resolver discreto no footer do card -- */
-    .btn-resolve-card { font-size: .65rem; font-weight: 600; padding: 3px 9px; border-radius: 6px; border: 1px solid #fca5a5; background: #fff1f2; color: #b91c1c; cursor: pointer; transition: background .12s; white-space: nowrap; }
+    /* -- Botão Resolver: centralizado abaixo do botão Abrir -- */
+    .btn-resolve-card {
+      display: block;
+      margin: 4px auto 0;
+      font-size: .65rem;
+      font-weight: 600;
+      padding: 3px 12px;
+      border-radius: 6px;
+      border: 1px solid #fca5a5;
+      background: #fff1f2;
+      color: #b91c1c;
+      cursor: pointer;
+      transition: background .12s;
+      white-space: nowrap;
+    }
     .btn-resolve-card:hover { background: #fee2e2; }
 
     /* -- Altura uniforme: botoes sempre no fundo -- */
@@ -372,10 +389,11 @@
     .card-name:focus  { background: #fff; outline: 2px solid var(--brand-navy); white-space: normal; overflow: visible; }
 
     .card-time {
-      font-size: .66rem;
+      font-size: .62rem;
       color: var(--text-secondary);
       white-space: nowrap;
       flex-shrink: 0;
+      opacity: .8;
     }
     .card-time.urgent { color: var(--brand-red); font-weight: 700; }
     .card-time.warn   { color: #d97706; font-weight: 700; }
@@ -509,9 +527,11 @@
     .card-footer {
       display: flex;
       gap: 8px;
-      margin-top: 7px;
-      font-size: .65rem;
+      margin-top: 6px;
+      font-size: .62rem;
       color: var(--text-muted);
+      justify-content: flex-end;
+      opacity: .7;
     }
 
     .card-last-msg {
@@ -2650,7 +2670,7 @@ function renderPipelineTab(tabId, cols, convs) {
           _dragInsertAfter = insertAfter;
           let line = cardsEl.querySelector(".drag-line");
           if (!line) { line = document.createElement("div"); line.className = "drag-line"; }
-          const afterEl = insertAfter ? cardsEl.querySelector(`.card[data-phone="${insertAfter}"]`) : null;
+          const afterEl = insertAfter ? cardsEl.querySelector('.card[data-phone="' + insertAfter + '"]') : null;
           if (afterEl) afterEl.after(line); else cardsEl.prepend(line);
         }
       }
@@ -2700,7 +2720,6 @@ function renderPipelineTab(tabId, cols, convs) {
         } catch { showToast("Erro ao mover card", "t-err"); loadQueue(); }
       }
     });
-
     // Header
     const hdr = document.createElement("div");
     hdr.className = "pipe-col-header";
@@ -2743,17 +2762,17 @@ function buildCard(c, col, cols) {
   const card = document.createElement("div");
   card.dataset.phone = c.phone;
   const priority = computePriority(c);
-  const isFinalizado = !isResolved && (c.pipelineStatus === "finalizado" || c.pipelineStatus === "entregue");
   let cls = "card";
-  if (forgotten)                         cls += " forgotten";
+  // Prioridade sempre define o fundo — coluna/timing não interferem
+  if (isResolved)                        cls += " resolvido";
   else if (priority.level === "critica") cls += " card-critica";
-  else if (urgent)                       cls += " urgent";
-  else if (warn10)                       cls += " warn-10";
   else if (priority.level === "alta")    cls += " pri-alta";
   else if (priority.level === "media")   cls += " pri-media";
-  if (isFinalizado)  cls += " card-finalizado";
-  if (isResolved)    cls += " resolvido";
-  if (isIncomplete)  cls += " triagem_incompleta";
+  if (isIncomplete) cls += " triagem_incompleta";
+  // Timing como indicador adicional (só afeta border-left, sem sobrescrever fundo)
+  if (forgotten)    cls += " forgotten";
+  else if (urgent)  cls += " urgent";
+  else if (warn10)  cls += " warn-10";
   card.className = cls;
 
   const colsForStatus = cols.filter(col => !col.resolved);
@@ -2773,7 +2792,13 @@ function buildCard(c, col, cols) {
 
   card.innerHTML = `
     <div class="card-top">
-      <span class="type-badge ${clientType}" title="${clientType === "pj" ? "Pessoa Jurídica" : "Pessoa Física"}">${clientType.toUpperCase()}</span>
+      <select class="type-select-top ${clientType}"
+        onchange="changeClientType(this,'${esc(c.phone)}')"
+        onclick="event.stopPropagation()"
+        title="${clientType === "pj" ? "Pessoa Jurídica" : "Pessoa Física"} — clique para alterar">
+        <option value="pf"${clientType==="pf"?" selected":""}>PF</option>
+        <option value="pj"${clientType==="pj"?" selected":""}>PJ</option>
+      </select>
       <span class="card-name" contenteditable="true" data-phone="${esc(c.phone)}"
         onblur="saveCardField(this,'clientName')"
         onkeydown="if(event.key==='Enter'){event.preventDefault();this.blur()}"
@@ -2783,7 +2808,7 @@ function buildCard(c, col, cols) {
         : warn10
           ? `<span class="card-time warn">🕐 ${relTime(c.handoffAt)}</span>`
           : `<span class="card-time">${relTime(c.handoffAt)}</span>`}
-      ${forgotten ? `<span class="tag-forgotten">Sem resposta +2h</span>` : ""}
+      ${forgotten ? `<span class="forgotten-icon" title="Sem resposta há mais de 2h">⏱</span>` : ""}
       ${priBadge}
     </div>
 
@@ -2810,26 +2835,12 @@ function buildCard(c, col, cols) {
              <button class="btn-reopen" onclick="reopenCard('${esc(c.phone)}','${clientType}')">&#8635; Reabrir</button>
              <button class="btn-open" style="flex:1" onclick="openChat('${esc(c.phone)}')">Abrir &rarr;</button>
            </div>`
-        : `<div class="card-actions-row">
-             <select class="status-select"
-               onchange="changeStatus(this,'${esc(c.phone)}','${clientType}')"
-               title="Coluna do pipeline">
-               ${statusOptions}
-             </select>
-             <select class="type-select"
-               onchange="changeClientType(this,'${esc(c.phone)}')">
-               <option value="pf"${clientType==="pf"?" selected":""}>PF</option>
-               <option value="pj"${clientType==="pj"?" selected":""}>PJ</option>
-             </select>
-           </div>
-           <button class="btn-open" onclick="openChat('${esc(c.phone)}')">Abrir &rarr;</button>`
+        : `<button class="btn-open" onclick="openChat('${esc(c.phone)}')">Abrir &rarr;</button>
+           <button class="btn-resolve-card" onclick="event.stopPropagation();quickResolveCard('${esc(c.phone)}')" title="Resolver atendimento">✓ Resolver</button>`
       }
     </div>
 
     <div class="card-footer">
-      ${!isResolved && !isIncomplete
-        ? `<button class="btn-resolve-card" onclick="event.stopPropagation();quickResolveCard('${esc(c.phone)}')" title="Resolver atendimento">✓ Resolver</button>`
-        : ""}
       <span style="margin-left:auto">${c.messageCount} msgs</span>
       ${isResolved && c.resolvedAt ? `<span>Resolvido ${relTime(c.resolvedAt)}</span>` : ""}
     </div>
