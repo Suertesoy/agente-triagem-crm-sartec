@@ -256,16 +256,15 @@
       overflow: hidden;
       word-break: break-word;
       box-sizing: border-box;
+      display: flex;
+      flex-direction: column;
+      min-height: 185px;
     }
     .card:hover { box-shadow: 0 5px 16px rgba(0,0,0,.12); transform: translateY(-1px); }
 
     .card.urgent {
-      border-left-color: var(--brand-red);
-      animation: pulse-border 1.8s ease-in-out infinite;
-    }
-    @keyframes pulse-border {
-      0%,100% { border-left-color: var(--brand-red); }
-      50%     { border-left-color: #ff6666; }
+      background: #fff1f2;
+      border-left-color: #f87171;
     }
 
     .card.resolvido {
@@ -273,26 +272,27 @@
       border-left-color: var(--status-resolvido);
     }
     .card.triagem_incompleta { border-left-color: var(--warn-color); }
-    .card.warn-10 {
-      border-left-color: #d97706;
-      background: linear-gradient(to right, #fffbeb 0%, var(--bg-card) 25%);
-    }
-    .card.pri-alta  { border-left-color: #ea580c; background: linear-gradient(to right, #fff7ed 0%, var(--bg-card) 25%); }
-    .card.pri-media { border-left-color: #ca8a04; background: linear-gradient(to right, #fefce8 0%, var(--bg-card) 25%); }
+    .card.warn-10  { border-left-color: #d97706; background: #fefce8; }
+    .card.pri-alta  { border-left-color: #ea580c; background: #fff7ed; }
+    .card.pri-media { border-left-color: #ca8a04; background: #fefce8; }
 
     .priority-dot {
-      width: 8px; height: 8px; border-radius: 50%;
-      flex-shrink: 0; cursor: pointer; display: inline-block;
+      display: inline-flex; align-items: center;
+      padding: 3px 9px; border-radius: 20px;
+      font-size: .6rem; font-weight: 700;
+      cursor: pointer; flex-shrink: 0;
+      white-space: nowrap; user-select: none;
+      border: none; transition: opacity .12s;
     }
-    .priority-dot.pb-critica { background: #dc2626; }
-    .priority-dot.pb-alta    { background: #ea580c; }
-    .priority-dot.pb-media   { background: #ca8a04; }
-    .priority-dot.pb-baixa   { background: #94a3b8; }
+    .priority-dot:hover { opacity: .75; }
+    .priority-dot.pb-critica { background: #fee2e2; color: #991b1b; }
+    .priority-dot.pb-alta    { background: #ffedd5; color: #9a3412; }
+    .priority-dot.pb-media   { background: #fef9c3; color: #854d0e; }
+    .priority-dot.pb-baixa   { background: #f1f5f9; color: #475569; }
     .priority-dot.pri-manual { outline: 1.5px dashed currentColor; outline-offset: 2px; }
 
     .card.forgotten {
-      border-left-color: #991b1b;
-      background: linear-gradient(to right, #fef2f2 0%, var(--bg-card) 30%);
+      background: #dc2626; border-left-color: #991b1b; color: #fff;
     }
     .tag-forgotten {
       font-size: .55rem;
@@ -306,6 +306,35 @@
     }
 
     /* ─ Card top ─ */
+    /* -- Prioridade critica = fundo vermelho -- */
+    .card.card-critica { background: #dc2626; border-left-color: #991b1b; color: #fff; }
+
+    /* -- Finalizado/Entregue = fundo verde -- */
+    .card.card-finalizado { background: #16a34a; border-left-color: #15803d; color: #fff; }
+
+    /* -- Contraste para fundos escuros -- */
+    .card.forgotten .card-name, .card.card-critica .card-name, .card.card-finalizado .card-name,
+    .card.forgotten .card-title, .card.card-critica .card-title, .card.card-finalizado .card-title,
+    .card.forgotten .card-time, .card.card-critica .card-time, .card.card-finalizado .card-time { color: rgba(255,255,255,.95); }
+    .card.forgotten .card-footer, .card.card-critica .card-footer, .card.card-finalizado .card-footer { color: rgba(255,255,255,.75); }
+    .card.forgotten .card-title:empty::before, .card.card-critica .card-title:empty::before, .card.card-finalizado .card-title:empty::before { color: rgba(255,255,255,.5); }
+    .card.forgotten .card-title:hover, .card.card-critica .card-title:hover, .card.card-finalizado .card-title:hover,
+    .card.forgotten .card-name:hover, .card.card-critica .card-name:hover, .card.card-finalizado .card-name:hover { background: rgba(255,255,255,.12); }
+    .card.forgotten .type-badge, .card.card-critica .type-badge, .card.card-finalizado .type-badge { background: rgba(255,255,255,.2); color: #fff; }
+    .card.forgotten .status-select, .card.card-critica .status-select, .card.card-finalizado .status-select,
+    .card.forgotten .type-select, .card.card-critica .type-select, .card.card-finalizado .type-select { background: rgba(255,255,255,.18); color: #fff; border-color: rgba(255,255,255,.3); }
+    .card.forgotten .btn-open, .card.card-critica .btn-open, .card.card-finalizado .btn-open { background: rgba(255,255,255,.15); border: 1px solid rgba(255,255,255,.4); color: #fff; }
+    .card.forgotten .btn-open:hover, .card.card-critica .btn-open:hover, .card.card-finalizado .btn-open:hover { background: rgba(255,255,255,.28); }
+    .card.forgotten .priority-dot, .card.card-critica .priority-dot, .card.card-finalizado .priority-dot { background: rgba(255,255,255,.2); color: #fff; }
+    .card.forgotten .btn-resolve-card, .card.card-critica .btn-resolve-card, .card.card-finalizado .btn-resolve-card { background: rgba(255,255,255,.18); border-color: rgba(255,255,255,.35); color: #fff; }
+
+    /* -- Botao Resolver discreto no footer do card -- */
+    .btn-resolve-card { font-size: .65rem; font-weight: 600; padding: 3px 9px; border-radius: 6px; border: 1px solid #fca5a5; background: #fff1f2; color: #b91c1c; cursor: pointer; transition: background .12s; white-space: nowrap; }
+    .btn-resolve-card:hover { background: #fee2e2; }
+
+    /* -- Altura uniforme: botoes sempre no fundo -- */
+    .card-actions { margin-top: auto; }
+
     .card-top {
       display: flex;
       align-items: center;
@@ -2714,14 +2743,17 @@ function buildCard(c, col, cols) {
   const card = document.createElement("div");
   card.dataset.phone = c.phone;
   const priority = computePriority(c);
+  const isFinalizado = !isResolved && (c.pipelineStatus === "finalizado" || c.pipelineStatus === "entregue");
   let cls = "card";
-  if (forgotten)       cls += " forgotten";
-  else if (urgent)     cls += " urgent";
-  else if (warn10)     cls += " warn-10";
-  else if (priority.level === "alta" || priority.level === "critica") cls += " pri-alta";
-  else if (priority.level === "media") cls += " pri-media";
-  if (isResolved) cls += " resolvido";
-  if (isIncomplete) cls += " triagem_incompleta";
+  if (forgotten)                         cls += " forgotten";
+  else if (priority.level === "critica") cls += " card-critica";
+  else if (urgent)                       cls += " urgent";
+  else if (warn10)                       cls += " warn-10";
+  else if (priority.level === "alta")    cls += " pri-alta";
+  else if (priority.level === "media")   cls += " pri-media";
+  if (isFinalizado)  cls += " card-finalizado";
+  if (isResolved)    cls += " resolvido";
+  if (isIncomplete)  cls += " triagem_incompleta";
   card.className = cls;
 
   const colsForStatus = cols.filter(col => !col.resolved);
@@ -2733,10 +2765,11 @@ function buildCard(c, col, cols) {
   const isManual   = !!c.priorityManual;
   const priBadge   = `<span
     class="priority-dot ${priority.cls || 'pb-baixa'}${isManual ? ' pri-manual' : ''}"
+    role="button" tabindex="0"
     data-phone="${esc(c.phone)}"
     onclick="event.stopPropagation();openPriorityPicker(event,'${esc(c.phone)}')"
-    title="${priority.label}${isManual ? ' (manual)' : ' (auto)'} — clique para alterar"
-  ></span>`;
+    title="Clique para alterar prioridade"
+  >${priority.level !== 'baixa' ? priority.label + ' ▾' : '···'}</span>`;
 
   card.innerHTML = `
     <div class="card-top">
@@ -2774,8 +2807,8 @@ function buildCard(c, col, cols) {
     <div class="card-actions" onclick="event.stopPropagation()">
       ${isResolved
         ? `<div class="card-actions-row">
-             <button class="btn-reopen" onclick="reopenCard('${esc(c.phone)}','${clientType}')">↺ Reabrir</button>
-             <button class="btn-open" style="flex:1" onclick="openChat('${esc(c.phone)}')">Abrir →</button>
+             <button class="btn-reopen" onclick="reopenCard('${esc(c.phone)}','${clientType}')">&#8635; Reabrir</button>
+             <button class="btn-open" style="flex:1" onclick="openChat('${esc(c.phone)}')">Abrir &rarr;</button>
            </div>`
         : `<div class="card-actions-row">
              <select class="status-select"
@@ -2789,12 +2822,15 @@ function buildCard(c, col, cols) {
                <option value="pj"${clientType==="pj"?" selected":""}>PJ</option>
              </select>
            </div>
-           <button class="btn-open" onclick="openChat('${esc(c.phone)}')">Abrir →</button>`
+           <button class="btn-open" onclick="openChat('${esc(c.phone)}')">Abrir &rarr;</button>`
       }
     </div>
 
     <div class="card-footer">
-      <span>${c.messageCount} msgs</span>
+      ${!isResolved && !isIncomplete
+        ? `<button class="btn-resolve-card" onclick="event.stopPropagation();quickResolveCard('${esc(c.phone)}')" title="Resolver atendimento">✓ Resolver</button>`
+        : ""}
+      <span style="margin-left:auto">${c.messageCount} msgs</span>
       ${isResolved && c.resolvedAt ? `<span>Resolvido ${relTime(c.resolvedAt)}</span>` : ""}
     </div>
   `;
@@ -2910,6 +2946,33 @@ async function reopenCard(phone, clientType) {
       }
     }
   } catch (e) { console.error("[reopenCard]", e); }
+}
+
+function quickResolveCard(phone) {
+  const conv = allConvs.find(c => c.phone === phone);
+  const name = conv?.clientName || phone;
+  document.getElementById("confirm-title").textContent = "Resolver atendimento";
+  document.getElementById("confirm-text").textContent  = `Marcar "${name}" como resolvido?`;
+  document.getElementById("confirm-modal").classList.remove("hidden");
+  resolveCallback = async () => {
+    try {
+      const res = await fetch("/api/resolve", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ phone }),
+      });
+      if (res.ok) {
+        const c = allConvs.find(c => c.phone === phone);
+        if (c) { c.status = "resolvido"; c.resolvedAt = new Date().toISOString(); }
+        renderPipeline(allConvs);
+        updateHeader(allConvs);
+        showToast("Conversa resolvida ✓");
+      } else {
+        const err = await res.json().catch(() => ({}));
+        showToast(`Erro: ${err.error || "falha"}`, "t-err");
+      }
+    } catch { showToast("Falha de rede.", "t-err"); }
+  };
 }
 
 // ╔══════════════════════════════════════════════════════════════╗
