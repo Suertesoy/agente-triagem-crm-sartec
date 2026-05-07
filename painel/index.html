@@ -2868,27 +2868,34 @@ function buildCard(c, col, cols) {
   const hasManualPriority = !!c.priorityManual;
 
   let cls = "card";
+
   if (isResolved) {
+    // Resolvido sempre verde com opacidade — não pode ser overridado
     cls += " resolvido";
-  } else if (isFinalizando || c.priorityManual === "concluindo") {
-    cls += " card-finalizado";  // verde: pipeline terminal OU manual "concluindo"
-  } else if (priority.level === "critica") {
-    cls += " card-critica";
-  } else if (priority.level === "alta") {
-    cls += " pri-alta";
-  } else if (priority.level === "media") {
-    cls += " pri-media";
-  }
-  // "baixa" manual não adiciona classe → card branco
-
-  if (isIncomplete) cls += " triagem_incompleta";
-
-  // Timing classes só quando NÃO há override manual e NÃO é estado terminal
-  if (!hasManualPriority && !isFinalizando) {
+  } else if (hasManualPriority) {
+    // priorityManual manda — ignora coluna, timing, automático
+    if      (c.priorityManual === "concluindo") cls += " card-finalizado";
+    else if (c.priorityManual === "alta")       cls += " pri-alta";
+    else if (c.priorityManual === "media")      cls += " pri-media";
+    // "baixa" → sem classe = card branco
+  } else {
+    // Sem priorityManual: lógica automática
+    if (isFinalizando) {
+      cls += " card-finalizado";
+    } else if (priority.level === "critica") {
+      cls += " card-critica";
+    } else if (priority.level === "alta") {
+      cls += " pri-alta";
+    } else if (priority.level === "media") {
+      cls += " pri-media";
+    }
+    // Timing só no caminho automático
     if (forgotten)    cls += " forgotten";
     else if (urgent)  cls += " urgent";
     else if (warn10)  cls += " warn-10";
   }
+
+  if (isIncomplete) cls += " triagem_incompleta";
   card.className = cls;
 
   const colsForStatus = cols.filter(col => !col.resolved);
