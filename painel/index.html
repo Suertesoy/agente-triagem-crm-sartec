@@ -153,20 +153,20 @@
     .pipeline-wrap {
       overflow-x: auto;
       padding: 16px 20px 28px;
-      max-width: 2200px;
+      max-width: 1900px;
       margin: 0 auto;
     }
     .pipeline {
       display: flex;
-      gap: 14px;
+      gap: 10px;
     }
     .pipe-col {
-      flex: 1 0 270px;
-      max-width: 380px;
+      flex: 1 0 240px;
+      max-width: 300px;
       display: flex;
       flex-direction: column;
       border-radius: 12px;
-      background: rgba(0,0,0,.016);
+      background: rgba(0,0,0,.024);
       transition: background .15s, outline .15s;
     }
     .pipe-col.drag-over {
@@ -253,7 +253,7 @@
       border-radius: 12px;
       padding: 14px 15px 12px;
       border-left: 5px solid var(--brand-navy);
-      box-shadow: 0 2px 10px rgba(0,0,0,.08);
+      box-shadow: 0 1px 3px rgba(0,0,0,.06), 0 3px 14px rgba(0,0,0,.09);
       transition: box-shadow .18s, transform .12s;
       position: relative;
       width: 100%;
@@ -262,7 +262,7 @@
       box-sizing: border-box;
       display: flex;
       flex-direction: column;
-      min-height: 190px;
+      min-height: 182px;
       animation: card-enter .22s ease;
       cursor: pointer;
     }
@@ -295,7 +295,7 @@
     .priority-dot.pb-critica { background: #fee2e2; color: #991b1b; }
     .priority-dot.pb-alta    { background: #ffedd5; color: #9a3412; }
     .priority-dot.pb-media   { background: #fef9c3; color: #854d0e; }
-    .priority-dot.pb-baixa   { background: #f1f5f9; color: #475569; }
+    .priority-dot.pb-baixa   { background: #f1f5f9; color: #475569; opacity: .45; }
     .priority-dot.pri-manual { outline: 1.5px dashed currentColor; outline-offset: 2px; }
 
     .card.forgotten {
@@ -319,9 +319,9 @@
 
     /* -- Select PF/PJ compacto no topo do card -- */
     .type-select-top {
-      font-size: .6rem;
+      font-size: .55rem;
       font-weight: 800;
-      padding: 2px 5px;
+      padding: 2px 4px;
       border-radius: 5px;
       border: 1px solid var(--border);
       background: rgba(255,255,255,.6);
@@ -398,8 +398,8 @@
 
     /* Nome editável inline */
     .card-name {
-      font-weight: 700;
-      font-size: .95rem;
+      font-weight: 800;
+      font-size: 1rem;
       flex: 1;
       min-width: 0;
       white-space: nowrap;
@@ -425,10 +425,10 @@
 
     /* ─ Card title editável — único resumo do pedido ─ */
     .card-title {
-      font-size: .82rem;
+      font-size: .84rem;
       font-weight: 500;
       color: var(--text-primary);
-      margin-bottom: 5px;
+      margin-bottom: 4px;
       cursor: text;
       border-radius: 4px;
       padding: 2px 3px;
@@ -439,7 +439,7 @@
       line-clamp: 2;
       -webkit-box-orient: vertical;
       overflow: hidden;
-      line-height: 1.5;
+      line-height: 1.6;
       word-break: break-word;
     }
     .card-title:hover { background: #f0f4ff; }
@@ -1962,8 +1962,8 @@
     .card-zone-top {
       display: flex;
       flex-direction: column;
-      gap: 3px;
-      margin-bottom: 4px;
+      gap: 2px;
+      margin-bottom: 3px;
     }
     .card-zone-top-row {
       display: flex;
@@ -1977,11 +1977,11 @@
       padding-left: 2px;
     }
     .card-zone-mid {
-      background: rgba(26,42,94,.05);
-      border-left: 2px solid rgba(26,42,94,.14);
-      border-radius: 0 7px 7px 0;
-      padding: 6px 9px;
-      margin: 3px 0 7px;
+      background: transparent;
+      border-left: 2px solid rgba(26,42,94,.18);
+      border-radius: 0;
+      padding: 5px 8px;
+      margin: 4px 0 5px;
       flex: 1;
     }
     .card-zone-footer {
@@ -2915,13 +2915,6 @@ function buildCard(c, col, cols) {
         ${forgotten ? `<span class="forgotten-icon" title="Sem resposta há mais de 2h">⏱</span>` : ""}
         ${priBadge}
       </div>
-      <div class="card-zone-time-row">
-        ${urgent
-          ? `<span class="card-time urgent">⚠️ ${relTime(c.handoffAt)}</span>`
-          : warn10
-            ? `<span class="card-time warn">🕐 ${relTime(c.handoffAt)}</span>`
-            : `<span class="card-time">${relTime(c.handoffAt)}</span>`}
-      </div>
     </div>
 
     <div class="card-zone-mid" onclick="event.stopPropagation()">
@@ -2943,6 +2936,11 @@ function buildCard(c, col, cols) {
         <button class="btn-cat-mgr" onclick="event.stopPropagation();openCatManager()" title="Gerenciar categorias">⚙️</button>
         ${isIncomplete ? `<span class="tag-sem-resp">Sem resposta</span>` : ""}
         <span class="card-msg-count">${c.messageCount} msgs</span>
+        ${urgent
+          ? `<span class="card-time urgent">⚠️ ${relTime(c.handoffAt)}</span>`
+          : warn10
+            ? `<span class="card-time warn">🕐 ${relTime(c.handoffAt)}</span>`
+            : `<span class="card-time">${relTime(c.handoffAt)}</span>`}
         ${!isResolved ? `<button class="btn-resolve-inline" onclick="event.stopPropagation();quickResolveCard('${esc(c.phone)}')" title="Resolver atendimento">✓ Resolver</button>` : ""}
       </div>
       ${isResolved && (c.resolvedAt
