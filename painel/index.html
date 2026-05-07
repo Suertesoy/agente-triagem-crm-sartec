@@ -2078,6 +2078,30 @@
     }
     .card-open-hint:hover { background: rgba(26,42,94,.05); border-color: rgba(26,42,94,.28); color: var(--brand-navy); }
 
+    /* ── Resumo operacional — expand do card ── */
+    .card-expand-summary {
+      background: rgba(26,42,94,.06);
+      border-radius: 8px;
+      padding: 8px 10px;
+      font-size: .78rem;
+      font-weight: 600;
+      color: var(--text-primary);
+      margin-bottom: 7px;
+      line-height: 1.45;
+    }
+
+    /* ── Resumo operacional — modal do atendente ── */
+    .modal-summary-highlight {
+      background: rgba(26,42,94,.05);
+      border-radius: 7px;
+      padding: 6px 10px;
+      margin-bottom: 5px;
+    }
+    .modal-summary-highlight .sum-text {
+      font-weight: 700;
+      color: var(--text-primary);
+    }
+
     /* ── Stats strip — continuidade visual com o header ── */
     .stats-strip {
       background: #1e2e68;
@@ -2598,6 +2622,63 @@ function windowStatusLabel(c) {
   return `<span class="card-window-status ws-closed">Janela fechada</span>`;
 }
 
+// ── Resumo operacional por heurísticas ───────────────────────────────────
+const _USELESS_MSG = /^(ok|oks|okay|obrigad\w*|obg|valeu|vlw|beleza|blz|tudo bem|td bem|tdbm|sim|não|nao|talvez|pode|certo|entendi|legal|\s|👍|✅|👌|😊|😁|🙏|⁠)+\.?$/iu;
+
+function resumoOperacional(c) {
+  // 1. cardTitle manual útil (> 5 chars e não é só espaços)
+  const title = (c.cardTitle || "").trim();
+  if (title.length > 5) return title;
+
+  // 2. Status terminal do pipeline
+  const ps = c.pipelineStatus || "";
+  if (ps === "confirmado")       return "Pedido confirmado";
+  if (ps === "finalizado")       return "Pedido finalizado";
+  if (ps === "entregue")         return "Pedido entregue";
+  if (c.status === "resolvido")  return "Atendimento encerrado";
+
+  // 3. Janela WhatsApp
+  if (c.conversationWindowStatus === "waiting_template_reply")
+    return "Aguardando resposta do cliente";
+
+  // 4. Pipeline de cotação
+  if (["orcamento_enviado","em_cotacao","proposta_enviada"].includes(ps))
+    return "Orçamento enviado — aguardando cliente";
+
+  // 5. Dados de pedido presentes
+  if (c.escola) return "Pedido de material escolar";
+  if (c.formaEntrega === "entrega" && !c.endereco) return "Falta endereço de entrega";
+  if (c.formaEntrega === "entrega" && c.endereco)  return "Confirmar endereço de entrega";
+
+  // 6. Palavras-chave na última mensagem (ignorar mensagens inúteis)
+  let lm = (c.lastMessage || "").trim();
+  // Se não veio lastMessage, tenta extrair de history
+  if (!lm && c.history) {
+    const um = [...c.history].reverse().find(m => m.role === "user");
+    if (um && typeof um.content === "string") lm = um.content.trim();
+  }
+  if (lm && !_USELESS_MSG.test(lm)) {
+    const lc = lm.toLowerCase();
+    if (/pdf|foto|imagem|arquivo|lista\s*escolar|foto da lista/.test(lc)) return "Cliente enviou material";
+    if (/cancelar|cancela|desistir|não quero mais/.test(lc))             return "Cliente pediu cancelamento";
+    if (/entrega|entregar|endere[çc]/.test(lc))                          return "Confirmar entrega";
+    if (/quanto custa|pre[çc]o|valor|or[çc]amento|quantidad/.test(lc))  return "Cliente pediu orçamento";
+  }
+
+  // 7. Fallback por categoria
+  const dt = c.demandType || "";
+  if (dt === "lista")       return "Material escolar";
+  if (dt === "cotacao_pj")  return "Cotação para empresa";
+  if (dt === "xerox")       return "Cópias / Impressão";
+  if (dt === "produto")     return "Consulta sobre produto";
+  if (dt === "duvida")      return "Dúvida do cliente";
+
+  // 8. Fallback por status
+  if (c.status === "triagem_incompleta") return "Solicitação incompleta";
+  if (c.status === "aguardando_humano")  return "Aguardando atendimento";
+  return "";
+}
+
 // ── Corpo expandido do card ───────────────────────────────────────────────
 function buildExpandBody(c, clientType) {
   const rows = [];
@@ -2607,11 +2688,13 @@ function buildExpandBody(c, clientType) {
       rows.push(`<div class="card-expand-row"><span class="card-expand-label">${lbl}</span><span>${esc(String(val))}</span></div>`);
   };
 
+  // Resumo operacional no topo — substitui "Última msg"
+  const resumo = resumoOperacional(c);
+  const summaryBlock = resumo
+    ? `<div class="card-expand-summary">${esc(resumo)}</div>`
+    : "";
+
   if (c.demandType && c.demandType !== "outro") add("Categoria", cats[c.demandType] || c.demandType);
-  if (c.lastMessage && c.lastMessage !== "[mídia]") {
-    const msg = c.lastMessage.length > 90 ? c.lastMessage.slice(0, 90) + "…" : c.lastMessage;
-    add("Última msg", msg);
-  }
   const wsStr = (() => {
     const ws = c.conversationWindowStatus;
     if (ws === "open" && c.windowRemainingMs > 0) {
@@ -2630,9 +2713,9 @@ function buildExpandBody(c, clientType) {
   if (c.serie)        add("Série", c.serie);
   if (c.observacoes)  add("Obs.", c.observacoes);
 
-  if (!rows.length) return "";
+  if (!summaryBlock && !rows.length) return "";
   const isExpanded = _expandedCards.has(c.phone);
-  return `<div class="card-expand-body${isExpanded ? " visible" : ""}"><div style="font-size:.62rem;font-weight:700;color:var(--text-muted);margin-bottom:5px;text-transform:uppercase;letter-spacing:.04em">Resumo</div>${rows.join("")}</div>`;
+  return `<div class="card-expand-body${isExpanded ? " visible" : ""}"><div style="font-size:.62rem;font-weight:700;color:var(--text-muted);margin-bottom:5px;text-transform:uppercase;letter-spacing:.04em">Resumo operacional</div>${summaryBlock}${rows.join("")}</div>`;
 }
 
 // ── Toggle card expandido ─────────────────────────────────────────────────
@@ -3330,31 +3413,26 @@ async function refreshModal() {
 
 // ── Gera resumo para o atendente (dados já carregados, sem chamada extra à IA) ──
 function buildSummaryHTML(data) {
+  // Resumo operacional — destaque principal
+  const resumo = resumoOperacional(data);
+
   const titleStr  = data.cardTitle
     ? esc(data.cardTitle)
     : esc(demandLabel(data.demandType));
 
-  const lastUserMsg = [...(data.history || [])].reverse().find(m => m.role === "user");
-  const lastMsgRaw  = lastUserMsg && typeof lastUserMsg.content === "string"
-    ? lastUserMsg.content.replace(/\s+/g, " ").trim()
-    : null;
-  const lastMsgStr  = lastMsgRaw
-    ? '\u201c' + esc(lastMsgRaw.substring(0, 90)) + (lastMsgRaw.length > 90 ? "\u2026" : "") + '\u201d'
-    : null;
-
-  const waitStr   = data.handoffAt ? relTime(data.handoffAt) : "\u2014";
+  const waitStr   = data.handoffAt ? relTime(data.handoffAt) : "—";
   const statusStr = pipelineLabel(data.pipelineStatus, data.clientType);
 
   const rows = [
-    `<div class="modal-summary-item"><span class="sum-icon">🎯</span><span class="sum-text"><span class="sum-label">Quer:</span>${titleStr}</span></div>`,
-    lastMsgStr
-      ? `<div class="modal-summary-item"><span class="sum-icon">💬</span><span class="sum-text"><span class="sum-label">\u00daltima msg:</span>${lastMsgStr}</span></div>`
+    resumo
+      ? `<div class="modal-summary-item modal-summary-highlight"><span class="sum-icon">⚡</span><span class="sum-text">${esc(resumo)}</span></div>`
       : "",
-    `<div class="modal-summary-item"><span class="sum-icon">\u23F1</span><span class="sum-text"><span class="sum-label">Aguardando:</span>${waitStr} \u00b7 ${statusStr}</span></div>`,
+    `<div class="modal-summary-item"><span class="sum-icon">🎯</span><span class="sum-text"><span class="sum-label">Pedido:</span>${titleStr}</span></div>`,
+    `<div class="modal-summary-item"><span class="sum-icon">⏱</span><span class="sum-text"><span class="sum-label">Aguardando:</span>${waitStr} · ${statusStr}</span></div>`,
   ].filter(Boolean).join("");
 
-  return `<summary>\uD83D\uDCCB Resumo para o atendente</summary><div class="modal-summary-body">${rows}</div>`;
-}
+  return `<summary>📋 Resumo para o atendente</summary><div class="modal-summary-body">${rows}</div>`;
+}}
 
 function renderModal(data) {
   document.getElementById("modal-chat-name").textContent =
