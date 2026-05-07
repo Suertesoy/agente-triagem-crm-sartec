@@ -165,10 +165,23 @@
       max-width: 300px;
       display: flex;
       flex-direction: column;
-      border-radius: 12px;
-      background: rgba(0,0,0,.024);
+      border-radius: 14px;
+      background: rgba(0,0,0,.018);
       transition: background .15s, outline .15s;
     }
+
+    /* ── Cores pastel por coluna ── */
+    .pipe-col[data-col-key="novo"]              { background: #eef5ff; }
+    .pipe-col[data-col-key="em_atendimento"]    { background: #fffbf3; }
+    .pipe-col[data-col-key="orcamento_enviado"] { background: #f6f2ff; }
+    .pipe-col[data-col-key="confirmado"]        { background: #edfaf5; }
+    .pipe-col[data-col-key="finalizado"]        { background: #f2f4f7; }
+    .pipe-col[data-col-key="resolvido"]         { background: #f5f5f7; }
+    /* PJ */
+    .pipe-col[data-col-key="cadastro"]          { background: #fffbf3; }
+    .pipe-col[data-col-key="em_cotacao"]        { background: #f6f2ff; }
+    .pipe-col[data-col-key="proposta_enviada"]  { background: #eef5ff; }
+    .pipe-col[data-col-key="entregue"]          { background: #f2f4f7; }
     .pipe-col.drag-over {
       background: #eef2ff;
       outline: 2px dashed var(--brand-navy-mid);
@@ -179,7 +192,7 @@
       display: flex;
       align-items: center;
       gap: 8px;
-      padding: 6px 6px 10px;
+      padding: 8px 10px 12px;
     }
     .pipe-col-dot {
       width: 10px; height: 10px;
@@ -230,9 +243,9 @@
       font-size: .75rem;
       color: var(--text-muted);
       text-align: center;
-      padding: 18px 0;
-      border: 1.5px dashed var(--border);
+      padding: 20px 0;
       border-radius: 10px;
+      opacity: .6;
     }
 
     .empty-pipeline {
@@ -250,10 +263,10 @@
     ══════════════════════════════════════════════════ */
     .card {
       background: var(--bg-card);
-      border-radius: 12px;
-      padding: 14px 15px 12px;
-      border-left: 5px solid var(--brand-navy);
-      box-shadow: 0 1px 3px rgba(0,0,0,.06), 0 3px 14px rgba(0,0,0,.09);
+      border-radius: 16px;
+      padding: 14px 16px 12px;
+      border: 1px solid rgba(0,0,0,.05);
+      box-shadow: 0 2px 8px rgba(15,23,42,.05), 0 8px 24px rgba(15,23,42,.06);
       transition: box-shadow .18s, transform .12s;
       position: relative;
       width: 100%;
@@ -266,22 +279,14 @@
       animation: card-enter .22s ease;
       cursor: pointer;
     }
-    .card:hover { box-shadow: 0 6px 22px rgba(0,0,0,.13); transform: translateY(-2px); }
+    .card:hover { box-shadow: 0 4px 16px rgba(15,23,42,.09), 0 12px 32px rgba(15,23,42,.08); transform: translateY(-2px); }
 
-    .card.urgent {
-      border-left-color: #f87171;
-      box-shadow: 0 1px 4px rgba(0,0,0,.07), 0 0 0 1px #fca5a5;
-    }
-
-    .card.resolvido {
-      opacity: .75;
-      background: #f0fdf4;
-      border-left-color: #86efac;
-    }
-    .card.triagem_incompleta { border-left-color: var(--warn-color); }
-    .card.warn-10  { border-left-color: #d97706; box-shadow: 0 1px 4px rgba(0,0,0,.07), 0 0 0 1px #fbbf24; }
-    .card.pri-alta  { border-left-color: #ea580c; background: #fffaf7; }
-    .card.pri-media { border-left-color: #ca8a04; background: #fefdf5; }
+    .card.urgent   { background: #fff1f2; border-color: rgba(248,113,113,.18); }
+    .card.resolvido { opacity: .78; background: #f0fdf4; border-color: rgba(134,239,172,.3); }
+    .card.triagem_incompleta { border-color: rgba(245,158,11,.2); }
+    .card.warn-10  { background: #fffbeb; border-color: rgba(251,191,36,.2); }
+    .card.pri-alta  { background: #fff8f1; border-color: rgba(234,88,12,.1); }
+    .card.pri-media { background: #fffef0; border-color: rgba(202,138,4,.1); }
 
     .priority-dot {
       display: inline-flex; align-items: center;
@@ -296,12 +301,9 @@
     .priority-dot.pb-alta    { background: #ffedd5; color: #9a3412; }
     .priority-dot.pb-media   { background: #fef9c3; color: #854d0e; }
     .priority-dot.pb-baixa   { background: #f1f5f9; color: #475569; opacity: .45; }
-    .priority-dot.pri-manual { outline: 1.5px dashed currentColor; outline-offset: 2px; }
+    .priority-dot.pri-manual { opacity: .8; }
 
-    .card.forgotten {
-      border-left-color: #f87171;
-      box-shadow: 0 1px 4px rgba(0,0,0,.07), 0 0 0 1px #f87171;
-    }
+    .card.forgotten { background: #fff0f0; border-color: rgba(248,113,113,.2); }
     .forgotten-icon {
       font-size: .75rem;
       flex-shrink: 0;
@@ -311,11 +313,11 @@
     }
 
     /* ─ Card top ─ */
-    /* -- Prioridade crítica: pastel vermelho (texto escuro) -- */
-    .card.card-critica { background: #fde2e2; border-left-color: #ef4444; border-left-width: 5px; }
+    /* -- Prioridade crítica -- */
+    .card.card-critica { background: #fff1f1; border-color: rgba(239,68,68,.15); }
 
-    /* -- Finalizado/Entregue: pastel verde (texto escuro) -- */
-    .card.card-finalizado { background: #dcfce7; border-left-color: #86efac; }
+    /* -- Finalizado/Entregue -- */
+    .card.card-finalizado { background: #f0fdf6; border-color: rgba(52,211,153,.2); }
 
     /* -- Select PF/PJ compacto no topo do card -- */
     .type-select-top {
@@ -357,22 +359,22 @@
     }
     .btn-resolve-card:hover { background: #fff1f2; border-color: #f87171; }
 
-    /* Resolver inline — no rodapé meta do card, discreto */
+    /* Resolver inline — ghost button discreto */
     .btn-resolve-inline {
       margin-left: auto;
-      font-size: .61rem;
-      font-weight: 600;
+      font-size: .6rem;
+      font-weight: 500;
       padding: 2px 7px;
       border-radius: 5px;
-      border: 1px solid #fca5a5;
+      border: 1px solid rgba(0,0,0,.14);
       background: transparent;
-      color: #b91c1c;
+      color: var(--text-muted);
       cursor: pointer;
-      transition: background .12s;
+      transition: background .12s, color .12s;
       white-space: nowrap;
       flex-shrink: 0;
     }
-    .btn-resolve-inline:hover { background: #fff1f2; }
+    .btn-resolve-inline:hover { background: #fff1f2; color: #b91c1c; border-color: #fca5a5; }
 
     /* -- Altura uniforme: botoes sempre no fundo -- */
     .card-actions { margin-top: auto; }
@@ -2843,7 +2845,7 @@ function renderPipelineTab(tabId, cols, convs) {
     if (!cards.length) {
       const empty = document.createElement("div");
       empty.className = "empty-col";
-      empty.textContent = "—";
+      empty.textContent = "Nenhuma conversa";
       cardsEl.appendChild(empty);
     } else {
       for (const c of cards) {
@@ -2943,9 +2945,7 @@ function buildCard(c, col, cols) {
             : `<span class="card-time">${relTime(c.handoffAt)}</span>`}
         ${!isResolved ? `<button class="btn-resolve-inline" onclick="event.stopPropagation();quickResolveCard('${esc(c.phone)}')" title="Resolver atendimento">✓ Resolver</button>` : ""}
       </div>
-      ${isResolved && (c.resolvedAt
-        ? `<div style="font-size:.61rem;color:var(--text-muted);text-align:center;padding-top:2px">Resolvido ${relTime(c.resolvedAt)}</div>`
-        : "")}
+      ${isResolved && c.resolvedAt ? `<div style="font-size:.61rem;color:var(--text-muted);text-align:center;padding-top:2px">Resolvido ${relTime(c.resolvedAt)}</div>` : ""}
       ${isResolved
         ? `<button class="btn-reopen" onclick="reopenCard('${esc(c.phone)}','${clientType}')" style="width:100%;margin-top:4px">&#8635; Reabrir</button>`
         : ""
