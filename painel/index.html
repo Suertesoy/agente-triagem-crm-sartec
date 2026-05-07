@@ -163,8 +163,8 @@
       gap: 12px;
     }
     .pipe-col {
-      flex: 1 0 260px;
-      max-width: 340px;
+      flex: 1 0 280px;
+      max-width: 400px;
       display: flex;
       flex-direction: column;
       border-radius: 16px;
@@ -255,9 +255,9 @@
     .card {
       background: var(--bg-card);
       border-radius: 16px;
-      padding: 16px 18px 14px;
-      border: 1px solid rgba(0,0,0,.05);
-      box-shadow: 0 2px 8px rgba(15,23,42,.05), 0 8px 24px rgba(15,23,42,.06);
+      padding: 18px 20px 16px;
+      border: 1px solid rgba(0,0,0,.06);
+      box-shadow: 0 2px 8px rgba(15,23,42,.06), 0 8px 28px rgba(15,23,42,.08);
       transition: box-shadow .18s, transform .12s;
       position: relative;
       width: 100%;
@@ -266,21 +266,21 @@
       box-sizing: border-box;
       display: flex;
       flex-direction: column;
-      min-height: 182px;
+      min-height: 204px;
       animation: card-enter .22s ease;
       cursor: pointer;
     }
-    .card:hover { box-shadow: 0 4px 16px rgba(15,23,42,.09), 0 12px 32px rgba(15,23,42,.08); transform: translateY(-2px); }
+    .card:hover { box-shadow: 0 4px 18px rgba(15,23,42,.1), 0 14px 36px rgba(15,23,42,.09); transform: translateY(-2px); }
 
     /* ── Semântica: fundo do card = temperatura operacional ── */
-    .card.resolvido      { opacity: .76; background: #e3f8ec; border-color: rgba(52,211,153,.18); }
-    .card.card-finalizado { background: #e3f8ec; border-color: rgba(52,211,153,.18); }
-    .card.card-critica   { background: #ffe4e6; border-color: rgba(248,113,113,.15); }
-    .card.pri-alta       { background: #ffe4e6; border-color: rgba(248,113,113,.15); }
-    .card.urgent         { background: #ffe4e6; border-color: rgba(248,113,113,.15); }
-    .card.forgotten      { background: #ffe4e6; border-color: rgba(248,113,113,.15); }
-    .card.pri-media      { background: #fff4d0; border-color: rgba(234,179,8,.15); }
-    .card.warn-10        { background: #fff4d0; border-color: rgba(234,179,8,.15); }
+    .card.resolvido      { opacity: .76; background: #d1f7e4; border-color: rgba(52,211,153,.2); }
+    .card.card-finalizado { background: #d1f7e4; border-color: rgba(52,211,153,.2); }
+    .card.card-critica   { background: #ffd6d9; border-color: rgba(248,113,113,.18); }
+    .card.pri-alta       { background: #ffd6d9; border-color: rgba(248,113,113,.18); }
+    .card.urgent         { background: #ffd6d9; border-color: rgba(248,113,113,.18); }
+    .card.forgotten      { background: #ffd6d9; border-color: rgba(248,113,113,.18); }
+    .card.pri-media      { background: #fef0b0; border-color: rgba(234,179,8,.18); }
+    .card.warn-10        { background: #fef0b0; border-color: rgba(234,179,8,.18); }
     .card.triagem_incompleta { border-color: rgba(245,158,11,.2); }
 
     .priority-dot {
@@ -419,10 +419,10 @@
 
     /* ─ Card title editável — único resumo do pedido ─ */
     .card-title {
-      font-size: .84rem;
+      font-size: .88rem;
       font-weight: 500;
       color: var(--text-primary);
-      margin-bottom: 4px;
+      margin-bottom: 2px;
       cursor: text;
       border-radius: 4px;
       padding: 2px 3px;
@@ -433,7 +433,7 @@
       line-clamp: 2;
       -webkit-box-orient: vertical;
       overflow: hidden;
-      line-height: 1.6;
+      line-height: 1.65;
       word-break: break-word;
     }
     .card-title:hover { background: #f0f4ff; }
@@ -1972,16 +1972,16 @@
     }
     .card-zone-mid {
       background: transparent;
-      border-left: 2px solid rgba(26,42,94,.18);
+      border-left: 3px solid rgba(26,42,94,.16);
       border-radius: 0;
-      padding: 5px 8px;
-      margin: 4px 0 5px;
+      padding: 6px 10px;
+      margin: 8px 0 8px;
       flex: 1;
     }
     .card-zone-footer {
       display: flex;
       flex-direction: column;
-      gap: 5px;
+      gap: 7px;
     }
     .card-zone-footer-meta {
       display: flex;
@@ -2018,18 +2018,19 @@
 
     /* ── Botão expandir card ── */
     .card-expand-btn {
-      font-size: .6rem;
-      color: var(--text-muted);
+      font-size: .62rem;
+      font-weight: 600;
+      color: var(--text-secondary);
       background: transparent;
-      border: none;
+      border: 1px solid rgba(0,0,0,.1);
       cursor: pointer;
-      padding: 1px 5px;
-      border-radius: 4px;
-      transition: color .12s, background .12s;
+      padding: 3px 9px;
+      border-radius: 6px;
+      transition: color .12s, background .12s, border-color .12s;
       flex-shrink: 0;
-      opacity: .65;
+      white-space: nowrap;
     }
-    .card-expand-btn:hover { opacity: 1; background: rgba(0,0,0,.05); }
+    .card-expand-btn:hover { background: rgba(26,42,94,.06); color: var(--brand-navy); border-color: rgba(26,42,94,.2); }
 
     /* ── Corpo expandido ── */
     .card-expand-body {
@@ -2059,21 +2060,28 @@
       letter-spacing: .03em;
     }
 
-    /* ── Affordance "Abrir conversa" ── */
+    /* ── "Abrir conversa" — ghost button secundário ── */
     .card-open-hint {
-      font-size: .59rem;
+      display: block;
+      width: 100%;
+      text-align: center;
+      font-size: .69rem;
+      font-weight: 600;
       color: var(--brand-navy-mid);
-      opacity: .55;
-      text-align: right;
-      padding-top: 4px;
-      pointer-events: none;
+      background: transparent;
+      border: 1px solid rgba(26,42,94,.15);
+      border-radius: 8px;
+      padding: 6px 10px;
+      cursor: pointer;
       letter-spacing: .02em;
+      transition: background .15s, border-color .15s, color .15s;
     }
+    .card-open-hint:hover { background: rgba(26,42,94,.05); border-color: rgba(26,42,94,.28); color: var(--brand-navy); }
 
-    /* ── Stats strip — barra de métricas abaixo do header ── */
+    /* ── Stats strip — continuidade visual com o header ── */
     .stats-strip {
-      background: #f8f9fb;
-      border-bottom: 1px solid rgba(0,0,0,.06);
+      background: #1e2e68;
+      border-bottom: 1px solid rgba(0,0,0,.2);
       padding: 5px 20px;
       display: flex;
       align-items: center;
@@ -2082,15 +2090,15 @@
     }
     .stat-chip {
       font-size: .67rem;
-      color: var(--text-muted);
+      color: rgba(255,255,255,.6);
       white-space: nowrap;
       display: flex;
       align-items: center;
       gap: 3px;
     }
-    .stat-chip.open   { color: #16a34a; }
-    .stat-chip.closed { color: var(--text-muted); }
-    .stat-sep { font-size: .6rem; color: var(--border); opacity: .8; }
+    .stat-chip.open   { color: #86efac; }
+    .stat-chip.closed { color: rgba(255,255,255,.38); }
+    .stat-sep { font-size: .6rem; color: rgba(255,255,255,.2); }
   </style>
 </head>
 <body>
@@ -3117,7 +3125,7 @@ function buildCard(c, col, cols) {
         ${windowStatusLabel(c)}
         <button class="card-expand-btn"
           onclick="event.stopPropagation();toggleCardExpand(event,'${esc(c.phone)}')"
-          title="${_expandedCards.has(c.phone) ? 'Recolher' : 'Ver detalhes'}">${_expandedCards.has(c.phone) ? "▲" : "▼"}</button>
+          title="${_expandedCards.has(c.phone) ? 'Ocultar detalhes' : 'Ver detalhes'}">${_expandedCards.has(c.phone) ? "▲ Ocultar" : "▼ Detalhes"}</button>
         ${!isResolved ? `<button class="btn-resolve-inline" onclick="event.stopPropagation();quickResolveCard('${esc(c.phone)}')" title="Resolver atendimento">✓ Resolver</button>` : ""}
       </div>
       ${buildExpandBody(c, clientType)}
@@ -3126,7 +3134,7 @@ function buildCard(c, col, cols) {
         ? `<button class="btn-reopen" onclick="reopenCard('${esc(c.phone)}','${clientType}')" style="width:100%;margin-top:4px">&#8635; Reabrir</button>`
         : ""
       }
-      ${!isResolved ? `<div class="card-open-hint">Abrir conversa →</div>` : ""}
+      ${!isResolved ? `<button class="card-open-hint" type="button" onclick="openChat('${esc(c.phone)}')">Abrir conversa →</button>` : ""}
     </div>
   `;
 
