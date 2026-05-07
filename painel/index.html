@@ -48,8 +48,8 @@
     .top-header {
       background: var(--brand-navy);
       color: #fff;
-      padding: 0 20px;
-      height: 56px;
+      padding: 0 24px;
+      height: 64px;
       display: flex;
       align-items: center;
       gap: 16px;
@@ -257,8 +257,8 @@
       border-radius: 16px;
       padding: 18px 20px 16px;
       border: 1px solid rgba(0,0,0,.06);
-      box-shadow: 0 2px 8px rgba(15,23,42,.06), 0 8px 28px rgba(15,23,42,.08);
-      transition: box-shadow .18s, transform .12s;
+      box-shadow: 0 1px 3px rgba(15,23,42,.04), 0 4px 12px rgba(15,23,42,.07), 0 12px 32px rgba(15,23,42,.08);
+      transition: box-shadow .18s, transform .14s, background-color .22s ease;
       position: relative;
       width: 100%;
       overflow: hidden;
@@ -270,11 +270,11 @@
       animation: card-enter .22s ease;
       cursor: pointer;
     }
-    .card:hover { box-shadow: 0 4px 18px rgba(15,23,42,.1), 0 14px 36px rgba(15,23,42,.09); transform: translateY(-2px); }
+    .card:hover { box-shadow: 0 2px 6px rgba(15,23,42,.06), 0 8px 22px rgba(15,23,42,.1), 0 18px 40px rgba(15,23,42,.08); transform: translateY(-2px); }
 
     /* ── Semântica: fundo do card = temperatura operacional ── */
-    .card.resolvido      { opacity: .76; background: #d1f7e4; border-color: rgba(52,211,153,.2); }
-    .card.card-finalizado { background: #d1f7e4; border-color: rgba(52,211,153,.2); }
+    .card.resolvido      { opacity: .76; background: #e8f3ee; border-color: rgba(20,150,80,.14); }
+    .card.card-finalizado { background: #e8f3ee; border-color: rgba(20,150,80,.14); }
     .card.card-critica   { background: #ffd6d9; border-color: rgba(248,113,113,.18); }
     .card.pri-alta       { background: #ffd6d9; border-color: rgba(248,113,113,.18); }
     .card.urgent         { background: #ffd6d9; border-color: rgba(248,113,113,.18); }
@@ -392,8 +392,8 @@
 
     /* Nome editável inline */
     .card-name {
-      font-weight: 800;
-      font-size: 1rem;
+      font-weight: 700;
+      font-size: .9rem;
       flex: 1;
       min-width: 0;
       white-space: nowrap;
@@ -419,8 +419,8 @@
 
     /* ─ Card title editável — único resumo do pedido ─ */
     .card-title {
-      font-size: .88rem;
-      font-weight: 500;
+      font-size: .92rem;
+      font-weight: 600;
       color: var(--text-primary);
       margin-bottom: 2px;
       cursor: text;
@@ -1972,22 +1972,23 @@
     }
     .card-zone-mid {
       background: transparent;
-      border-left: 3px solid rgba(26,42,94,.16);
+      border-left: 3px solid rgba(26,42,94,.22);
       border-radius: 0;
       padding: 6px 10px;
-      margin: 8px 0 8px;
+      margin: 4px 0 6px;
       flex: 1;
     }
     .card-zone-footer {
       display: flex;
       flex-direction: column;
-      gap: 7px;
+      gap: 6px;
     }
     .card-zone-footer-meta {
       display: flex;
       align-items: center;
-      gap: 5px;
-      flex-wrap: wrap;
+      gap: 6px;
+      flex-wrap: nowrap;
+      overflow: hidden;
     }
     .card-msg-count {
       margin-left: auto;
@@ -2018,30 +2019,37 @@
 
     /* ── Botão expandir card ── */
     .card-expand-btn {
-      font-size: .62rem;
+      font-size: .63rem;
       font-weight: 600;
       color: var(--text-secondary);
       background: transparent;
-      border: 1px solid rgba(0,0,0,.1);
+      border: 1px solid rgba(0,0,0,.11);
       cursor: pointer;
-      padding: 3px 9px;
-      border-radius: 6px;
-      transition: color .12s, background .12s, border-color .12s;
+      padding: 4px 11px;
+      border-radius: 7px;
+      transition: all .15s ease;
       flex-shrink: 0;
       white-space: nowrap;
     }
-    .card-expand-btn:hover { background: rgba(26,42,94,.06); color: var(--brand-navy); border-color: rgba(26,42,94,.2); }
+    .card-expand-btn:hover { background: rgba(26,42,94,.05); color: var(--brand-navy); border-color: rgba(26,42,94,.2); transform: none; }
 
-    /* ── Corpo expandido ── */
+    /* ── Corpo expandido — animação com max-height/opacity ── */
     .card-expand-body {
-      display: none;
-      margin-top: 7px;
-      padding: 8px 10px;
+      max-height: 0;
+      overflow: hidden;
+      opacity: 0;
+      margin-top: 0;
+      padding: 0 10px;
       background: rgba(0,0,0,.025);
       border-radius: 8px;
-      border-top: 1px solid rgba(0,0,0,.05);
+      transition: max-height .2s ease, opacity .18s ease, padding .2s ease, margin-top .2s ease;
     }
-    .card-expand-body.visible { display: block; }
+    .card-expand-body.visible {
+      max-height: 600px;
+      opacity: 1;
+      margin-top: 6px;
+      padding: 9px 10px;
+    }
     .card-expand-row {
       display: flex;
       gap: 5px;
@@ -2060,23 +2068,24 @@
       letter-spacing: .03em;
     }
 
-    /* ── "Abrir conversa" — ghost button secundário ── */
+    /* ── "Abrir conversa" — ação secundária discreta ── */
     .card-open-hint {
-      display: block;
-      width: 100%;
-      text-align: center;
-      font-size: .69rem;
+      display: inline-flex;
+      align-items: center;
+      align-self: flex-start;
+      gap: 4px;
+      font-size: .66rem;
       font-weight: 600;
-      color: var(--brand-navy-mid);
+      color: var(--text-secondary);
       background: transparent;
-      border: 1px solid rgba(26,42,94,.15);
-      border-radius: 8px;
-      padding: 6px 10px;
+      border: 1px solid rgba(0,0,0,.1);
+      border-radius: 7px;
+      padding: 4px 10px;
       cursor: pointer;
-      letter-spacing: .02em;
+      letter-spacing: .01em;
       transition: background .15s, border-color .15s, color .15s;
     }
-    .card-open-hint:hover { background: rgba(26,42,94,.05); border-color: rgba(26,42,94,.28); color: var(--brand-navy); }
+    .card-open-hint:hover { background: rgba(26,42,94,.05); border-color: rgba(26,42,94,.2); color: var(--brand-navy); }
 
     /* ── Resumo operacional — expand do card ── */
     .card-expand-summary {
@@ -3196,6 +3205,7 @@ function buildCard(c, col, cols) {
 
     <div class="card-zone-footer" onclick="event.stopPropagation()">
       <div class="card-zone-footer-meta">
+        ${windowStatusLabel(c)}
         <select class="demand-select ${demandClass(c.demandType)}"
           data-phone="${esc(c.phone)}"
           onchange="saveDemandType(this)" onclick="event.stopPropagation()" title="Tipo de demanda">
@@ -3205,7 +3215,6 @@ function buildCard(c, col, cols) {
         </select>
         <button class="btn-cat-mgr" onclick="event.stopPropagation();openCatManager()" title="Gerenciar categorias">⚙️</button>
         ${isIncomplete ? `<span class="tag-sem-resp">Sem resposta</span>` : ""}
-        ${windowStatusLabel(c)}
         <button class="card-expand-btn"
           onclick="event.stopPropagation();toggleCardExpand(event,'${esc(c.phone)}')"
           title="${_expandedCards.has(c.phone) ? 'Ocultar detalhes' : 'Ver detalhes'}">${_expandedCards.has(c.phone) ? "▲ Ocultar" : "▼ Detalhes"}</button>
