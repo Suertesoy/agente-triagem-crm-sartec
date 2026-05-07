@@ -130,6 +130,12 @@ export default async function handler(req, res) {
         lastMessage:    lastMessage.substring(0, 200),
         messageCount:   (session.history || []).length,
         priorityManual: session.priorityManual  || null,
+        dataLimite:     session.dataLimite      || null,
+        formaEntrega:   session.formaEntrega    || null,
+        endereco:       session.endereco        || null,
+        observacoes:    session.observacoes     || null,
+        escola:         session.escola          || null,
+        serie:          session.serie           || null,
         ...computeWindowInfo(session),
       });
     }

@@ -2006,6 +2006,66 @@
       to   { opacity: 1; transform: translateY(0); }
     }
     .bubble-wrap { animation: bubble-enter .15s ease; }
+
+    /* ── Status da janela WhatsApp no card ── */
+    .card-window-status { font-size: .59rem; font-weight: 600; white-space: nowrap; flex-shrink: 0; }
+    .ws-open    { color: #16a34a; }
+    .ws-waiting { color: #d97706; }
+    .ws-closed  { color: var(--text-muted); opacity: .7; }
+
+    /* ── Botão expandir card ── */
+    .card-expand-btn {
+      font-size: .6rem;
+      color: var(--text-muted);
+      background: transparent;
+      border: none;
+      cursor: pointer;
+      padding: 1px 5px;
+      border-radius: 4px;
+      transition: color .12s, background .12s;
+      flex-shrink: 0;
+      opacity: .65;
+    }
+    .card-expand-btn:hover { opacity: 1; background: rgba(0,0,0,.05); }
+
+    /* ── Corpo expandido ── */
+    .card-expand-body {
+      display: none;
+      margin-top: 7px;
+      padding: 8px 10px;
+      background: rgba(0,0,0,.025);
+      border-radius: 8px;
+      border-top: 1px solid rgba(0,0,0,.05);
+    }
+    .card-expand-body.visible { display: block; }
+    .card-expand-row {
+      display: flex;
+      gap: 5px;
+      font-size: .69rem;
+      line-height: 1.5;
+      color: var(--text-secondary);
+      margin-bottom: 1px;
+    }
+    .card-expand-label {
+      font-size: .62rem;
+      color: var(--text-muted);
+      font-weight: 600;
+      flex-shrink: 0;
+      min-width: 68px;
+      text-transform: uppercase;
+      letter-spacing: .03em;
+    }
+
+    /* ── Affordance "Abrir conversa" ── */
+    .card-open-hint {
+      font-size: .59rem;
+      color: var(--brand-navy-mid);
+      opacity: .45;
+      text-align: right;
+      padding-top: 4px;
+      pointer-events: none;
+      letter-spacing: .02em;
+    }
   </style>
 </head>
 <body>
@@ -2442,7 +2502,8 @@ let resolveCallback = null;   // callback para o confirm modal
 let _dragPhone = null, _dragClientType = null;
 let _dragInsertAfter = null;
 const _colOrder = {};
-let _priPickerPhone = null;
+let _priPickerPhone  = null;
+const _expandedCards = new Set(); // phones com card expandido no kanban
 
 // mídia modal
 let mediaModalBase64 = null;
@@ -2480,6 +2541,64 @@ function demandClass(t) {
 function demandLabel(t) {
   const cats = getCategories();
   return cats[t] || t || "Outro";
+}
+
+// ── Status da janela WhatsApp para os cards ──────────────────────────────
+function windowStatusLabel(c) {
+  const ws = c.conversationWindowStatus;
+  if (ws === "open" && c.windowRemainingMs > 0) {
+    const h = Math.floor(c.windowRemainingMs / 3_600_000);
+    const m = Math.floor((c.windowRemainingMs % 3_600_000) / 60_000);
+    return `<span class="card-window-status ws-open">⬡ ${h}h${String(m).padStart(2,'0')}min</span>`;
+  }
+  if (ws === "waiting_template_reply")
+    return `<span class="card-window-status ws-waiting">⏳ Aguardando</span>`;
+  return `<span class="card-window-status ws-closed">Janela fechada</span>`;
+}
+
+// ── Corpo expandido do card ───────────────────────────────────────────────
+function buildExpandBody(c, clientType) {
+  const rows = [];
+  const cats = getCategories();
+  const add = (lbl, val) => {
+    if (val !== null && val !== undefined && val !== "" && val !== "—")
+      rows.push(`<div class="card-expand-row"><span class="card-expand-label">${lbl}</span><span>${esc(String(val))}</span></div>`);
+  };
+
+  if (c.demandType && c.demandType !== "outro") add("Categoria", cats[c.demandType] || c.demandType);
+  if (c.lastMessage && c.lastMessage !== "[mídia]") {
+    const msg = c.lastMessage.length > 90 ? c.lastMessage.slice(0, 90) + "…" : c.lastMessage;
+    add("Última msg", msg);
+  }
+  const wsStr = (() => {
+    const ws = c.conversationWindowStatus;
+    if (ws === "open" && c.windowRemainingMs > 0) {
+      const h = Math.floor(c.windowRemainingMs / 3_600_000);
+      const m = Math.floor((c.windowRemainingMs % 3_600_000) / 60_000);
+      return `Aberta — ${h}h${String(m).padStart(2,'0')}min`;
+    }
+    if (ws === "waiting_template_reply") return "Aguardando resposta";
+    return "Fechada";
+  })();
+  add("Janela WA", wsStr);
+  if (c.dataLimite)   add("Data limite", c.dataLimite);
+  if (c.formaEntrega) add("Entrega", c.formaEntrega === "retirada" ? "Retirada" : c.formaEntrega === "entrega" ? "Domicílio" : c.formaEntrega);
+  if (c.endereco)     add("Endereço", c.endereco);
+  if (c.escola)       add("Escola", c.escola);
+  if (c.serie)        add("Série", c.serie);
+  if (c.observacoes)  add("Obs.", c.observacoes);
+
+  if (!rows.length) return "";
+  const isExpanded = _expandedCards.has(c.phone);
+  return `<div class="card-expand-body${isExpanded ? " visible" : ""}"><div style="font-size:.62rem;font-weight:700;color:var(--text-muted);margin-bottom:5px;text-transform:uppercase;letter-spacing:.04em">Resumo</div>${rows.join("")}</div>`;
+}
+
+// ── Toggle card expandido ─────────────────────────────────────────────────
+function toggleCardExpand(event, phone) {
+  event.stopPropagation();
+  if (_expandedCards.has(phone)) _expandedCards.delete(phone);
+  else _expandedCards.add(phone);
+  renderPipeline(allConvs);
 }
 
 function relTime(iso) {
@@ -2928,7 +3047,6 @@ function buildCard(c, col, cols) {
           onblur="saveCardField(this,'clientName')"
           onkeydown="if(event.key==='Enter'){event.preventDefault();this.blur()}"
           title="${esc(c.clientName)} — clique para editar">${esc(c.clientName)}</span>
-        ${forgotten ? `<span class="forgotten-icon" title="Sem resposta há mais de 2h">⏱</span>` : ""}
         ${priBadge}
       </div>
     </div>
@@ -2951,19 +3069,19 @@ function buildCard(c, col, cols) {
         </select>
         <button class="btn-cat-mgr" onclick="event.stopPropagation();openCatManager()" title="Gerenciar categorias">⚙️</button>
         ${isIncomplete ? `<span class="tag-sem-resp">Sem resposta</span>` : ""}
-        <span class="card-msg-count">${c.messageCount} msgs</span>
-        ${urgent
-          ? `<span class="card-time urgent">⚠️ ${relTime(c.handoffAt)}</span>`
-          : warn10
-            ? `<span class="card-time warn">🕐 ${relTime(c.handoffAt)}</span>`
-            : `<span class="card-time">${relTime(c.handoffAt)}</span>`}
+        ${windowStatusLabel(c)}
+        <button class="card-expand-btn"
+          onclick="event.stopPropagation();toggleCardExpand(event,'${esc(c.phone)}')"
+          title="${_expandedCards.has(c.phone) ? 'Recolher' : 'Ver detalhes'}">${_expandedCards.has(c.phone) ? "▲" : "▼"}</button>
         ${!isResolved ? `<button class="btn-resolve-inline" onclick="event.stopPropagation();quickResolveCard('${esc(c.phone)}')" title="Resolver atendimento">✓ Resolver</button>` : ""}
       </div>
+      ${buildExpandBody(c, clientType)}
       ${isResolved && c.resolvedAt ? `<div style="font-size:.61rem;color:var(--text-muted);text-align:center;padding-top:2px">Resolvido ${relTime(c.resolvedAt)}</div>` : ""}
       ${isResolved
         ? `<button class="btn-reopen" onclick="reopenCard('${esc(c.phone)}','${clientType}')" style="width:100%;margin-top:4px">&#8635; Reabrir</button>`
         : ""
       }
+      ${!isResolved ? `<div class="card-open-hint">Abrir conversa →</div>` : ""}
     </div>
   `;
 
