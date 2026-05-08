@@ -169,9 +169,10 @@
     .pipeline {
       display: flex;
       gap: 12px;
+      width: 100%;
     }
     .pipe-col {
-      flex: 1 0 280px;
+      flex: 1 1 220px;
       max-width: 400px;
       display: flex;
       flex-direction: column;
@@ -218,7 +219,7 @@
 
     .pipe-col-cards {
       display: grid;
-      grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
+      grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
       gap: 10px;
       align-content: start;
       min-height: 60px;
@@ -639,8 +640,44 @@
       gap: 8px;
       max-width: 280px;
     }
-    .toast.t-ok  { border-left: 3px solid #10b981; }
-    .toast.t-err { border-left: 3px solid #ef4444; }
+    .toast.t-ok   { border-left: 3px solid #10b981; }
+    .toast.t-err  { border-left: 3px solid #ef4444; }
+    .toast.t-undo { border-left: 3px solid #f59e0b; }
+    .toast-undo-btn {
+      background: rgba(255,255,255,.14);
+      border: 1px solid rgba(255,255,255,.25);
+      color: #f8fafc;
+      border-radius: 5px;
+      padding: 3px 10px;
+      font-size: .71rem;
+      font-weight: 700;
+      cursor: pointer;
+      flex-shrink: 0;
+      transition: background .14s;
+    }
+    .toast-undo-btn:hover { background: rgba(255,255,255,.26); }
+    /* Triagem incompleta */
+    .badge-triagem {
+      font-size: .56rem;
+      font-weight: 700;
+      padding: 2px 6px;
+      border-radius: 4px;
+      background: #fef3c7;
+      color: #92400e;
+      flex-shrink: 0;
+      white-space: nowrap;
+      letter-spacing: .02em;
+    }
+    .card-triagem-hint {
+      font-size: .76rem;
+      font-weight: 600;
+      color: #92400e;
+      background: rgba(245,158,11,.07);
+      border-radius: 5px;
+      padding: 5px 8px;
+      margin-bottom: 5px;
+      line-height: 1.4;
+    }
     @keyframes toast-in {
       from { opacity: 0; transform: translateY(8px); }
       to   { opacity: 1; transform: translateY(0); }
@@ -2316,10 +2353,10 @@
         Todas <span class="filter-pill-count" id="pill-count-all">0</span>
       </button>
       <button class="filter-pill" id="pill-pf" onclick="setConvFilter('pf')">
-        PF <span class="filter-pill-count" id="pill-count-pf">0</span>
+        Pessoa Física <span class="filter-pill-count" id="pill-count-pf">0</span>
       </button>
       <button class="filter-pill" id="pill-pj" onclick="setConvFilter('pj')">
-        PJ <span class="filter-pill-count" id="pill-count-pj">0</span>
+        Pessoa Jurídica <span class="filter-pill-count" id="pill-count-pj">0</span>
       </button>
     </div>
     <div class="convs-list" id="convs-list"></div>
@@ -2694,7 +2731,8 @@ let resolveCallback = null;   // callback para o confirm modal
 let _dragPhone = null, _dragClientType = null;
 let _dragInsertAfter = null;
 const _colOrder = {};
-let _priPickerPhone  = null;
+let _priPickerPhone      = null;
+let _lastClientTypeChange = null; // { phone, oldType, oldPipelineStatus }
 const _expandedCards = new Set(); // phones com card expandido no kanban
 
 // mídia modal
@@ -2751,10 +2789,19 @@ function windowStatusLabel(c) {
 // ── Resumo operacional por heurísticas ───────────────────────────────────
 const _USELESS_MSG = /^(ok|oks|okay|obrigad\w*|obg|valeu|vlw|beleza|blz|tudo bem|td bem|tdbm|sim|não|nao|talvez|pode|certo|entendi|legal|\s|👍|✅|👌|😊|😁|🙏|⁠)+\.?$/iu;
 
+const _GREET_RE = /^(oi+|ol[aá]|hey|hi|bom dia|boa tarde|boa noite|boas|tudo bem|td bem|e a[íi]|eae|opa|hello|\s)+[!.?]?$/i;
+
 function resumoOperacional(c) {
   // 1. cardTitle manual útil
   const title = (c.cardTitle || "").trim();
   if (title.length > 5) return title;
+
+  // 1.5 Triagem incompleta — prioridade alta
+  if (c.status === "triagem_incompleta") {
+    const lm = (c.lastMessage || "").trim();
+    if (!lm || _GREET_RE.test(lm)) return "Triagem incompleta — cliente não informou o pedido";
+    return "Triagem incompleta — revisar solicitação do cliente";
+  }
 
   const ps  = c.pipelineStatus || "";
   const fe  = c.formaEntrega   || "";
@@ -2858,6 +2905,12 @@ function buildExpandBody(c, clientType) {
   if (c.escola)       add("Escola", c.escola);
   if (c.serie)        add("Série", c.serie);
   if (c.observacoes)  add("Obs.", c.observacoes);
+  // Contexto operacional de janela para triagem incompleta
+  if (c.status === "triagem_incompleta") {
+    const ws = c.conversationWindowStatus;
+    if (ws === "open")   add("Ação sugerida", "Janela aberta — pode responder agora");
+    else if (ws === "closed") add("Ação sugerida", "Janela fechada — enviar template para retomar");
+  }
 
   if (!summaryBlock && !rows.length) return "";
   const isExpanded = _expandedCards.has(c.phone);
@@ -3351,10 +3404,12 @@ function buildCard(c, col, cols) {
           onkeydown="if(event.key==='Enter'){event.preventDefault();this.blur()}"
           title="${esc(c.clientName)} — clique para editar">${esc(c.clientName)}</span>
         ${priBadge}
+        ${isIncomplete ? `<span class="badge-triagem">Triagem ⚠️</span>` : ""}
       </div>
     </div>
 
     <div class="card-zone-mid" onclick="event.stopPropagation()">
+      ${isIncomplete && !cardTitle ? `<div class="card-triagem-hint">${esc(resumoOperacional(c))}</div>` : ""}
       <div class="card-title" contenteditable="true" data-phone="${esc(c.phone)}"
         onblur="saveCardField(this,'cardTitle')"
         onkeydown="if(event.key==='Enter'){event.preventDefault();this.blur()}"
@@ -3472,13 +3527,24 @@ async function changeStatus(select, phone, clientType) {
 }
 
 async function changeClientType(select, phone) {
-  const newType  = select.value;
+  const newType = select.value;
   const conv = allConvs.find(c => c.phone === phone);
-  if (conv) {
-    conv.clientType     = newType;
-    conv.pipelineStatus = "novo"; // reset to novo quando troca de aba
-    renderPipeline(allConvs);
-  }
+  if (!conv) return;
+
+  // Capturar estado anterior para undo
+  _lastClientTypeChange = {
+    phone,
+    oldType:           conv.clientType     || "pf",
+    oldPipelineStatus: conv.pipelineStatus  || "novo",
+  };
+
+  conv.clientType     = newType;
+  conv.pipelineStatus = "novo";
+  renderPipeline(allConvs);
+
+  const label = newType === "pj" ? "Pessoa Jurídica" : "Pessoa Física";
+  showUndoToast(`Cliente movido para ${label}`, undoClientTypeChange, 6000);
+
   try {
     await fetch("/api/update-card", {
       method: "PUT",
@@ -3489,17 +3555,18 @@ async function changeClientType(select, phone) {
 }
 
 async function reopenCard(phone, clientType) {
+  const targetStatus = clientType === "pj" ? "novo" : "em_atendimento";
   try {
     const res = await fetch("/api/update-status", {
       method: "PUT",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ phone, pipelineStatus: "em_atendimento", clientType }),
+      body: JSON.stringify({ phone, pipelineStatus: targetStatus, clientType }),
     });
     if (res.ok) {
       const conv = allConvs.find(c => c.phone === phone);
       if (conv) {
         conv.status         = "aguardando_humano";
-        conv.pipelineStatus = "em_atendimento";
+        conv.pipelineStatus = targetStatus;
         conv.resolvedAt     = null;
         renderPipeline(allConvs);
       }
@@ -3590,10 +3657,20 @@ function buildSummaryHTML(data) {
   const waitStr   = data.handoffAt ? relTime(data.handoffAt) : "—";
   const statusStr = pipelineLabel(data.pipelineStatus, data.clientType);
 
+  // Contexto operacional extra para triagem incompleta
+  const triagemCtx = data.status === "triagem_incompleta"
+    ? (data.conversationWindowStatus === "open"
+        ? `<div class="modal-summary-item"><span class="sum-icon">💡</span><span class="sum-text" style="color:#15803d;font-weight:700">Janela aberta — pode responder agora</span></div>`
+        : data.conversationWindowStatus === "closed"
+          ? `<div class="modal-summary-item"><span class="sum-icon">💡</span><span class="sum-text" style="color:#b45309;font-weight:700">Janela fechada — enviar template para retomar</span></div>`
+          : "")
+    : "";
+
   const rows = [
     resumo
       ? `<div class="modal-summary-item modal-summary-highlight"><span class="sum-icon">⚡</span><span class="sum-text">${esc(resumo)}</span></div>`
       : "",
+    triagemCtx,
     `<div class="modal-summary-item"><span class="sum-icon">🎯</span><span class="sum-text"><span class="sum-label">Pedido:</span>${titleStr}</span></div>`,
     `<div class="modal-summary-item"><span class="sum-icon">⏱</span><span class="sum-text"><span class="sum-label">Aguardando:</span>${waitStr} · ${statusStr}</span></div>`,
   ].filter(Boolean).join("");
@@ -3625,7 +3702,7 @@ function renderModal(data) {
     const dadosSection = document.getElementById("modal-dados-section");
     dadosSection.insertAdjacentElement("afterend", summaryBlock);
   }
-  if (data.status === "aguardando_humano") {
+  if (data.status === "aguardando_humano" || data.status === "triagem_incompleta") {
     summaryBlock.style.display = "";
     summaryBlock.open = true;
     summaryBlock.innerHTML = buildSummaryHTML(data);
@@ -4368,10 +4445,7 @@ function removeLastOptimistic(container) {
 }
 
 function handleEnter(event, prefix) {
-  if (event.key === "Enter" && !event.shiftKey) {
-    event.preventDefault();
-    sendMessage(prefix);
-  }
+  // Enter = quebra de linha; envio somente pelo botão Enviar
 }
 
 function autoResize(el) {
@@ -4528,6 +4602,61 @@ function showToast(msg, type = "t-ok") {
     toast.style.transform = "translateY(8px)";
     setTimeout(() => toast.remove(), 320);
   }, 2500);
+}
+
+function showUndoToast(msg, undoFn, ms) {
+  ms = ms || 6000;
+  const container = document.getElementById("toast-container");
+  if (!container) return;
+  const toast = document.createElement("div");
+  toast.className = "toast t-undo";
+  const textSpan = document.createElement("span");
+  textSpan.textContent = msg;
+  const undoBtn = document.createElement("button");
+  undoBtn.className = "toast-undo-btn";
+  undoBtn.textContent = "Desfazer";
+  undoBtn.onclick = function() {
+    toast.remove();
+    undoFn();
+  };
+  toast.appendChild(textSpan);
+  toast.appendChild(undoBtn);
+  container.appendChild(toast);
+  const timer = setTimeout(() => {
+    toast.style.transition = "opacity .3s, transform .3s";
+    toast.style.opacity = "0";
+    toast.style.transform = "translateY(8px)";
+    setTimeout(() => toast.remove(), 320);
+  }, ms);
+  undoBtn.addEventListener("click", () => clearTimeout(timer));
+}
+
+async function undoClientTypeChange() {
+  if (!_lastClientTypeChange) return;
+  const { phone, oldType, oldPipelineStatus } = _lastClientTypeChange;
+  _lastClientTypeChange = null;
+  const conv = allConvs.find(c => c.phone === phone);
+  if (conv) {
+    conv.clientType     = oldType;
+    conv.pipelineStatus = oldPipelineStatus;
+    renderPipeline(allConvs);
+  }
+  try {
+    await fetch("/api/update-card", {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ phone, clientType: oldType }),
+    });
+    await fetch("/api/update-status", {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ phone, pipelineStatus: oldPipelineStatus, clientType: oldType }),
+    });
+    showToast("Alteração desfeita");
+  } catch (e) {
+    console.error("[undoClientTypeChange]", e);
+    showToast("Erro ao desfazer", "t-err");
+  }
 }
 
 // ╔══════════════════════════════════════════════════════════════╗
