@@ -35,6 +35,31 @@ async function withSessionLock(redis, phone, fn) {
   return fn();
 }
 
+async function upsertContact(redis, phone, incoming) {
+  const key = `sartec:contact:${phone}`;
+  const now = new Date().toISOString();
+  try {
+    const raw  = await redis.get(key);
+    const prev = raw ? JSON.parse(raw) : {};
+    const updated = {
+      phone,
+      whatsappName:           incoming.whatsappName           || prev.whatsappName           || "",
+      clientName:             incoming.clientName             || prev.clientName             || prev.whatsappName || "",
+      clientType:             incoming.clientType             || prev.clientType             || "",
+      demandType:             incoming.demandType             || prev.demandType             || "",
+      firstSeenAt:            prev.firstSeenAt                || now,
+      lastSeenAt:             now,
+      lastActivityAt:         now,
+      lastConversationStatus: incoming.lastConversationStatus || prev.lastConversationStatus || "",
+      lastPipelineStatus:     incoming.lastPipelineStatus     || prev.lastPipelineStatus     || "",
+      updatedAt:              now,
+    };
+    await redis.set(key, JSON.stringify(updated));
+  } catch (err) {
+    console.error("[Contact] ❌ upsertContact:", err.message);
+  }
+}
+
 // Campos aceitos — merge parcial
 const ALLOWED_FIELDS = [
   "dataLimite",
@@ -84,6 +109,17 @@ export default async function handler(req, res) {
       await redis.set(`sartec:${phone}`, JSON.stringify(session), "EX", SESSION_TTL);
       savedSession = session;
     });
+
+    if (!notFound) {
+      const contactUpdate = {
+        lastConversationStatus: savedSession.status         || "",
+        lastPipelineStatus:     savedSession.pipelineStatus || "",
+      };
+      if (body.clientName) contactUpdate.clientName = body.clientName;
+      if (body.clientType) contactUpdate.clientType = body.clientType;
+      if (body.demandType) contactUpdate.demandType = body.demandType;
+      await upsertContact(redis, phone, contactUpdate);
+    }
 
     if (notFound) return res.status(404).json({ error: "Conversa não encontrada" });
 

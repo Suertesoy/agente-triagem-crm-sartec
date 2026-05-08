@@ -332,8 +332,40 @@ async function saveSession(phone, session) {
       "EX",
       SESSION_TTL
     );
+    await upsertContact(getRedis(), phone, {
+      clientName:             session.clientName,
+      clientType:             session.clientType,
+      demandType:             session.demandType,
+      lastConversationStatus: session.status,
+      lastPipelineStatus:     session.pipelineStatus,
+    });
   } catch (err) {
     console.error("[Sessão] ❌ Erro ao salvar:", err.message);
+  }
+}
+
+async function upsertContact(redis, phone, incoming) {
+  const key = `sartec:contact:${phone}`;
+  const now = new Date().toISOString();
+  try {
+    const raw  = await redis.get(key);
+    const prev = raw ? JSON.parse(raw) : {};
+    const updated = {
+      phone,
+      whatsappName:           incoming.whatsappName           || prev.whatsappName           || "",
+      clientName:             incoming.clientName             || prev.clientName             || prev.whatsappName || "",
+      clientType:             incoming.clientType             || prev.clientType             || "",
+      demandType:             incoming.demandType             || prev.demandType             || "",
+      firstSeenAt:            prev.firstSeenAt                || now,
+      lastSeenAt:             now,
+      lastActivityAt:         now,
+      lastConversationStatus: incoming.lastConversationStatus || prev.lastConversationStatus || "",
+      lastPipelineStatus:     incoming.lastPipelineStatus     || prev.lastPipelineStatus     || "",
+      updatedAt:              now,
+    };
+    await redis.set(key, JSON.stringify(updated));
+  } catch (err) {
+    console.error("[Contact] ❌ upsertContact:", err.message);
   }
 }
 
@@ -796,6 +828,8 @@ async function handleIncomingMessage(req, res) {
           const name = value.contacts?.find((c) => c.wa_id === from)?.profile?.name ?? "—";
 
           console.log(`[Msg] +${from} (${name}) tipo: ${type}`);
+
+          await upsertContact(getRedis(), from, { whatsappName: name !== "—" ? name : null });
 
           // ── ÁUDIO — dois estágios, sem chamar Claude ─────────
           if (type === "audio") {
