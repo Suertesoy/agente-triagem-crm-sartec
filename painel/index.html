@@ -3027,7 +3027,11 @@ async function loadQueue() {
     updateDocTitle(allConvs);
     detectNewCards(allConvs);
     if (!_obAutoStarted) { _obAutoStarted = true; if (!localStorage.getItem("sartec_ob_done")) setTimeout(obStart, 1200); }
-  } catch (e) { console.error("[loadQueue]", e); }
+  } catch (e) {
+    console.error("[loadQueue]", e);
+    const wc = document.getElementById("waiting-count");
+    if (wc) wc.textContent = "Erro ao carregar — verifique a conexão";
+  }
 }
 
 function updateHeader(convs) {
@@ -3662,7 +3666,16 @@ async function loadConversations() {
     const data   = await res.json();
     allConversationsList = data.conversations || [];
     renderConvsList(allConversationsList);
-  } catch (e) { console.error("[loadConversations]", e); }
+  } catch (e) {
+    console.error("[loadConversations]", e);
+    const list = document.getElementById("convs-list");
+    if (list) list.innerHTML = `<div style="padding:24px 16px;text-align:center;color:var(--text-secondary)">
+      <div style="font-size:.85rem;margin-bottom:12px">Erro ao carregar conversas.</div>
+      <button onclick="loadConversations()" style="background:var(--brand-navy);color:#fff;border:none;padding:8px 18px;border-radius:8px;cursor:pointer;font-size:.8rem;font-weight:600">
+        Tentar novamente
+      </button>
+    </div>`;
+  }
 }
 
 function filterConvsList() {
@@ -5420,9 +5433,11 @@ function closeMobChat() {
 // ╔══════════════════════════════════════════════════════════════╗
 // ║  INIT                                                        ║
 // ╚══════════════════════════════════════════════════════════════╝
-// Restaura aba ativa da sessão anterior
-switchTab(currentTab);
-if (window.innerWidth <= 768) { initMobileKanban(); }
+// Restaura aba ativa da sessão anterior (só executa se autenticado)
+if (sessionStorage.getItem("sartec_auth") === "true") {
+  switchTab(currentTab);
+  if (window.innerWidth <= 768) { initMobileKanban(); }
+}
 
 // ╔══════════════════════════════════════════════════════════════╗
 // ║  ONBOARDING TOUR                                             ║
@@ -5544,8 +5559,10 @@ function restartOnboarding() {
   obStart();
 }
 
-loadQueue();
-startAutoRefresh();
+if (sessionStorage.getItem("sartec_auth") === "true") {
+  loadQueue();
+  startAutoRefresh();
+}
 </script>
 <div id="toast-container"></div>
 
