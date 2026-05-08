@@ -2,7 +2,7 @@
   "name": "Sartec CRM",
   "short_name": "Sartec",
   "description": "CRM de atendimento WhatsApp — Sartec Papelaria",
-  "start_url": "/painel/",
+  "start_url": "/painel/index.html",
   "display": "standalone",
   "orientation": "portrait-primary",
   "background_color": "#1a2a5e",

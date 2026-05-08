@@ -5434,10 +5434,8 @@ function closeMobChat() {
 // ║  INIT                                                        ║
 // ╚══════════════════════════════════════════════════════════════╝
 // Restaura aba ativa da sessão anterior (só executa se autenticado)
-if (sessionStorage.getItem("sartec_auth") === "true") {
-  switchTab(currentTab);
-  if (window.innerWidth <= 768) { initMobileKanban(); }
-}
+switchTab(currentTab);
+if (window.innerWidth <= 768) { initMobileKanban(); }
 
 // ╔══════════════════════════════════════════════════════════════╗
 // ║  ONBOARDING TOUR                                             ║
@@ -5559,10 +5557,8 @@ function restartOnboarding() {
   obStart();
 }
 
-if (sessionStorage.getItem("sartec_auth") === "true") {
-  loadQueue();
-  startAutoRefresh();
-}
+loadQueue();
+startAutoRefresh();
 </script>
 <div id="toast-container"></div>
 
