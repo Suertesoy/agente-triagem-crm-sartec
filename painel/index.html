@@ -3036,7 +3036,7 @@ async function loadQueue() {
     console.log("[loadQueue] ✅ done");
     updateDocTitle(allConvs);
     detectNewCards(allConvs);
-    if (!_obAutoStarted) { _obAutoStarted = true; if (!localStorage.getItem("sartec_ob_done")) setTimeout(obStart, 1200); }
+    if (!_obAutoStarted) { _obAutoStarted = true; if (window.innerWidth > 768 && !localStorage.getItem("sartec_ob_done")) setTimeout(obStart, 1200); }
   } catch (e) {
     console.error("[loadQueue] ❌", e);
     const wc = document.getElementById("waiting-count");
@@ -5543,8 +5543,7 @@ async function obStart() {
 }
 
 async function obNext() {
-  let nxt = _obStep + 1;
-  while (nxt < OB_STEPS.length && OB_STEPS[nxt].sel && !document.querySelector(OB_STEPS[nxt].sel)) nxt++;
+  const nxt = _obStep + 1;
   if (nxt >= OB_STEPS.length) { obFinish(); return; }
   _obStep = nxt;
   await obShowStep(_obStep);
