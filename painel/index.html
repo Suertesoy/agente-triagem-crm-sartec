@@ -79,6 +79,9 @@
       gap: 6px;
       font-size: .78rem;
       opacity: .9;
+      background: rgba(255,255,255,.10);
+      border-radius: 8px;
+      padding: 3px 10px;
     }
     .waiting-dot {
       width: 8px; height: 8px;
@@ -92,7 +95,11 @@
       50%     { transform: scale(1.4); opacity: .7; }
     }
 
-    .refresh-info { margin-left: auto; font-size: .7rem; opacity: .55; }
+    .refresh-info { margin-left: auto; font-size: .7rem; opacity: .55; border-left: 1px solid rgba(255,255,255,.15); padding-left: 12px; }
+    .refresh-state { margin-left: 6px; font-size: .68rem; font-weight: 600; display: inline-flex; align-items: center; transition: opacity .2s; }
+    .refresh-state.rs-updating { color: rgba(255,255,255,.7); }
+    .refresh-state.rs-ok       { color: #86efac; }
+    .refresh-state.rs-err      { color: #fca5a5; }
 
     .btn-logout {
       background: rgba(255,255,255,.12);
@@ -235,16 +242,16 @@
     .tab-bar {
       background: #f8f9fb;
       border-bottom: 1px solid var(--border);
-      padding: 0 20px;
+      padding: 0 16px;
       display: flex;
       gap: 4px;
-      box-shadow: 0 1px 3px rgba(0,0,0,.04);
+      box-shadow: 0 2px 6px rgba(0,0,0,.06);
     }
     .tab-btn {
-      padding: 13px 20px;
+      padding: 10px 16px;
       border: none;
       background: none;
-      font-size: .84rem;
+      font-size: .82rem;
       font-weight: 600;
       color: var(--text-secondary);
       cursor: pointer;
@@ -254,8 +261,8 @@
       transition: color .15s, border-color .15s, background .15s;
       white-space: nowrap;
     }
-    .tab-btn.active { color: var(--brand-navy); border-bottom-color: var(--brand-navy); background: rgba(26,42,94,.04); }
-    .tab-btn:hover:not(.active) { color: var(--text-primary); background: rgba(0,0,0,.02); }
+    .tab-btn.active { color: var(--brand-navy); border-bottom-color: var(--brand-navy); background: rgba(26,42,94,.07); }
+    .tab-btn:hover:not(.active) { color: var(--text-primary); background: rgba(0,0,0,.03); }
     .tab-btn .tab-badge {
       display: inline-flex;
       align-items: center;
@@ -387,7 +394,7 @@
     .card {
       background: var(--bg-card);
       border-radius: 16px;
-      padding: 18px 20px 16px;
+      padding: 15px 17px 13px;
       border: 1px solid rgba(0,0,0,.06);
       box-shadow: 0 1px 3px rgba(15,23,42,.04), 0 4px 12px rgba(15,23,42,.07), 0 12px 32px rgba(15,23,42,.08);
       transition: box-shadow .18s, transform .14s, background-color .22s ease;
@@ -398,7 +405,7 @@
       box-sizing: border-box;
       display: flex;
       flex-direction: column;
-      min-height: 204px;
+      min-height: 190px;
       animation: card-enter .22s ease;
       cursor: pointer;
     }
@@ -407,12 +414,12 @@
     /* ── Semântica: fundo do card = temperatura operacional ── */
     .card.resolvido      { opacity: .76; background: #e8f3ee; border-color: rgba(20,150,80,.14); }
     .card.card-finalizado { background: #e8f3ee; border-color: rgba(20,150,80,.14); }
-    .card.card-critica   { background: #ffd6d9; border-color: rgba(248,113,113,.18); }
-    .card.pri-alta       { background: #ffd6d9; border-color: rgba(248,113,113,.18); }
-    .card.urgent         { background: #ffd6d9; border-color: rgba(248,113,113,.18); }
-    .card.forgotten      { background: #ffd6d9; border-color: rgba(248,113,113,.18); }
-    .card.pri-media      { background: #fef0b0; border-color: rgba(234,179,8,.18); }
-    .card.warn-10        { background: #fef0b0; border-color: rgba(234,179,8,.18); }
+    .card.card-critica   { background: #fff4f4; border-color: rgba(248,113,113,.22); }
+    .card.pri-alta       { background: #fff4f4; border-color: rgba(248,113,113,.22); }
+    .card.urgent         { background: #fff4f4; border-color: rgba(248,113,113,.22); }
+    .card.forgotten      { background: #fff4f4; border-color: rgba(248,113,113,.22); }
+    .card.pri-media      { background: #fefde8; border-color: rgba(234,179,8,.22); }
+    .card.warn-10        { background: #fefde8; border-color: rgba(234,179,8,.22); }
     .card.triagem_incompleta { border-color: rgba(245,158,11,.2); }
 
     .priority-dot {
@@ -524,9 +531,9 @@
 
     /* Nome editável inline */
     .card-name {
-      font-weight: 500;
-      font-size: .82rem;
-      color: var(--text-secondary);
+      font-weight: 700;
+      font-size: .88rem;
+      color: var(--text-primary);
       flex: 1;
       min-width: 0;
       white-space: nowrap;
@@ -980,7 +987,7 @@
     }
     .modal-header .info { flex: 1; min-width: 0; }
     .modal-header h2 {
-      font-size: .9rem;
+      font-size: 1rem;
       font-weight: 700;
       white-space: nowrap;
       overflow: hidden;
@@ -988,7 +995,7 @@
     }
     .modal-header .info-sub {
       font-size: .7rem;
-      opacity: .75;
+      opacity: .85;
       display: flex;
       gap: 8px;
       align-items: center;
@@ -1016,7 +1023,7 @@
       align-items: center;
       gap: 8px;
       padding: 7px 16px;
-      font-size: .78rem;
+      font-size: .8rem;
       font-weight: 600;
       border-bottom: 1px solid rgba(0,0,0,.06);
       flex-shrink: 0;
@@ -1047,9 +1054,10 @@
     .dupe-tab-warning {
       background: #fef3c7;
       border-bottom: 2px solid #f59e0b;
+      border-left: 3px solid #d97706;
       color: #92400e;
       padding: 8px 16px;
-      font-size: .78rem;
+      font-size: .8rem;
       font-weight: 600;
       display: flex;
       align-items: center;
@@ -1111,6 +1119,7 @@
     }
     .dados-pedido summary::before { content: "▶"; font-size: .6rem; transition: transform .2s; }
     .dados-pedido[open] summary::before { transform: rotate(90deg); }
+    .dados-pedido[open] summary { background: #fafafa; }
     .dados-pedido summary::-webkit-details-marker { display: none; }
 
     .dados-form {
@@ -1165,7 +1174,7 @@
       padding: 14px 5% 10px;
       display: flex;
       flex-direction: column;
-      gap: 5px;
+      gap: 6px;
     }
 
     /* Centraliza conversa na aba Conversas (área mais larga) */
@@ -1182,14 +1191,14 @@
     .bubble-wrap.right { align-self: flex-end;   align-items: flex-end;   }
 
     .bubble {
-      padding: 8px 12px;
+      padding: 9px 12px;
       border-radius: 14px;
       font-size: .85rem;
-      line-height: 1.45;
+      line-height: 1.5;
       word-break: break-word;
       max-width: 100%;
     }
-    .bubble.client  { background: #ececec; border-bottom-left-radius: 4px; }
+    .bubble.client  { background: #e8e8e8; border-bottom-left-radius: 4px; }
     .bubble.bot     { background: #cfe3ff; color: #1a3a6b; border-bottom-right-radius: 4px; }
     .bubble.human   { background: var(--brand-navy); color: #fff; border-bottom-right-radius: 4px; }
     .bubble.optimistic { opacity: .62; }
@@ -2124,13 +2133,13 @@
        RESUMO DA CONVERSA — modal do atendente
     ══════════════════════════════════════════════════ */
     .modal-summary {
-      background: #eef4ff;
-      border-left: 3px solid var(--brand-navy);
+      background: #f0f6ff;
+      border-left: 3px solid rgba(26,42,94,.35);
       border-bottom: 1px solid var(--border);
       flex-shrink: 0;
     }
     .modal-summary summary {
-      padding: 8px 14px;
+      padding: 9px 14px;
       font-size: .78rem;
       font-weight: 700;
       color: var(--brand-navy);
@@ -2183,10 +2192,10 @@
     }
     .card-zone-mid {
       background: transparent;
-      border-left: 3px solid rgba(26,42,94,.22);
+      border-left: 2px solid rgba(26,42,94,.10);
       border-radius: 0;
-      padding: 6px 10px;
-      margin: 4px 0 6px;
+      padding: 4px 9px;
+      margin: 3px 0 5px;
       flex: 1;
     }
     .card-zone-footer {
@@ -2197,7 +2206,7 @@
     .card-zone-footer-meta {
       display: flex;
       align-items: center;
-      gap: 6px;
+      gap: 5px;
       flex-wrap: nowrap;
       overflow: hidden;
     }
@@ -2223,7 +2232,7 @@
     .bubble-wrap { animation: bubble-enter .15s ease; }
 
     /* ── Status da janela WhatsApp no card ── */
-    .card-window-status { font-size: .59rem; font-weight: 600; white-space: nowrap; flex-shrink: 0; }
+    .card-window-status { font-size: .59rem; font-weight: 600; white-space: nowrap; flex-shrink: 0; padding: 1px 6px; border-radius: 10px; background: rgba(0,0,0,.04); }
     .ws-open    { color: #16a34a; }
     .ws-waiting { color: #d97706; }
     .ws-closed  { color: var(--text-muted); opacity: .7; }
@@ -2324,25 +2333,29 @@
 
     /* ── Stats strip — continuidade visual com o header ── */
     .stats-strip {
-      background: #1e2e68;
-      border-bottom: 1px solid rgba(0,0,0,.2);
-      padding: 5px 20px;
+      background: var(--brand-navy);
+      border-top: 1px solid rgba(255,255,255,.08);
+      border-bottom: 1px solid rgba(0,0,0,.18);
+      padding: 4px 20px;
       display: flex;
       align-items: center;
-      gap: 10px;
+      gap: 8px;
       flex-shrink: 0;
     }
     .stat-chip {
       font-size: .67rem;
-      color: rgba(255,255,255,.6);
+      color: rgba(255,255,255,.65);
       white-space: nowrap;
       display: flex;
       align-items: center;
       gap: 3px;
+      background: rgba(255,255,255,.08);
+      border-radius: 20px;
+      padding: 2px 9px;
     }
-    .stat-chip.open   { color: #86efac; }
-    .stat-chip.closed { color: rgba(255,255,255,.38); }
-    .stat-sep { font-size: .6rem; color: rgba(255,255,255,.2); }
+    .stat-chip.open   { color: #86efac; background: rgba(134,239,172,.10); }
+    .stat-chip.closed { color: rgba(255,255,255,.4); background: rgba(255,255,255,.04); }
+    .stat-sep { display: none; }
     /* ══════════════════════════════════════════════════
        ONBOARDING TOUR
     ══════════════════════════════════════════════════ */
@@ -2474,7 +2487,7 @@
       autocomplete="off" spellcheck="false">
     <div class="contact-results" id="contact-results" style="display:none"></div>
   </div>
-  <div class="refresh-info">Atualiza em <span id="countdown">30</span>s</div>
+  <div class="refresh-info">Atualiza em <span id="countdown">30</span>s<span id="refresh-state" class="refresh-state"></span></div>
   <button class="attendant-chip" id="attendant-chip" onclick="openAttendantPicker()" title="Trocar perfil">
     <span class="attendant-avatar" id="attendant-avatar">?</span>
     <span class="attendant-name" id="attendant-name">Perfil</span>
@@ -2908,6 +2921,7 @@ let openConvsRedisKey = null;   // chave Redis da conversa aberta (para buscar a
 let pendingMedia    = {};     // { modal: {type,base64,mimeType,filename}, convs: {...} }
 let countdownVal    = 30;
 let countdownTimer  = null;
+let _refreshOkTimer = null;
 let convsPollTimer  = null;
 let resolveCallback = null;   // callback para o confirm modal
 let _dragPhone = null, _dragClientType = null;
@@ -3252,8 +3266,29 @@ function switchTab(tab) {
 // ╚══════════════════════════════════════════════════════════════╝
 let _obAutoStarted = false;
 
+function setRefreshState(state) {
+  const el = document.getElementById("refresh-state");
+  if (!el) return;
+  clearTimeout(_refreshOkTimer);
+  el.className = "refresh-state";
+  if (state === "updating") {
+    el.classList.add("rs-updating");
+    el.textContent = " ↻";
+  } else if (state === "ok") {
+    el.classList.add("rs-ok");
+    el.textContent = " ✓";
+    _refreshOkTimer = setTimeout(() => { el.textContent = ""; el.className = "refresh-state"; }, 3000);
+  } else if (state === "error") {
+    el.classList.add("rs-err");
+    el.textContent = " ⚠ Falha";
+  } else {
+    el.textContent = "";
+  }
+}
+
 async function loadQueue() {
   console.log("[loadQueue] ▶ start");
+  setRefreshState("updating");
   try {
     const res  = await fetch("/api/queue");
     console.log("[loadQueue] status:", res.status);
@@ -3271,11 +3306,11 @@ async function loadQueue() {
     console.log("[loadQueue] ✅ done");
     updateDocTitle(allConvs);
     detectNewCards(allConvs);
+    setRefreshState("ok");
     if (!_obAutoStarted && getCurrentAttendant()) { _obAutoStarted = true; if (window.innerWidth > 768 && !localStorage.getItem("sartec_ob_done")) setTimeout(obStart, 1200); }
   } catch (e) {
     console.error("[loadQueue] ❌", e);
-    const wc = document.getElementById("waiting-count");
-    if (wc) wc.textContent = "Erro ao carregar — verifique a conexão";
+    setRefreshState("error");
   }
 }
 
@@ -3842,8 +3877,18 @@ async function refreshModal() {
       renderActiveAttendantNotice("modal", data);
       return;
     }
+    // Nova(s) mensagem(ns) detectada(s) — mostrar toast só se for do cliente
+    const prevCount = _lastMsgCountByPhone[openModalPhone] || 0;
+    if (prevCount > 0 && newCount > prevCount) {
+      const newMsgs = (data.history || []).slice(prevCount);
+      const hasClientMsg = newMsgs.some(m => !m.sentByHuman);
+      if (hasClientMsg) showToast("✦ Nova mensagem do cliente", "t-ok");
+    }
     renderModal(data);
-  } catch (e) { console.error("[refreshModal]", e); }
+  } catch (e) {
+    console.error("[refreshModal]", e);
+    showToast("Falha ao carregar conversa", "t-err");
+  }
 }
 
 // ── Gera resumo para o atendente (dados já carregados, sem chamada extra à IA) ──
@@ -3902,7 +3947,7 @@ function renderModal(data) {
     summaryBlock.id        = "modal-summary-block";
     summaryBlock.className = "modal-summary";
     const dadosSection = document.getElementById("modal-dados-section");
-    dadosSection.insertAdjacentElement("afterend", summaryBlock);
+    dadosSection.insertAdjacentElement("beforebegin", summaryBlock);
   }
   if (data.status === "aguardando_humano" || data.status === "triagem_incompleta") {
     summaryBlock.style.display = "";
