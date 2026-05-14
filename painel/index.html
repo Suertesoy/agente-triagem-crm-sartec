@@ -636,6 +636,7 @@
       align-items: center;
       gap: 5px;
     }
+    .card-actions-row .card-open-hint { flex: 1; }
     .status-select, .type-select {
       font-size: .7rem;
       border: 1px solid var(--border);
@@ -3659,7 +3660,6 @@ function buildCard(c, col, cols) {
         <button class="card-expand-btn"
           onclick="event.stopPropagation();toggleCardExpand(event,'${esc(c.phone)}')"
           title="${_expandedCards.has(c.phone) ? 'Ocultar detalhes' : 'Ver detalhes'}">${_expandedCards.has(c.phone) ? "▲ Ocultar" : "▼ Detalhes"}</button>
-        ${!isResolved ? `<button class="btn-resolve-inline" onclick="event.stopPropagation();quickResolveCard('${esc(c.phone)}')" title="Resolver atendimento">✓ Resolver</button>` : ""}
       </div>
       ${buildExpandBody(c, clientType)}
       ${isResolved && c.resolvedAt ? `<div style="font-size:.61rem;color:var(--text-muted);text-align:center;padding-top:2px">Resolvido ${relTime(c.resolvedAt)}</div>` : ""}
@@ -3667,7 +3667,10 @@ function buildCard(c, col, cols) {
         ? `<button class="btn-reopen" onclick="reopenCard('${esc(c.phone)}','${clientType}')" style="width:100%;margin-top:4px">&#8635; Reabrir</button>`
         : ""
       }
-      ${!isResolved ? `<button class="card-open-hint" type="button" onclick="openChat('${esc(c.phone)}')">Abrir conversa →</button>` : ""}
+      ${!isResolved ? `<div class="card-actions-row">
+        <button class="card-open-hint" type="button" onclick="openChat('${esc(c.phone)}')">Abrir conversa →</button>
+        <button class="btn-resolve-inline" onclick="event.stopPropagation();quickResolveCard('${esc(c.phone)}')" title="Resolver atendimento">✓ Resolver</button>
+      </div>` : ""}
     </div>
   `;
 
