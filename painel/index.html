@@ -1025,6 +1025,53 @@
         grid-row: 6;
         min-width: 0;
       }
+
+      /* ── Sidebar: overflow e box-sizing ── */
+      #modal-summary-block,
+      #modal-dados-section {
+        box-sizing: border-box;
+        overflow-x: hidden;
+      }
+
+      /* ── Modal summary: área de contexto limpa ── */
+      #modal-summary-block .modal-summary-body {
+        padding: 4px 14px 14px;
+      }
+      #modal-summary-block .modal-summary-item {
+        font-size: .73rem;
+        line-height: 1.5;
+      }
+
+      /* ── dados-form: 1 coluna na sidebar — evita compressão ── */
+      #modal-dados-section .dados-form {
+        grid-template-columns: 1fr;
+        padding: 0 14px 14px;
+      }
+
+      /* form-row: sem overflow, sem compressão ── */
+      #modal-dados-section .form-row,
+      #modal-dados-section .form-row.full {
+        grid-column: 1;
+        min-width: 0;
+      }
+
+      /* inputs/selects/textareas: largura total da sidebar ── */
+      #modal-dados-section .form-row input,
+      #modal-dados-section .form-row select,
+      #modal-dados-section .form-row textarea {
+        width: 100%;
+        box-sizing: border-box;
+        min-width: 0;
+      }
+
+      /* Salvar dados: botão full-width na sidebar ── */
+      #modal-dados-section .dados-save-row {
+        justify-content: stretch;
+      }
+      #modal-dados-section .btn-save {
+        width: 100%;
+        text-align: center;
+      }
     }
 
     .modal-header {
