@@ -134,8 +134,10 @@ export default async function handler(req, res) {
         formaEntrega:   session.formaEntrega    || null,
         endereco:       session.endereco        || null,
         observacoes:    session.observacoes     || null,
-        escola:         session.escola          || null,
-        serie:          session.serie           || null,
+        escola:            session.escola             || null,
+        serie:             session.serie              || null,
+        activeAttendant:   session.activeAttendant    || null,
+        activeAttendantAt: session.activeAttendantAt  || null,
         ...computeWindowInfo(session),
       });
     }

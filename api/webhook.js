@@ -249,9 +249,10 @@ Após coletar, faça handoff.
 Use a saudação inicial.
 
 **Pós-handoff:**
-- Perguntas sobre endereço, horário ou pagamento: responda normalmente
-- Qualquer outra mensagem (primeira vez): "Nossa equipe já está ciente e vai te atender em breve 🤝"
-- Mensagens seguintes: silêncio total
+- Se a conversa foi retomada por template aprovado (ex: retomar_atendimento), você NÃO deve continuar a triagem nem responder automaticamente.
+- Perguntas sobre endereço, horário ou pagamento: responda normalmente.
+- Qualquer outra mensagem (primeira vez): "Nossa equipe já está ciente e vai te atender em breve 🤝".
+- Mensagens seguintes: silêncio total.
 
 ---
 
@@ -684,10 +685,47 @@ async function chatWithAgent(phone, userText, mediaPayload = null, name = "") {
   const _now = new Date();
   session.lastUserMessageAt = _now.toISOString();
   session.windowExpiresAt   = new Date(_now.getTime() + 24 * 60 * 60 * 1000).toISOString();
+
+  // Detecta se é resposta a template de retomada
+  const isResumeReply = session.templateWaitingReply && session.lastTemplateType === "attendance_resume";
+
   // Se havia template aguardando resposta, o cliente acabou de responder → limpa a flag
   if (session.templateWaitingReply) {
     session.templateWaitingReply = false;
     console.log(`[Agente] 🔓 Template respondido — janela reaberta: +${phone}`);
+  }
+
+  // Se for retomada, paramos aqui (humano assume)
+  if (isResumeReply) {
+    console.log(`[Agente] 🔄 Retomada de atendimento — silenciando bot para +${phone}`);
+    session.handoffDone          = true;
+    session.status               = "aguardando_humano";
+    session.postHandoffReplySent = true; // Evita a mensagem padrão de "já estamos ciente"
+    session.handoffAt            = new Date().toISOString(); // Atualiza timestamp na fila
+
+    // Se o card estiver em status terminal ou sem pipelineStatus, move para em_atendimento
+    if (!session.pipelineStatus || session.pipelineStatus === "finalizado" || session.pipelineStatus === "entregue") {
+      session.pipelineStatus = "em_atendimento";
+    }
+
+    // Registra a mensagem no histórico antes de sair
+    const userContent = mediaPayload
+      ? [
+          {
+            type: mediaPayload.mimeType === "application/pdf" ? "document" : "image",
+            source: {
+              type:       "base64",
+              media_type: mediaPayload.mimeType,
+              data:       mediaPayload.base64,
+            },
+          },
+          { type: "text", text: userText || "O cliente enviou este arquivo." },
+        ]
+      : userText;
+
+    addMessage(session, "user", userContent);
+    await saveSession(phone, session);
+    return null; // Encerra sem chamar Claude e sem resposta automática
   }
   // ──────────────────────────────────────────────────────────────────────────
 
@@ -840,8 +878,23 @@ async function handleIncomingMessage(req, res) {
               session.lastUserMessageAt = _audioNow.toISOString();
               session.windowExpiresAt   = new Date(_audioNow.getTime() + 24 * 60 * 60 * 1000).toISOString();
               if (session.templateWaitingReply) {
+                const isResume = session.lastTemplateType === "attendance_resume";
                 session.templateWaitingReply = false;
                 console.log(`[Audio] 🔓 Template respondido (áudio) — janela reaberta: +${from}`);
+
+                if (isResume) {
+                  console.log(`[Audio] 🔄 Retomada via áudio — silenciando bot para +${from}`);
+                  session.handoffDone          = true;
+                  session.status               = "aguardando_humano";
+                  session.postHandoffReplySent = true;
+                  session.handoffAt            = new Date().toISOString(); // Atualiza timestamp na fila
+                  if (!session.pipelineStatus || session.pipelineStatus === "finalizado" || session.pipelineStatus === "entregue") {
+                    session.pipelineStatus = "em_atendimento";
+                  }
+                  addMessage(session, "user", "[áudio]");
+                  await saveSession(from, session);
+                  return null; // Silêncio total
+                }
               }
               session.audioCount = (session.audioCount || 0) + 1;
 
@@ -904,12 +957,33 @@ async function handleIncomingMessage(req, res) {
                 _docSession.lastUserMessageAt = _docNow.toISOString();
                 _docSession.windowExpiresAt   = new Date(_docNow.getTime() + 24 * 60 * 60 * 1000).toISOString();
                 if (_docSession.templateWaitingReply) {
+                  const isResume = _docSession.lastTemplateType === "attendance_resume";
                   _docSession.templateWaitingReply = false;
                   console.log(`[Doc] 🔓 Template respondido (doc) — janela reaberta: +${from}`);
+
+                  if (isResume) {
+                    console.log(`[Doc] 🔄 Retomada via doc — silenciando bot para +${from}`);
+                    _docSession.handoffDone          = true;
+                    _docSession.status               = "aguardando_humano";
+                    _docSession.postHandoffReplySent = true;
+                    _docSession.handoffAt            = new Date().toISOString(); // Atualiza timestamp na fila
+                    if (!_docSession.pipelineStatus || _docSession.pipelineStatus === "finalizado" || _docSession.pipelineStatus === "entregue") {
+                      _docSession.pipelineStatus = "em_atendimento";
+                    }
+                    _docSession._stopFlow = true; // Flag temporária para o handler
+                  }
                 }
                 await saveSession(from, _docSession);
+                if (_docSession._stopFlow) {
+                  // Limpa a flag temporária e sinaliza para o handler não enviar mensagem
+                  delete _docSession._stopFlow;
+                  throw new Error("STOP_FLOW"); 
+                }
               });
-            } catch (_e) { console.error("[Doc/window] ❌", _e.message); }
+            } catch (_e) { 
+              if (_e.message === "STOP_FLOW") continue;
+              console.error("[Doc/window] ❌", _e.message); 
+            }
             await sendTextMessage(from, "Recebi seu arquivo 📎 Vou passar para a equipe dar uma olhada 🤝");
             continue;
           }
