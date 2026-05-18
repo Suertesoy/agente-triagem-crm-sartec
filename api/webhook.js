@@ -809,24 +809,109 @@ export default async function handler(req, res) {
 }
 
 async function handleReset(req, res) {
-  const { reset, phone } = req.query;
+  const { reset, phone, hard, all, dryRun } = req.query;
 
+  // ── Autenticação obrigatória ──────────────────────────────────────────────
   if (reset !== process.env.WHATSAPP_VERIFY_TOKEN) {
     console.warn("[Reset] ❌ Token inválido");
     return res.status(403).json({ error: "Forbidden" });
   }
 
-  if (!phone) {
-    return res.status(400).json({ error: "Parâmetro phone obrigatório" });
+  const redis     = getRedis();
+  const isDryRun  = dryRun === "1" || dryRun === "true";
+
+  // ── Opção 1: reset por número ─────────────────────────────────────────────
+  if (phone && !all) {
+    try {
+      const sessionKey = `sartec:${phone}`;
+      const contactKey = `sartec:contact:${phone}`;
+
+      // Buscar archives do número
+      const archiveKeys = [];
+      let cursor = "0";
+      do {
+        const [nextCursor, found] = await redis.scan(
+          cursor, "MATCH", `sartec:archive:${phone}:*`, "COUNT", 100
+        );
+        cursor = nextCursor;
+        archiveKeys.push(...found);
+      } while (cursor !== "0");
+
+      const keysToDelete = [sessionKey, ...archiveKeys];
+      if (hard === "1") keysToDelete.push(contactKey);
+
+      if (isDryRun) {
+        return res.status(200).json({ dryRun: true, phone, hard: hard === "1", keysToDelete, count: keysToDelete.length });
+      }
+
+      const deleted = [];
+      for (const key of keysToDelete) {
+        const n = await redis.del(key);
+        if (n > 0) deleted.push(key);
+      }
+      console.log(`[Reset] ✅ +${phone}: ${deleted.length} chave(s) removida(s)`);
+      return res.status(200).json({ ok: true, phone, deleted, count: deleted.length });
+
+    } catch (err) {
+      console.error("[Reset/phone] ❌", err.message);
+      return res.status(500).json({ error: "Erro ao resetar número", detail: err.message });
+    }
   }
 
-  try {
-    await getRedis().del(`sartec:${phone}`);
-    console.log(`[Reset] ✅ Sessão deletada: +${phone}`);
-    return res.status(200).json({ ok: true, message: `Sessão de +${phone} resetada.` });
-  } catch (err) {
-    return res.status(500).json({ error: "Erro ao resetar sessão" });
+  // ── Opção 2: reset geral de todos os dados sartec:* ───────────────────────
+  if (all === "1") {
+    try {
+      const allKeys = [];
+      let cursor = "0";
+      do {
+        const [nextCursor, found] = await redis.scan(cursor, "MATCH", "sartec:*", "COUNT", 200);
+        cursor = nextCursor;
+        allKeys.push(...found);
+      } while (cursor !== "0");
+
+      const sessions = allKeys.filter(k => !k.includes(":archive:") && !k.includes(":contact:"));
+      const archives = allKeys.filter(k => k.includes(":archive:"));
+      const contacts = allKeys.filter(k => k.includes(":contact:"));
+
+      if (isDryRun) {
+        console.log(`[Reset] 🔍 Dry-run all: ${allKeys.length} chave(s)`);
+        return res.status(200).json({
+          dryRun: true, total: allKeys.length,
+          sessions: { count: sessions.length, sample: sessions.slice(0, 30) },
+          archives: { count: archives.length, sample: archives.slice(0, 10) },
+          contacts: { count: contacts.length, sample: contacts.slice(0, 10) },
+          ...(sessions.length > 30 && { note: `... e mais ${sessions.length - 30} sessões omitidas` }),
+        });
+      }
+
+      if (allKeys.length === 0) {
+        return res.status(200).json({ ok: true, deleted: 0, message: "Nada a apagar — Redis já está vazio no namespace sartec:" });
+      }
+
+      const pipeline = redis.pipeline();
+      for (const key of allKeys) pipeline.del(key);
+      await pipeline.exec();
+
+      console.log(`[Reset] ✅ Geral: ${allKeys.length} chave(s) | sessões=${sessions.length} archives=${archives.length} contatos=${contacts.length}`);
+      return res.status(200).json({ ok: true, deleted: allKeys.length, breakdown: { sessions: sessions.length, archives: archives.length, contacts: contacts.length } });
+
+    } catch (err) {
+      console.error("[Reset/all] ❌", err.message);
+      return res.status(500).json({ error: "Erro ao executar reset geral", detail: err.message });
+    }
   }
+
+  // ── Parâmetros inválidos — mostrar uso ─────────────────────────────────────
+  return res.status(400).json({
+    error: "Parâmetros inválidos",
+    usage: {
+      "reset simples":   "GET /api/webhook?reset=TOKEN&phone=+55NUMERO",
+      "reset hard":      "GET /api/webhook?reset=TOKEN&phone=+55NUMERO&hard=1",
+      "dry-run número":  "GET /api/webhook?reset=TOKEN&phone=+55NUMERO&hard=1&dryRun=1",
+      "dry-run geral":   "GET /api/webhook?reset=TOKEN&all=1&dryRun=1",
+      "reset geral":     "GET /api/webhook?reset=TOKEN&all=1  (CUIDADO)",
+    },
+  });
 }
 
 function handleVerification(req, res) {
