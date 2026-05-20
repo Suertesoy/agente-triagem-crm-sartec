@@ -4125,6 +4125,11 @@ async function refreshModal() {
       const newMsgs = (data.history || []).slice(prevCount);
       const hasClientMsg = newMsgs.some(m => !m.sentByHuman);
       if (hasClientMsg) showToast("✦ Nova mensagem do cliente", "t-ok");
+      const currentAtt = getCurrentAttendant();
+      const hasOtherAttMsg = currentAtt && newMsgs.some(
+        m => m.sentByHuman && m.attendantId && m.attendantId !== currentAtt.id
+      );
+      if (hasOtherAttMsg) showToast("✦ Mensagem de outro atendente", "t-ok");
     }
     renderModal(data);
   } catch (e) {
