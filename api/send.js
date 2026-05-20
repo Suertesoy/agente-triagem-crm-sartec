@@ -21,7 +21,7 @@ function getRedis() {
   return redisClient;
 }
 
-const SESSION_TTL = 60 * 60 * 24 * 30; // 30 dias
+const SESSION_TTL = 60 * 60 * 24 * 90; // 90 dias — retenção mínima de histórico
 
 // Vercel: aceita body até 10 MB para suportar imagens em base64
 export const config = {
@@ -313,8 +313,10 @@ async function saveToHistory(phone, message) {
 
       const session = JSON.parse(raw);
       session.history.push(message);
-      session.lastHumanReply = new Date().toISOString();
-      session.lastDate       = new Date().toISOString().slice(0, 10);
+      const now = new Date().toISOString();
+      session.lastHumanReply = now;
+      session.lastDate       = now.slice(0, 10);
+      session.lastActivityAt = now;
 
       await redis.set(`sartec:${phone}`, JSON.stringify(session), "EX", SESSION_TTL);
     });
