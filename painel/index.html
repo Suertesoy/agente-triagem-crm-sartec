@@ -4925,7 +4925,7 @@ async function sendTextMessage(prefix, container, text) {
     });
     if (!res.ok) {
       const err = await res.json();
-      alert(`Erro ao enviar: ${err.error}`);
+      alert(`Erro ao enviar: ${err.detail || err.error || "Falha de envio"}`);
       removeLastOptimistic(container);
     } else {
       prefix === "modal" ? await refreshModal() : await refreshConvsChat(phone);
@@ -4959,7 +4959,7 @@ async function sendImageMessage(prefix, container, caption) {
     });
     if (!res.ok) {
       const err = await res.json();
-      alert(`Erro ao enviar imagem: ${err.error}`);
+      alert(`Erro ao enviar imagem: ${err.detail || err.error || "Falha de envio"}`);
       removeLastOptimistic(container);
     } else {
       prefix === "modal" ? await refreshModal() : await refreshConvsChat(phone);
@@ -4994,7 +4994,7 @@ async function sendDocumentMessage(prefix, container, caption) {
     });
     if (!res.ok) {
       const err = await res.json();
-      alert(`Erro ao enviar documento: ${err.error}`);
+      alert(`Erro ao enviar documento: ${err.detail || err.error || "Falha de envio"}`);
       removeLastOptimistic(container);
     } else {
       prefix === "modal" ? await refreshModal() : await refreshConvsChat(phone);
@@ -5282,7 +5282,7 @@ async function sendQuickReply(phone) {
     });
     if (!res.ok) {
       const err = await res.json();
-      showToast(`Erro: ${err.error}`, "t-err");
+      showToast(`Erro: ${err.detail || err.error || "Falha de envio"}`, "t-err");
     } else {
       showToast("Mensagem enviada");
       closeQuickReply(phone);
