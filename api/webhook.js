@@ -638,7 +638,9 @@ function trimHistory(session) {
 }
 
 function getMessages(session) {
-  return session.history.filter((m) => m.role !== "system");
+  return session.history
+    .filter((m) => m.role !== "system")
+    .map((m) => ({ role: m.role, content: m.content }));
 }
 
 function shouldRespond(session, text) {
