@@ -19,3 +19,9 @@ npm-debug.log*
 .DS_Store
 Thumbs.db
 .vercel
+
+# Local — não commitar
+.claude/
+_test_js.mjs
+fix_card.js
+.env.reset.tmp
