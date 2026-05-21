@@ -1024,6 +1024,7 @@ async function handleIncomingMessage(req, res) {
                 if (!session.cardTitle)      session.cardTitle    = generateCardTitle(session);
               }
 
+              addMessage(session, "user", "[áudio]", msgMeta);
               await saveSession(from, session);
               return reply;
             });

@@ -4695,7 +4695,13 @@ function appendBubble(container, msg, optimistic = false, history = null) {
   // ── Texto ──
   } else {
     const _textNode = document.createElement("span");
-    _textNode.textContent = content || "[mídia]";
+    if (content === "[áudio]") {
+      _textNode.textContent  = "🎧 Áudio recebido — peça ao cliente para enviar por texto.";
+      _textNode.style.fontStyle = "italic";
+      _textNode.style.opacity   = ".82";
+    } else {
+      _textNode.textContent = content || "[mídia]";
+    }
     bubble.appendChild(_textNode);
   }
 
