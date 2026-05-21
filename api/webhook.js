@@ -759,6 +759,7 @@ async function chatWithAgent(phone, userText, mediaPayload = null, name = "", me
   }
 
   if (decision === false) {
+    addMessage(session, "user", textToCheck || "[mensagem]", meta);
     await saveSession(phone, session);
     return null;
   }
