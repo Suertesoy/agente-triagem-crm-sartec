@@ -4110,12 +4110,9 @@ async function openChat(phone) {
   document.getElementById("chat-modal").classList.remove("hidden");
   document.body.style.overflow = "hidden";
 
-  touchActiveAttendant(phone);
+  _aaRegistered = false;  // decisão será tomada após carregar dados da conversa
   clearInterval(_aaIntervalId);
-  _aaIntervalId = setInterval(() => {
-    if (openModalPhone === phone) touchActiveAttendant(phone);
-    else clearInterval(_aaIntervalId);
-  }, 60000);
+  _aaIntervalId = null;
   clearInterval(_chatPollId);
   _chatPollId = setInterval(() => {
     if (openModalPhone === phone) refreshModal();
@@ -4131,6 +4128,16 @@ async function refreshModal() {
   try {
     const res      = await fetch(`/api/conversation?phone=${openModalPhone}`);
     const data     = await res.json();
+
+    // Registrar como atendente ativo apenas se ninguém (ou o próprio usuário) já estiver ativo
+    if (!_aaRegistered) {
+      _aaRegistered = true;
+      if (canTouchActiveAttendant(data)) {
+        touchActiveAttendant(openModalPhone);
+        startActiveAttendantRenewal(openModalPhone);
+      }
+    }
+
     const newCount = (data.history || []).length;
     if (openModalPhone in _lastMsgCountByPhone && _lastMsgCountByPhone[openModalPhone] === newCount) {
       updateWindowUI("modal", data);
@@ -4273,6 +4280,7 @@ function renderModal(data) {
 }
 
 function closeModal() {
+  _aaRegistered = false;
   clearInterval(_aaIntervalId);
   _aaIntervalId = null;
   clearInterval(_chatPollId);
@@ -6343,6 +6351,7 @@ function clearConvHasNew(phone) {
 // ║  ATENDENTE ATIVO — AVISO OPERACIONAL                         ║
 // ╚══════════════════════════════════════════════════════════════╝
 let _aaIntervalId = null;
+let _aaRegistered = false;  // true quando o usuário atual foi registrado como ativo nesta conversa
 let _chatPollId   = null;
 const _lastMsgCountByPhone = {};
 
@@ -6371,6 +6380,23 @@ function renderActiveAttendantNotice(prefix, data) {
   }
 }
 
+function canTouchActiveAttendant(data) {
+  const current = getCurrentAttendant();
+  if (!current) return false;
+  const att   = data?.activeAttendant;
+  const fresh = isActiveAttendantFresh(data?.activeAttendantAt);
+  if (!att || !fresh) return true;       // nenhum atendente ativo → pode registrar
+  return att.id === current.id;          // é o próprio usuário → pode renovar
+}
+
+function startActiveAttendantRenewal(phone) {
+  clearInterval(_aaIntervalId);
+  _aaIntervalId = setInterval(() => {
+    if (openModalPhone === phone) touchActiveAttendant(phone);
+    else clearInterval(_aaIntervalId);
+  }, 60000);
+}
+
 async function touchActiveAttendant(phone) {
   const att = getCurrentAttendant();
   if (!att || !phone) return;
@@ -6387,6 +6413,8 @@ async function assumeAttendant(phone, prefix) {
   const current = getCurrentAttendant();
   if (!current || !phone) return;
   await touchActiveAttendant(phone);
+  _aaRegistered = true;
+  startActiveAttendantRenewal(phone);
   // Atualiza a barra visualmente de imediato, sem esperar polling
   renderActiveAttendantNotice(prefix, {
     activeAttendant:   current,
