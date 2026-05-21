@@ -4699,7 +4699,9 @@ function appendBubble(container, msg, optimistic = false, history = null) {
 
   // ── Texto ──
   } else {
-    bubble.textContent = content || "[mídia]";
+    const _textNode = document.createElement("span");
+    _textNode.textContent = content || "[mídia]";
+    bubble.appendChild(_textNode);
   }
 
   wrap.appendChild(bubble);
