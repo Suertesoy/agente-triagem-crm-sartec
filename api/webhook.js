@@ -1007,6 +1007,13 @@ async function handleIncomingMessage(req, res) {
                   return null; // Silêncio total
                 }
               }
+              // Pós-handoff: bot fica silencioso, apenas registra o áudio
+              if (session.handoffDone) {
+                addMessage(session, "user", "[áudio]", msgMeta);
+                await saveSession(from, session);
+                return null;
+              }
+
               session.audioCount = (session.audioCount || 0) + 1;
 
               let reply;
@@ -1025,6 +1032,7 @@ async function handleIncomingMessage(req, res) {
               }
 
               addMessage(session, "user", "[áudio]", msgMeta);
+              if (reply) addMessage(session, "assistant", reply);
               await saveSession(from, session);
               return reply;
             });

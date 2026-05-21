@@ -4695,7 +4695,7 @@ function appendBubble(container, msg, optimistic = false, history = null) {
   // ── Texto ──
   } else {
     const _textNode = document.createElement("span");
-    if (content === "[áudio]") {
+    if (typeof content === "string" && content.trim() === "[áudio]") {
       _textNode.textContent  = "🎧 Áudio recebido — peça ao cliente para enviar por texto.";
       _textNode.style.fontStyle = "italic";
       _textNode.style.opacity   = ".82";
