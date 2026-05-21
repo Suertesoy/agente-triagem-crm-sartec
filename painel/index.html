@@ -407,7 +407,7 @@
       box-sizing: border-box;
       display: flex;
       flex-direction: column;
-      min-height: 220px;
+      min-height: 250px;
       cursor: pointer;
     }
     .card:hover { box-shadow: 0 2px 6px rgba(15,23,42,.07), 0 8px 20px rgba(15,23,42,.10); transform: translateY(-2px); }
@@ -2166,6 +2166,19 @@
       pointer-events: none;
     }
 
+    /* Badge de status na aba Conversas */
+    .conv-status-badge {
+      font-size: .52rem;
+      font-weight: 700;
+      padding: 1px 5px;
+      border-radius: 4px;
+      text-transform: uppercase;
+      letter-spacing: .04em;
+      white-space: nowrap;
+    }
+    .conv-waiting  { background: #dbeafe; color: #1e40af; }
+    .conv-resolved { background: #dcfce7; color: #166534; }
+
     /* Bolinha azul de não lida — direita do card */
     .conv-unread-dot {
       width: 11px; height: 11px; min-width: 11px;
@@ -2399,6 +2412,7 @@
       padding: 9px 11px;
       margin: 7px 0;
       min-height: 50px;
+      flex: 1;
     }
     .card.pri-alta .card-zone-mid        { background: rgba(255,255,255,.68); }
     .card.pri-media .card-zone-mid       { background: rgba(255,255,255,.68); }
@@ -2588,36 +2602,39 @@
     /* ── Linha de ação principal (CTA) ── */
     .card-cta-row { margin: 8px 0 6px; }
 
-    /* ── Toggle PF/PJ — switch segmentado ── */
+    /* ── Toggle PF/PJ — switch com thumb elevado ── */
     .pf-pj-toggle {
       display: inline-flex;
-      background: rgba(0,0,0,.10);
+      align-items: center;
+      background: rgba(0,0,0,.09);
+      border: 1px solid rgba(0,0,0,.07);
       border-radius: 999px;
       padding: 3px;
       gap: 0;
       flex-shrink: 0;
     }
     .pftgl-btn {
-      font-size: .56rem;
+      font-size: .58rem;
       font-weight: 800;
-      padding: 4px 11px;
+      padding: 5px 13px;
       border-radius: 999px;
       border: none;
       background: transparent;
       color: var(--text-secondary);
       cursor: pointer;
       text-transform: uppercase;
-      letter-spacing: .04em;
-      transition: background .15s, color .15s, box-shadow .15s;
+      letter-spacing: .05em;
+      transition: background .18s, color .18s, box-shadow .18s, transform .12s;
       white-space: nowrap;
       line-height: 1;
     }
     .pftgl-btn.active {
       background: var(--brand-navy);
       color: #fff;
-      box-shadow: 0 1px 4px rgba(0,0,0,.22);
+      box-shadow: 0 2px 6px rgba(26,42,94,.38);
+      transform: scale(1.04);
     }
-    .pftgl-btn:not(.active):hover { background: rgba(26,42,94,.12); color: var(--text-primary); }
+    .pftgl-btn:not(.active):hover { background: rgba(26,42,94,.10); color: var(--text-primary); }
 
     /* ── Linha de rodapé: toggle + Finalizar centralizado + seta ── */
     .card-footer-row {
@@ -3392,11 +3409,11 @@ function resumoOperacional(c) {
     return stripped.length > 4 ? stripped : title;
   }
 
-  // 1.5 Triagem incompleta — prioridade alta
+  // 1.5 Triagem incompleta — mensagem curta, sem duplicar no placeholder
   if (c.status === "triagem_incompleta") {
     const lm = (c.lastMessage || "").trim();
-    if (!lm || _GREET_RE.test(lm)) return "Triagem incompleta — cliente não informou o pedido";
-    return "Triagem incompleta — revisar solicitação do cliente";
+    if (!lm || _GREET_RE.test(lm)) return "Revisar — cliente não informou o pedido";
+    return "Revisar solicitação do cliente";
   }
 
   const ps  = c.pipelineStatus || "";
@@ -4045,7 +4062,6 @@ function buildCard(c, col, cols) {
     </div>
 
     <div class="card-zone-mid" onclick="event.stopPropagation()">
-      ${isIncomplete && !cardTitle ? `<div class="card-triagem-hint">${esc(resumoOperacional(c))}</div>` : ""}
       <div class="card-title" contenteditable="true" data-phone="${esc(c.phone)}"
         onblur="saveCardField(this,'cardTitle')"
         onkeydown="if(event.key==='Enter'){event.preventDefault();this.blur()}"
@@ -4567,8 +4583,8 @@ function buildConvItem(c) {
   const isPinned   = !isArchiveConv && pinnedConvs.includes(c.phone);
   const isHandoff  = c.status === "aguardando_humano";
   const isResolved = c.status === "resolvido";
-  // Só mostra dot de status quando relevante (handoff pendente ou resolvido)
-  const statusDot  = isHandoff ? "🔵" : isResolved ? "✅" : "";
+  // Badge de status legível — sem emoji ambíguo
+  const statusDot  = isHandoff ? `<span class="conv-status-badge conv-waiting">Aguardando</span>` : isResolved ? `<span class="conv-status-badge conv-resolved">Resolvido</span>` : "";
 
   const item = document.createElement("div");
   item.className = "conv-item"
@@ -4592,7 +4608,7 @@ function buildConvItem(c) {
       <div class="conv-meta">
         <span class="demand-tag ${demandClass(c.demandType)}"
           style="font-size:.55rem;padding:1px 5px">${demandLabel(c.demandType)}</span>
-        ${statusDot ? `<span style="font-size:.62rem">${statusDot}</span>` : ""}
+        ${statusDot || ""}
         ${isArchiveConv ? `<span class="conv-archive-badge">📁 arquivada</span>` : ""}
       </div>
     </div>
