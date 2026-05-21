@@ -3301,24 +3301,7 @@ function buildExpandBody(c, clientType) {
       rows.push(`<div class="card-expand-row"><span class="card-expand-label">${lbl}</span><span>${esc(String(val))}</span></div>`);
   };
 
-  // Resumo operacional no topo — substitui "Última msg"
-  const resumo = resumoOperacional(c);
-  const summaryBlock = resumo
-    ? `<div class="card-expand-summary">${esc(resumo)}</div>`
-    : "";
-
   if (c.demandType && c.demandType !== "outro") add("Categoria", cats[c.demandType] || c.demandType);
-  const wsStr = (() => {
-    const ws = c.conversationWindowStatus;
-    if (ws === "open" && c.windowRemainingMs > 0) {
-      const h = Math.floor(c.windowRemainingMs / 3_600_000);
-      const m = Math.floor((c.windowRemainingMs % 3_600_000) / 60_000);
-      return `Aberta — ${h}h${String(m).padStart(2,'0')}min`;
-    }
-    if (ws === "waiting_template_reply") return "Aguardando resposta";
-    return "Fechada";
-  })();
-  add("Janela WA", wsStr);
   if (c.dataLimite)   add("Data limite", c.dataLimite);
   if (c.formaEntrega) add("Entrega", c.formaEntrega === "retirada" ? "Retirada" : c.formaEntrega === "entrega" ? "Domicílio" : c.formaEntrega);
   if (c.endereco)     add("Endereço", c.endereco);
@@ -3332,9 +3315,9 @@ function buildExpandBody(c, clientType) {
     else if (ws === "closed") add("Ação sugerida", "Janela fechada — enviar template para retomar");
   }
 
-  if (!summaryBlock && !rows.length) return "";
+  if (!rows.length) return "";
   const isExpanded = _expandedCards.has(c.phone);
-  return `<div class="card-expand-body${isExpanded ? " visible" : ""}"><div style="font-size:.62rem;font-weight:700;color:var(--text-muted);margin-bottom:5px;text-transform:uppercase;letter-spacing:.04em">Resumo operacional</div>${summaryBlock}${rows.join("")}</div>`;
+  return `<div class="card-expand-body${isExpanded ? " visible" : ""}">${rows.join("")}</div>`;
 }
 
 // ── Toggle card expandido ─────────────────────────────────────────────────
