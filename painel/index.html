@@ -4961,6 +4961,25 @@ async function sendMessage(prefix) {
   if (input) input.focus();
 }
 
+// Avança pipeline de "novo" para próxima etapa quando humano envia mensagem com sucesso
+async function autoAdvanceAfterHumanReply(phone) {
+  const conv = allConvs.find(c => c.phone === phone);
+  if (!conv) return;
+  if ((conv.pipelineStatus || "novo") !== "novo") return;
+  const clientType   = conv.clientType || "pf";
+  const targetStatus = clientType === "pj" ? "cadastro" : "em_atendimento";
+  try {
+    const res = await fetch("/api/update-status", {
+      method:  "PUT",
+      headers: { "Content-Type": "application/json" },
+      body:    JSON.stringify({ phone, pipelineStatus: targetStatus, clientType }),
+    });
+    if (!res.ok) { console.warn("[autoAdvance] Falha ao avançar status", res.status); return; }
+    conv.pipelineStatus = targetStatus;
+    await loadQueue();
+  } catch (err) { console.warn("[autoAdvance] Erro:", err.message); }
+}
+
 async function sendTextMessage(prefix, container, text) {
   const phone = getPhoneForPrefix(prefix);
   const att   = getCurrentAttendant();
@@ -4987,6 +5006,7 @@ async function sendTextMessage(prefix, container, text) {
     } else {
       prefix === "modal" ? await refreshModal() : await refreshConvsChat(phone);
       showToast("Mensagem enviada");
+      autoAdvanceAfterHumanReply(phone);
     }
   } catch (e) { alert("Falha de rede."); removeLastOptimistic(container); }
 }
@@ -5021,6 +5041,7 @@ async function sendImageMessage(prefix, container, caption) {
     } else {
       prefix === "modal" ? await refreshModal() : await refreshConvsChat(phone);
       showToast("Imagem enviada");
+      autoAdvanceAfterHumanReply(phone);
     }
   } catch (e) { alert("Falha de rede."); removeLastOptimistic(container); }
 }
@@ -5056,6 +5077,7 @@ async function sendDocumentMessage(prefix, container, caption) {
     } else {
       prefix === "modal" ? await refreshModal() : await refreshConvsChat(phone);
       showToast("Documento enviado");
+      autoAdvanceAfterHumanReply(phone);
     }
   } catch (e) { alert("Falha de rede."); removeLastOptimistic(container); }
 }
@@ -5343,6 +5365,7 @@ async function sendQuickReply(phone) {
     } else {
       showToast("Mensagem enviada");
       closeQuickReply(phone);
+      autoAdvanceAfterHumanReply(phone);
       loadQueue();
     }
   } catch { showToast("Falha de rede", "t-err"); }
