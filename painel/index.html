@@ -178,6 +178,20 @@
     .pfpj-btn-confirm { padding:8px 18px; border-radius:8px; border:none; background:var(--brand-navy); color:#fff; font-size:.82rem; font-weight:700; cursor:pointer; transition:background .15s; }
     .pfpj-btn-confirm:hover { background:var(--brand-navy-mid); }
 
+    /* ── Botão flutuante de atendente (desktop only) ─────────── */
+    .attendant-fab { position:fixed; bottom:24px; right:24px; display:flex; align-items:center; gap:9px; background:var(--brand-navy); color:#fff; border:none; border-radius:28px; padding:10px 18px 10px 8px; box-shadow:0 4px 18px rgba(15,23,42,.22); cursor:pointer; font-size:.82rem; font-weight:700; z-index:390; transition:background .15s,box-shadow .15s; white-space:nowrap; }
+    .attendant-fab:hover { background:var(--brand-navy-mid); box-shadow:0 6px 22px rgba(15,23,42,.28); }
+    .attendant-fab-avatar { width:32px; height:32px; border-radius:50%; background:rgba(255,255,255,.2); color:#fff; font-size:.7rem; font-weight:700; display:flex; align-items:center; justify-content:center; flex-shrink:0; }
+    @media (max-width:768px) { .attendant-fab { display:none !important; } }
+
+    /* ── Modal de aviso: reply + anexo + texto ───────────────── */
+    .reply-warn-box { background:#fff; border-radius:14px; padding:24px; width:360px; max-width:calc(100vw - 32px); box-shadow:0 16px 48px rgba(15,23,42,.18); }
+    .reply-warn-title { font-size:.95rem; font-weight:700; color:var(--text-primary); margin-bottom:12px; }
+    .reply-warn-text { font-size:.84rem; color:var(--text-secondary); line-height:1.55; margin-bottom:8px; }
+    .reply-warn-list { font-size:.82rem; color:var(--text-secondary); line-height:1.8; margin:4px 0 20px; }
+    .reply-warn-btn { width:100%; padding:10px; border-radius:8px; border:none; background:var(--brand-navy); color:#fff; font-size:.88rem; font-weight:700; cursor:pointer; transition:background .15s; }
+    .reply-warn-btn:hover { background:var(--brand-navy-mid); }
+
     .btn-introduce {
       background: none; border: 1px solid var(--border);
       color: var(--text-secondary); font-size: .68rem;
@@ -4319,6 +4333,16 @@ function closePfPjModal() {
   _pfpjPendingType  = null;
 }
 
+function openReplyWarnModal() {
+  const m = document.getElementById("reply-warn-modal");
+  if (m) m.classList.remove("hidden");
+}
+
+function closeReplyWarnModal() {
+  const m = document.getElementById("reply-warn-modal");
+  if (m) m.classList.add("hidden");
+}
+
 function confirmPfPjChange() {
   const phone   = _pfpjPendingPhone;
   const newType = _pfpjPendingType;
@@ -5237,6 +5261,8 @@ document.addEventListener("keydown", (e) => {
   if (e.key === "Escape") {
     const pfpjM = document.getElementById("pfpj-confirm-modal");
     if (pfpjM && !pfpjM.classList.contains("hidden")) { closePfPjModal(); return; }
+    const rwM = document.getElementById("reply-warn-modal");
+    if (rwM && !rwM.classList.contains("hidden")) { closeReplyWarnModal(); return; }
     if (!document.getElementById("new-convo-modal").classList.contains("hidden")) {
       closeNewConvoModal(); return;
     }
@@ -5341,7 +5367,7 @@ async function sendMessage(prefix) {
 
   // Bloquear: reply ativo + mídia + texto/legenda no mesmo envio
   if (hasPending && _replyTarget[prefix] && text) {
-    showToast("Envie o anexo sem texto ou cancele a resposta selecionada.", "t-warn");
+    openReplyWarnModal();
     return;
   }
 
@@ -7020,6 +7046,10 @@ function renderAttendantBadge(att) {
   const name   = document.getElementById("attendant-name");
   if (avatar) { avatar.textContent = att.initials; avatar.style.background = att.color; }
   if (name)   name.textContent = "Atendente: " + att.name;
+  const fabAvatar = document.getElementById("attendant-fab-avatar");
+  const fabName   = document.getElementById("attendant-fab-name");
+  if (fabAvatar) { fabAvatar.textContent = att.initials; fabAvatar.style.background = att.color; }
+  if (fabName)   fabName.textContent = "Atendente: " + att.name;
 }
 
 function setAttendant(id) {
@@ -7217,6 +7247,26 @@ async function openContactResult(contact) {
     </div>
   </div>
 </div>
+
+<!-- ══════ MODAL AVISO REPLY + ANEXO + TEXTO ══════ -->
+<div id="reply-warn-modal" class="modal-overlay hidden" onclick="closeReplyWarnModal()">
+  <div class="reply-warn-box" onclick="event.stopPropagation()">
+    <h3 class="reply-warn-title">Não é possível enviar assim</h3>
+    <p class="reply-warn-text">Você está respondendo uma mensagem específica e também anexou um arquivo com texto.</p>
+    <p class="reply-warn-text">Para continuar, escolha uma das opções:</p>
+    <div class="reply-warn-list">
+      • envie o anexo sem texto;<br>
+      • ou cancele a resposta selecionada e envie como mensagem normal.
+    </div>
+    <button class="reply-warn-btn" onclick="closeReplyWarnModal()">Entendi</button>
+  </div>
+</div>
+
+<!-- ══════ BOTÃO FLUTUANTE DE ATENDENTE ══════ -->
+<button class="attendant-fab" id="attendant-fab" onclick="openAttendantPicker()" title="Trocar atendente">
+  <span class="attendant-fab-avatar" id="attendant-fab-avatar">?</span>
+  <span id="attendant-fab-name">Selecionar atendente</span>
+</button>
 
 <!-- ══════ ONBOARDING TOUR ══════ -->
 <div id="ob-wrap" class="ob-hidden">
