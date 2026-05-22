@@ -73,6 +73,7 @@ const ALLOWED_FIELDS = [
   "cardTitle",
   "demandType",
   "clientType",
+  "pipelineStatus",
   "priorityManual",
 ];
 

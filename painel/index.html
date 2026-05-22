@@ -126,6 +126,8 @@
       transition: background .15s;
     }
     .attendant-chip:hover { background: rgba(255,255,255,.2); }
+    /* Chip do header oculto no desktop — substituído pelo botão flutuante */
+    @media (min-width: 769px) { .attendant-chip { display: none !important; } }
     .attendant-avatar {
       width: 24px; height: 24px; border-radius: 50%;
       background: #3b82f6; color: #fff;
@@ -179,9 +181,9 @@
     .pfpj-btn-confirm:hover { background:var(--brand-navy-mid); }
 
     /* ── Botão flutuante de atendente (desktop only) ─────────── */
-    .attendant-fab { position:fixed; bottom:24px; right:24px; display:flex; align-items:center; gap:9px; background:var(--brand-navy); color:#fff; border:none; border-radius:28px; padding:10px 18px 10px 8px; box-shadow:0 4px 18px rgba(15,23,42,.22); cursor:pointer; font-size:.82rem; font-weight:700; z-index:390; transition:background .15s,box-shadow .15s; white-space:nowrap; }
-    .attendant-fab:hover { background:var(--brand-navy-mid); box-shadow:0 6px 22px rgba(15,23,42,.28); }
-    .attendant-fab-avatar { width:32px; height:32px; border-radius:50%; background:rgba(255,255,255,.2); color:#fff; font-size:.7rem; font-weight:700; display:flex; align-items:center; justify-content:center; flex-shrink:0; }
+    .attendant-fab { position:fixed; bottom:24px; right:24px; display:flex; align-items:center; gap:10px; background:#dbeafe; color:#1e3a5f; border:1px solid rgba(30,58,95,.15); border-radius:28px; padding:12px 20px 12px 10px; box-shadow:0 8px 28px rgba(15,23,42,.20),0 2px 8px rgba(15,23,42,.10); cursor:pointer; font-size:.85rem; font-weight:700; z-index:390; transition:background .15s,box-shadow .15s; white-space:nowrap; }
+    .attendant-fab:hover { background:#bfdbfe; box-shadow:0 10px 32px rgba(15,23,42,.24),0 2px 8px rgba(15,23,42,.12); }
+    .attendant-fab-avatar { width:38px; height:38px; border-radius:50%; background:rgba(30,58,95,.15); color:#fff; font-size:.72rem; font-weight:700; display:flex; align-items:center; justify-content:center; flex-shrink:0; }
     @media (max-width:768px) { .attendant-fab { display:none !important; } }
 
     /* ── Modal de aviso: reply + anexo + texto ───────────────── */
@@ -436,6 +438,7 @@
       cursor: pointer;
     }
     .card:hover { box-shadow: 0 2px 6px rgba(15,23,42,.07), 0 8px 20px rgba(15,23,42,.10); transform: translateY(-2px); }
+    .card-new-badge { position:absolute; top:10px; right:10px; width:11px; height:11px; border-radius:50%; background:#ef4444; border:2px solid var(--bg-card,#fff); animation:pulse-dot 2s ease-in-out infinite; pointer-events:none; z-index:3; }
 
     /* ── Semântica: fundo do card = temperatura operacional ── */
     .card.resolvido      { opacity: .72; background: #e8f3ee; border-color: rgba(22,163,74,.22); }
@@ -3392,6 +3395,16 @@ let openConvsPhone    = null;   // conversa aberta na aba Conversas
 let openConvsRedisKey = null;   // chave Redis da conversa aberta (para buscar archives corretamente)
 let pendingMedia    = {};     // { modal: {type,base64,mimeType,filename}, convs: {...} }
 const _replyTarget  = { modal: null, convs: null };
+const _cardLastUserMsg = {};  // phone → ISO string de lastUserMessageAt quando visto pela última vez
+
+function isCardNew(phone, lastUserMessageAt) {
+  if (!lastUserMessageAt) return false;
+  if (_cardLastUserMsg[phone] === undefined) {
+    _cardLastUserMsg[phone] = lastUserMessageAt; // primeira renderização: sem badge
+    return false;
+  }
+  return lastUserMessageAt > _cardLastUserMsg[phone];
+}
 let countdownVal    = 30;
 let countdownTimer  = null;
 let _refreshOkTimer = null;
@@ -4113,6 +4126,8 @@ function buildCard(c, col, cols) {
   if (isWindowClosed) cls += " card-window-closed";
   card.className = cls;
 
+  const isCardNewMsg = !isResolved && isCardNew(c.phone, c.lastUserMessageAt);
+
   const colsForStatus = cols.filter(col => !col.resolved);
   const statusOptions = colsForStatus.map(col =>
     `<option value="${col.key}"${col.key === (c.pipelineStatus||"novo") ? " selected" : ""}>${col.label}</option>`
@@ -4137,6 +4152,7 @@ function buildCard(c, col, cols) {
     : "";
 
   card.innerHTML = `
+    ${isCardNewMsg ? '<span class="card-new-badge" title="Nova mensagem do cliente"></span>' : ''}
     <span class="card-status-dot"
       role="button"
       tabindex="0"
@@ -4374,7 +4390,7 @@ async function changeClientType(select, phone) {
     await fetch("/api/update-card", {
       method: "PUT",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ phone, clientType: newType }),
+      body: JSON.stringify({ phone, clientType: newType, pipelineStatus: "novo" }),
     });
   } catch (e) { console.error("[changeClientType]", e); }
 }
@@ -4447,6 +4463,7 @@ function stopAutoRefresh() { clearInterval(countdownTimer); countdownTimer = nul
 // ╚══════════════════════════════════════════════════════════════╝
 async function openChat(phone) {
   openModalPhone = phone;
+  _cardLastUserMsg[phone] = new Date().toISOString(); // marca como visto
   if (isConvLockedByOther(phone)) showDupeWarning("modal");
   else hideDupeWarning("modal");
   lockConvTab(phone);
@@ -7104,7 +7121,7 @@ function introduceAttendant(prefix) {
   inp.focus();
 }
 
-initAttendant();
+setTimeout(initAttendant, 0);
 
 // ╔══════════════════════════════════════════════════════════════╗
 // ║  BUSCA DE CONTATOS                                           ║
