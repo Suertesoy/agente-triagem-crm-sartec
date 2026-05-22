@@ -68,6 +68,40 @@ function buildOperationalSummary(session) {
   return `${prefix}${summary}${cadCtx}`.trim().substring(0, 120) || null;
 }
 
+// ── Detalhes complementares (contexto + itens de pedido) ────────────────────
+function buildOperationalDetails(session) {
+  const history = session.history || [];
+  const isPJ = session.clientType === "pj" || session.demandType === "cotacao_pj";
+
+  const userMsgs = history
+    .filter((m) => m.role === "user" && typeof m.content === "string")
+    .map((m) => m.content.trim())
+    .filter((m) => m.length > 5 && !_QUEUE_USELESS.test(m));
+
+  if (!userMsgs.length) return { context: [], items: [] };
+
+  const allText = userMsgs.join(" ");
+  const context = [];
+
+  if (isPJ && _QUEUE_NOCAD.test(allText))   context.push("Empresa não cadastrada");
+  if (_QUEUE_URGENT.test(allText))           context.push("Pedido urgente");
+  if (/quando.*entrega|prazo.*entrega|quando.*consegue|quando.*fica.*pronto|prazo\s+de\s+entrega/i.test(allText)) {
+    context.push("Cliente quer prazo de entrega");
+  }
+
+  // Mensagens com produto, quantidade ou medida — como itens do pedido
+  const items = userMsgs
+    .filter((m) => _QUEUE_PROD.test(m) || _QUEUE_QTY.test(m) || _QUEUE_MEAS.test(m))
+    .map((m) => m
+      .replace(/^(quero|queria|gostaria\s+de|preciso\s+de|vim\s+pedir)[,!\s]+/gi, "")
+      .replace(/\s+/g, " ").trim()
+    )
+    .filter((m) => m.length > 5)
+    .slice(0, 4);
+
+  return { context, items };
+}
+
 // Janela de 24h
 function computeWindowInfo(session) {
   const now        = Date.now();
@@ -183,6 +217,7 @@ export default async function handler(req, res) {
         resolvedAt:     session.resolvedAt      || null,
         cardTitle:           session.cardTitle       || "",
         operationalSummary:  buildOperationalSummary(session),
+        operationalDetails:  buildOperationalDetails(session),
         lastMessage:         lastMessage.substring(0, 200),
         messageCount:   (session.history || []).length,
         priorityManual: session.priorityManual  || null,

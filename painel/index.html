@@ -3518,27 +3518,41 @@ function resumoOperacional(c) {
 // ── Corpo expandido do card ───────────────────────────────────────────────
 function buildExpandBody(c, clientType) {
   const rows = [];
-  const cats = getCategories();
-  const add = (lbl, val) => {
-    if (val !== null && val !== undefined && val !== "" && val !== "—")
-      rows.push(`<div class="card-expand-row"><span class="card-expand-label">${lbl}</span><span>${esc(String(val))}</span></div>`);
+  const add = (lbl, val, style) => {
+    if (val !== null && val !== undefined && val !== "" && val !== "—") {
+      const s = style ? ` style="${style}"` : "";
+      rows.push(`<div class="card-expand-row"><span class="card-expand-label">${lbl}</span><span${s}>${esc(String(val))}</span></div>`);
+    }
   };
 
-  if (c.demandType && c.demandType !== "outro") add("Categoria", cats[c.demandType] || c.demandType);
+  // ── Detalhes operacionais derivados (context + itens de pedido) ──
+  const od = c.operationalDetails;
+  if (od) {
+    od.context.forEach((ctx, i) => add(i === 0 ? "Contexto" : "", ctx));
+    od.items.forEach((item, i) => add(i === 0 ? "Pedido" : "", item));
+  }
+
+  // ── Dados do pedido preenchidos pelo atendente ──
+  // Categoria não mostrada aqui — já visível no card fechado
   if (c.dataLimite)   add("Data limite", c.dataLimite);
   if (c.formaEntrega) add("Entrega", c.formaEntrega === "retirada" ? "Retirada" : c.formaEntrega === "entrega" ? "Domicílio" : c.formaEntrega);
   if (c.endereco)     add("Endereço", c.endereco);
   if (c.escola)       add("Escola", c.escola);
   if (c.serie)        add("Série", c.serie);
   if (c.observacoes)  add("Obs.", c.observacoes);
-  // Contexto operacional de janela para triagem incompleta
+
+  // ── Ação sugerida para triagem incompleta ──
   if (c.status === "triagem_incompleta") {
     const ws = c.conversationWindowStatus;
-    if (ws === "open")   add("Ação sugerida", "Janela aberta — pode responder agora");
-    else if (ws === "closed") add("Ação sugerida", "Janela fechada — enviar template para retomar");
+    if (ws === "open")        add("Ação", "Janela aberta — pode responder agora");
+    else if (ws === "closed") add("Ação", "Janela fechada — enviar template para retomar");
   }
 
-  if (!rows.length) return "";
+  // Fallback quando não há nenhum detalhe complementar
+  if (!rows.length) {
+    rows.push(`<div class="card-expand-row" style="color:var(--text-muted);font-style:italic"><span class="card-expand-label"></span><span>Sem detalhes adicionais ainda</span></div>`);
+  }
+
   const isExpanded = _expandedCards.has(c.phone);
   return `<div class="card-expand-body${isExpanded ? " visible" : ""}">${rows.join("")}</div>`;
 }
@@ -4395,17 +4409,12 @@ async function refreshModal() {
 
 // ── Gera resumo para o atendente (dados já carregados, sem chamada extra à IA) ──
 function buildSummaryHTML(data) {
-  // Resumo operacional — destaque principal
-  const resumo = resumoOperacional(data);
-
-  const titleStr  = data.cardTitle
-    ? esc(data.cardTitle)
-    : esc(demandLabel(data.demandType));
-
+  const resumo    = resumoOperacional(data);
+  const titleStr  = data.cardTitle ? esc(data.cardTitle) : esc(demandLabel(data.demandType));
   const waitStr   = data.handoffAt ? relTime(data.handoffAt) : "—";
   const statusStr = pipelineLabel(data.pipelineStatus, data.clientType);
 
-  // ── Contexto extra: empresa não cadastrada + urgência (detectado do histórico) ──
+  // Detecta contexto do histórico
   const _modalUserMsgs = (data.history || [])
     .filter(m => m.role === "user" && typeof m.content === "string")
     .map(m => m.content.trim()).join(" ");
@@ -4414,32 +4423,38 @@ function buildSummaryHTML(data) {
   const _isUrgent = /urgent|urgência|urgencia|o\s+quanto\s+antes|para\s+hoje|preciso.*hoje/i.test(_modalUserMsgs);
   const _hasPrazo = /quando.*entrega|prazo.*entrega|quando.*consegue|quando.*fica.*pronto/i.test(_modalUserMsgs);
 
-  const pjCtxRows = [
-    _isNoCad  ? `<div class="modal-summary-item"><span class="sum-icon">🏢</span><span class="sum-text" style="color:#7c3aed;font-weight:700">Empresa não cadastrada</span></div>` : "",
-    _isUrgent ? `<div class="modal-summary-item"><span class="sum-icon">🔴</span><span class="sum-text" style="color:#b91c1c;font-weight:700">Pedido urgente</span></div>` : "",
-    _hasPrazo ? `<div class="modal-summary-item"><span class="sum-icon">📅</span><span class="sum-text">Cliente perguntou sobre prazo/entrega</span></div>` : "",
+  // Linha de resumo sem ícone — texto limpo
+  const smRow = (text, style) => {
+    const s = style ? ` style="${style}"` : "";
+    return `<div class="modal-summary-item"><span class="sum-text"${s}>${text}</span></div>`;
+  };
+  const smLabelRow = (label, text) =>
+    `<div class="modal-summary-item"><span class="sum-text"><span class="sum-label">${label}</span>${text}</span></div>`;
+
+  const contextRows = [
+    resumo    ? `<div class="modal-summary-item modal-summary-highlight"><span class="sum-text">${esc(resumo)}</span></div>` : "",
+    _isNoCad  ? smRow("Empresa não cadastrada", "color:var(--text-secondary)") : "",
+    _isUrgent ? smRow("Pedido urgente", "color:#b45309;font-weight:700") : "",
+    _hasPrazo ? smRow("Cliente perguntou sobre prazo/entrega") : "",
   ].filter(Boolean).join("");
 
-  // Contexto operacional extra para triagem incompleta
+  // Triagem incompleta — sem emoji
   const triagemCtx = data.status === "triagem_incompleta"
     ? (data.conversationWindowStatus === "open"
-        ? `<div class="modal-summary-item"><span class="sum-icon">💡</span><span class="sum-text" style="color:#15803d;font-weight:700">Janela aberta — pode responder agora</span></div>`
+        ? smRow("Janela aberta — pode responder agora", "color:#15803d;font-weight:700")
         : data.conversationWindowStatus === "closed"
-          ? `<div class="modal-summary-item"><span class="sum-icon">💡</span><span class="sum-text" style="color:#b45309;font-weight:700">Janela fechada — enviar template para retomar</span></div>`
+          ? smRow("Janela fechada — enviar template para retomar", "color:#b45309;font-weight:700")
           : "")
     : "";
 
   const rows = [
-    resumo
-      ? `<div class="modal-summary-item modal-summary-highlight"><span class="sum-icon">⚡</span><span class="sum-text">${esc(resumo)}</span></div>`
-      : "",
-    pjCtxRows,
+    contextRows,
     triagemCtx,
-    `<div class="modal-summary-item"><span class="sum-icon">🎯</span><span class="sum-text"><span class="sum-label">Pedido:</span>${titleStr}</span></div>`,
-    `<div class="modal-summary-item"><span class="sum-icon">⏱</span><span class="sum-text"><span class="sum-label">Aguardando:</span>${waitStr} · ${statusStr}</span></div>`,
+    smLabelRow("Pedido:", titleStr),
+    smLabelRow("Aguardando:", `${waitStr} · ${statusStr}`),
   ].filter(Boolean).join("");
 
-  return `<summary>📋 Resumo para o atendente</summary><div class="modal-summary-body">${rows}</div>`;
+  return `<summary>Resumo para o atendente</summary><div class="modal-summary-body">${rows}</div>`;
 }
 
 function renderModal(data) {
