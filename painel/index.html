@@ -1446,6 +1446,19 @@
       max-width: 100%; overflow: hidden;
       text-overflow: ellipsis; white-space: nowrap;
     }
+
+    /* ── Botão Responder nas bolhas do cliente ────────────────── */
+    .bubble-reply-btn { display:none; font-size:.62rem; font-weight:600; background:none; border:1px solid var(--border); border-radius:5px; padding:2px 7px; color:var(--text-secondary); cursor:pointer; margin-top:3px; transition:background .12s,color .12s; align-self:flex-start; }
+    .bubble-reply-btn:hover { background:#e8edf9; color:var(--brand-navy); }
+    .bubble-wrap.left:hover .bubble-reply-btn { display:block; }
+
+    /* ── Barra de resposta acima do composer ─────────────────── */
+    .reply-bar { display:flex; align-items:center; gap:8px; padding:6px 12px; margin:0 0 2px; background:#eff2fb; border-left:3px solid var(--brand-navy); border-radius:6px; font-size:.78rem; color:var(--text-secondary); flex-shrink:0; }
+    .reply-bar-label { color:var(--brand-navy); font-size:.7rem; font-weight:700; flex-shrink:0; white-space:nowrap; }
+    .reply-bar-text { flex:1; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+    .reply-bar-cancel { flex-shrink:0; background:none; border:none; cursor:pointer; color:var(--text-muted); font-size:.88rem; padding:0 3px; line-height:1; }
+    .reply-bar-cancel:hover { color:var(--text-primary); }
+
     .conv-new-badge {
       font-size: .55rem; font-weight: 700; background: #3b82f6; color: #fff;
       padding: 1px 5px; border-radius: 20px; margin-left: 5px; vertical-align: middle;
@@ -2896,6 +2909,7 @@
       .btn-camera { width:42px;height:42px; }
       .btn-send { height:42px;min-width:60px; }
       .composer-row textarea { min-height:42px; }
+      .bubble-reply-btn { display:block; }
       /* Previne zoom automático do iOS em campos com font-size < 16px */
       .composer-row textarea,
       .caption-input,
@@ -3077,6 +3091,11 @@
       <div class="active-attendant-bar hidden" id="modal-aa-bar"></div>
       <!-- Lock da janela de 24h — aparece quando janela está fechada/aguardando -->
       <div class="composer-lock-bar" id="modal-composer-lock" style="display:none"></div>
+      <div class="reply-bar" id="modal-reply-bar" style="display:none">
+        <span class="reply-bar-label">Respondendo:</span>
+        <span class="reply-bar-text" id="modal-reply-text"></span>
+        <button class="reply-bar-cancel" onclick="clearReplyTarget('modal')" title="Cancelar resposta">✕</button>
+      </div>
       <div class="img-preview-bar" id="modal-img-preview-bar">
         <img id="modal-img-thumb" src="" alt="preview">
         <input class="caption-input" id="modal-img-caption" placeholder="Legenda (opcional)">
@@ -3358,6 +3377,7 @@ let openModalPhone  = null;   // conversa aberta no modal do pipeline
 let openConvsPhone    = null;   // conversa aberta na aba Conversas
 let openConvsRedisKey = null;   // chave Redis da conversa aberta (para buscar archives corretamente)
 let pendingMedia    = {};     // { modal: {type,base64,mimeType,filename}, convs: {...} }
+const _replyTarget  = { modal: null, convs: null };
 let countdownVal    = 30;
 let countdownTimer  = null;
 let _refreshOkTimer = null;
@@ -4407,6 +4427,7 @@ async function openChat(phone) {
   else hideDupeWarning("modal");
   lockConvTab(phone);
   pendingMedia.modal = null;
+  clearReplyTarget("modal");
   clearImage("modal");
 
   document.getElementById("modal-messages").innerHTML = "";
@@ -4733,6 +4754,7 @@ function buildConvItem(c) {
 }
 
 async function openConvsChat(phone, redisKey, isArchive) {
+  clearReplyTarget("convs");
   if (openConvsPhone && openConvsPhone !== phone) unlockConvTab(openConvsPhone);
   openConvsPhone    = phone;
   openConvsRedisKey = redisKey || `sartec:${phone}`;
@@ -4782,6 +4804,7 @@ async function openConvsChat(phone, redisKey, isArchive) {
         <button class="btn-clear-img" onclick="clearImage('convs')" title="Remover">✕</button>
       </div>
       <div class="composer-lock-bar" id="convs-composer-lock" style="display:none"></div>
+      <div class="reply-bar" id="convs-reply-bar" style="display:none"><span class="reply-bar-label">Respondendo:</span><span class="reply-bar-text" id="convs-reply-text"></span><button class="reply-bar-cancel" onclick="clearReplyTarget('convs')" title="Cancelar resposta">✕</button></div>
       <div class="composer-row">
         <button class="btn-attach" onclick="document.getElementById('convs-file-input').click()" title="Imagem">📎</button>
         <input type="file" id="convs-file-input" accept="image/jpeg,image/png,image/gif,image/webp,application/pdf" style="display:none" onchange="handleImageSelect(event,'convs')">
@@ -5083,7 +5106,43 @@ function appendBubble(container, msg, optimistic = false, history = null) {
     wrap.appendChild(lbl);
   }
 
+  // Botão Responder: apenas em mensagens do cliente com metaMessageId
+  if (role === "user" && msg.metaMessageId && !optimistic) {
+    const replyBtn = document.createElement("button");
+    replyBtn.className   = "bubble-reply-btn";
+    replyBtn.textContent = "Responder";
+    replyBtn.onclick = (e) => {
+      e.stopPropagation();
+      const prefix = container.id === "modal-messages" ? "modal" : "convs";
+      setReplyTarget(prefix, msg);
+    };
+    wrap.appendChild(replyBtn);
+  }
+
   container.appendChild(wrap);
+}
+
+function setReplyTarget(prefix, msg) {
+  _replyTarget[prefix] = msg;
+  const bar  = document.getElementById(`${prefix}-reply-bar`);
+  const text = document.getElementById(`${prefix}-reply-text`);
+  if (!bar || !text) return;
+  let preview = "[mídia]";
+  if (typeof msg.content === "string" && msg.content.trim()) {
+    preview = msg.content.trim().slice(0, 90);
+  } else if (Array.isArray(msg.content)) {
+    const tp = msg.content.find(c => c.type === "text");
+    if (tp?.text?.trim()) preview = tp.text.trim().slice(0, 90);
+  }
+  text.textContent = preview;
+  bar.style.display = "";
+  document.getElementById(`${prefix}-msg-input`)?.focus();
+}
+
+function clearReplyTarget(prefix) {
+  _replyTarget[prefix] = null;
+  const bar = document.getElementById(`${prefix}-reply-bar`);
+  if (bar) bar.style.display = "none";
 }
 
 function storeMedia(base64, mimeType) {
@@ -5325,27 +5384,34 @@ async function autoAdvanceAfterHumanReply(phone) {
 async function sendTextMessage(prefix, container, text) {
   const phone = getPhoneForPrefix(prefix);
   const att   = getCurrentAttendant();
+  const reply = _replyTarget[prefix];
+
   appendBubble(container, {
     role: "assistant", content: text, sentByHuman: true,
     attendantId: att?.id, attendantName: att?.name,
+    ...(reply?.metaMessageId ? { replyToMsgId: reply.metaMessageId } : {}),
   }, true);
   scrollToBottom(container);
 
   try {
+    const payload = {
+      to: phone, type: "text", message: text,
+      attendantId:   att?.id   || null,
+      attendantName: att?.name || null,
+    };
+    if (reply?.metaMessageId) payload.replyToMessageId = reply.metaMessageId;
+
     const res = await fetch("/api/send", {
       method:  "POST",
       headers: { "Content-Type": "application/json" },
-      body:    JSON.stringify({
-        to: phone, type: "text", message: text,
-        attendantId:   att?.id   || null,
-        attendantName: att?.name || null,
-      }),
+      body:    JSON.stringify(payload),
     });
     if (!res.ok) {
       const err = await res.json();
       alert(`Erro ao enviar: ${err.detail || err.error || "Falha de envio"}`);
       removeLastOptimistic(container);
     } else {
+      clearReplyTarget(prefix);
       prefix === "modal" ? await refreshModal() : await refreshConvsChat(phone);
       showToast("Mensagem enviada");
       autoAdvanceAfterHumanReply(phone);

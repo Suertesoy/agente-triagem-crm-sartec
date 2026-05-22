@@ -67,10 +67,21 @@ export default async function handler(req, res) {
 
 // ── Envio de texto ────────────────────────────────────────
 async function sendText(req, res, body, PHONE_NUMBER_ID, ACCESS_TOKEN) {
-  const { to, message } = body;
+  const { to, message, replyToMessageId } = body;
 
   if (!message) {
     return res.status(400).json({ error: "Campo message é obrigatório para type text" });
+  }
+
+  const msgPayload = {
+    messaging_product: "whatsapp",
+    recipient_type: "individual",
+    to,
+    type: "text",
+    text: { preview_url: false, body: message },
+  };
+  if (replyToMessageId && typeof replyToMessageId === "string") {
+    msgPayload.context = { message_id: replyToMessageId };
   }
 
   const metaRes = await fetch(
@@ -81,13 +92,7 @@ async function sendText(req, res, body, PHONE_NUMBER_ID, ACCESS_TOKEN) {
         "Content-Type": "application/json",
         Authorization: `Bearer ${ACCESS_TOKEN}`,
       },
-      body: JSON.stringify({
-        messaging_product: "whatsapp",
-        recipient_type: "individual",
-        to,
-        type: "text",
-        text: { preview_url: false, body: message },
-      }),
+      body: JSON.stringify(msgPayload),
     }
   );
 
@@ -102,16 +107,19 @@ async function sendText(req, res, body, PHONE_NUMBER_ID, ACCESS_TOKEN) {
   }
 
   const metaMessageId = metaData?.messages?.[0]?.id || null;
-  console.log(`[send/text] ✅ ID: ${metaMessageId}`);
+  console.log(`[send/text] ✅ ID: ${metaMessageId}${replyToMessageId ? " (reply)" : ""}`);
 
-  await saveToHistory(to, {
+  const historyEntry = {
     role: "assistant",
     content: message,
     sentByHuman:   true,
     attendantId:   body.attendantId   || null,
     attendantName: body.attendantName || null,
     metaMessageId,
-  });
+  };
+  if (replyToMessageId) historyEntry.replyToMsgId = replyToMessageId;
+
+  await saveToHistory(to, historyEntry);
 
   return res.status(200).json({ success: true });
 }
