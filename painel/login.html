@@ -166,6 +166,7 @@
 
     if (pwd === PANEL_PASSWORD) {
       sessionStorage.setItem("sartec_auth", "true");
+      localStorage.removeItem("sartec_current_attendant");
       btn.disabled  = true;
       btn.textContent = "Entrando...";
       // Fade out suave antes de redirecionar

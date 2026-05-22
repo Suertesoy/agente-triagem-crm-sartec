@@ -133,7 +133,7 @@
       display: flex; align-items: center; justify-content: center;
       flex-shrink: 0;
     }
-    .attendant-name { max-width: 80px; overflow: hidden; text-overflow: ellipsis; }
+    .attendant-name { max-width: 130px; overflow: hidden; text-overflow: ellipsis; }
     .attendant-picker-box {
       background: #fff; border-radius: 14px;
       padding: 28px 24px 24px;
@@ -166,6 +166,18 @@
       padding: 4px 8px; border-radius: 6px;
     }
     .attendant-picker-close:hover { background: var(--bg-main); }
+
+    /* ── Modal de confirmação PF/PJ ───────────────────────────── */
+    .pfpj-confirm-box { background:#fff; border-radius:14px; padding:28px 24px 24px; width:360px; max-width:calc(100vw - 32px); box-shadow:0 16px 48px rgba(15,23,42,.18); }
+    .pfpj-confirm-title { font-size:1rem; font-weight:700; color:var(--text-primary); margin-bottom:12px; }
+    .pfpj-confirm-text { font-size:.88rem; color:var(--text-secondary); margin-bottom:8px; line-height:1.5; }
+    .pfpj-confirm-sub { font-size:.78rem; color:var(--text-muted); margin-bottom:24px; line-height:1.5; font-style:italic; }
+    .pfpj-confirm-actions { display:flex; gap:10px; justify-content:flex-end; }
+    .pfpj-btn-cancel { padding:8px 16px; border-radius:8px; border:1.5px solid var(--border); background:var(--bg-main); color:var(--text-secondary); font-size:.82rem; font-weight:600; cursor:pointer; transition:background .12s; }
+    .pfpj-btn-cancel:hover { background:var(--bg-sidebar); }
+    .pfpj-btn-confirm { padding:8px 18px; border-radius:8px; border:none; background:var(--brand-navy); color:#fff; font-size:.82rem; font-weight:700; cursor:pointer; transition:background .15s; }
+    .pfpj-btn-confirm:hover { background:var(--brand-navy-mid); }
+
     .btn-introduce {
       background: none; border: 1px solid var(--border);
       color: var(--text-secondary); font-size: .68rem;
@@ -2914,7 +2926,7 @@
     <div class="contact-results" id="contact-results" style="display:none"></div>
   </div>
   <div class="refresh-info">Atualiza em <span id="countdown">30</span>s<span id="refresh-state" class="refresh-state"></span></div>
-  <button class="attendant-chip" id="attendant-chip" onclick="openAttendantPicker()" title="Trocar perfil">
+  <button class="attendant-chip" id="attendant-chip" onclick="openAttendantPicker()" title="Trocar perfil de atendimento">
     <span class="attendant-avatar" id="attendant-avatar">?</span>
     <span class="attendant-name" id="attendant-name">Perfil</span>
   </button>
@@ -4253,15 +4265,45 @@ async function changeStatus(select, phone, clientType) {
   } catch (e) { console.error("[changeStatus]", e); }
 }
 
+let _pfpjPendingPhone = null;
+let _pfpjPendingType  = null;
+
 function changeClientTypeToggle(phone, newType) {
   const conv = allConvs.find(c => c.phone === phone);
   const current = conv?.clientType || "pf";
   if (newType === current) return;
-  const destLabel = newType === "pj" ? "pessoas jurídicas" : "pessoas físicas";
-  const ok = window.confirm(
-    `Tem certeza que deseja enviar este atendimento para o painel de ${destLabel}?\nEle sairá deste painel após a confirmação.`
-  );
-  if (!ok) return;
+  _pfpjPendingPhone = phone;
+  _pfpjPendingType  = newType;
+  const title = document.getElementById("pfpj-confirm-title");
+  const text  = document.getElementById("pfpj-confirm-text");
+  const sub   = document.getElementById("pfpj-confirm-sub");
+  const btn   = document.getElementById("pfpj-btn-confirm");
+  if (newType === "pj") {
+    title.textContent = "Enviar para Pessoa Jurídica?";
+    text.textContent  = "Este atendimento sairá da aba Pessoa Física e aparecerá no painel de Pessoa Jurídica.";
+    sub.textContent   = "Use esta ação quando o cliente estiver falando em nome de uma empresa, escola, escritório ou outro CNPJ.";
+    btn.textContent   = "Enviar para PJ";
+  } else {
+    title.textContent = "Enviar para Pessoa Física?";
+    text.textContent  = "Este atendimento sairá da aba Pessoa Jurídica e aparecerá no painel de Pessoa Física.";
+    sub.textContent   = "Use esta ação quando o pedido for pessoal ou não estiver relacionado a uma empresa.";
+    btn.textContent   = "Enviar para PF";
+  }
+  document.getElementById("pfpj-confirm-modal").classList.remove("hidden");
+}
+
+function closePfPjModal() {
+  const m = document.getElementById("pfpj-confirm-modal");
+  if (m) m.classList.add("hidden");
+  _pfpjPendingPhone = null;
+  _pfpjPendingType  = null;
+}
+
+function confirmPfPjChange() {
+  const phone   = _pfpjPendingPhone;
+  const newType = _pfpjPendingType;
+  closePfPjModal();
+  if (!phone || !newType) return;
   changeClientType({ value: newType }, phone);
 }
 
@@ -5134,6 +5176,8 @@ function downloadMediaModal() {
 // Fechar modais com ESC
 document.addEventListener("keydown", (e) => {
   if (e.key === "Escape") {
+    const pfpjM = document.getElementById("pfpj-confirm-modal");
+    if (pfpjM && !pfpjM.classList.contains("hidden")) { closePfPjModal(); return; }
     if (!document.getElementById("new-convo-modal").classList.contains("hidden")) {
       closeNewConvoModal(); return;
     }
@@ -6892,7 +6936,7 @@ function renderAttendantBadge(att) {
   const avatar = document.getElementById("attendant-avatar");
   const name   = document.getElementById("attendant-name");
   if (avatar) { avatar.textContent = att.initials; avatar.style.background = att.color; }
-  if (name)   name.textContent = att.name;
+  if (name)   name.textContent = "Atendente: " + att.name;
 }
 
 function setAttendant(id) {
@@ -7075,6 +7119,19 @@ async function openContactResult(contact) {
     <button class="attendant-picker-close" id="attendant-picker-close" onclick="closeAttendantPicker()">✕</button>
     <h3 class="attendant-picker-title">Quem está atendendo agora?</h3>
     <div class="attendant-picker-grid" id="attendant-picker-grid"></div>
+  </div>
+</div>
+
+<!-- ══════ MODAL PF/PJ ══════ -->
+<div id="pfpj-confirm-modal" class="modal-overlay hidden" onclick="closePfPjModal()">
+  <div class="pfpj-confirm-box" onclick="event.stopPropagation()">
+    <h3 class="pfpj-confirm-title" id="pfpj-confirm-title"></h3>
+    <p class="pfpj-confirm-text" id="pfpj-confirm-text"></p>
+    <p class="pfpj-confirm-sub" id="pfpj-confirm-sub"></p>
+    <div class="pfpj-confirm-actions">
+      <button class="pfpj-btn-cancel" onclick="closePfPjModal()">Cancelar</button>
+      <button class="pfpj-btn-confirm" id="pfpj-btn-confirm" onclick="confirmPfPjChange()">Enviar</button>
+    </div>
   </div>
 </div>
 
