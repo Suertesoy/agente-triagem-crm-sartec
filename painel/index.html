@@ -874,6 +874,28 @@
       overflow-y: auto;
     }
 
+    /* ── Seletor de modo Conversas / Contatos ──────────────────── */
+    .convs-mode-bar { display:flex; border-bottom:1px solid var(--border); flex-shrink:0; }
+    .convs-mode-btn { flex:1; padding:9px 0; font-size:.78rem; font-weight:700; border:none; background:var(--bg-main); color:var(--text-secondary); cursor:pointer; transition:background .15s,color .15s; letter-spacing:.02em; }
+    .convs-mode-btn:hover { background:#eff2fb; color:var(--brand-navy); }
+    .convs-mode-btn.active { background:var(--brand-navy); color:#fff; }
+
+    /* ── Item de contato ───────────────────────────────────────── */
+    .contact-item { padding:10px 12px; border-bottom:1px solid var(--border); display:flex; gap:9px; align-items:center; transition:background .12s; }
+    .contact-item:hover { background:#eff2fb; }
+    .contact-avatar { width:38px; height:38px; border-radius:50%; background:var(--brand-navy); color:#fff; font-weight:700; font-size:.8rem; display:flex; align-items:center; justify-content:center; flex-shrink:0; }
+    .contact-avatar.pj { background:var(--pj-color); }
+    .contact-info { flex:1; min-width:0; }
+    .contact-name-row { display:flex; align-items:baseline; gap:4px; margin-bottom:2px; }
+    .contact-name { font-size:.84rem; font-weight:600; color:var(--text-primary); white-space:nowrap; overflow:hidden; text-overflow:ellipsis; flex:1; min-width:0; }
+    .contact-time { font-size:.65rem; color:var(--text-muted); flex-shrink:0; }
+    .contact-phone { font-size:.7rem; color:var(--text-secondary); margin-bottom:3px; }
+    .contact-meta { display:flex; align-items:center; gap:4px; flex-wrap:wrap; }
+    .contact-type-badge { font-size:.52rem; font-weight:700; padding:1px 5px; border-radius:4px; text-transform:uppercase; background:#f3f4f6; color:#374151; }
+    .contact-status-badge { font-size:.52rem; font-weight:700; padding:1px 5px; border-radius:4px; text-transform:uppercase; background:#e0e7ff; color:#3730a3; }
+    .contact-reopen-btn { flex-shrink:0; font-size:.68rem; font-weight:700; padding:5px 9px; border-radius:7px; border:1.5px solid var(--brand-navy); background:transparent; color:var(--brand-navy); cursor:pointer; transition:background .12s,color .12s; white-space:nowrap; }
+    .contact-reopen-btn:hover { background:var(--brand-navy); color:#fff; }
+
     .conv-item {
       padding: 10px 12px;
       border-bottom: 1px solid var(--border);
@@ -2939,8 +2961,12 @@
 <!-- ══════ VIEW CONVERSAS ══════ -->
 <div class="view" id="view-convs">
   <div class="convs-sidebar">
+    <div class="convs-mode-bar">
+      <button class="convs-mode-btn active" id="mode-btn-convs" onclick="setConvsMode('convs')">Conversas</button>
+      <button class="convs-mode-btn" id="mode-btn-contacts" onclick="setConvsMode('contacts')">Contatos</button>
+    </div>
     <div class="convs-search">
-      <input type="search" id="convs-search-input" placeholder="🔍  Buscar por nome ou número..." oninput="filterConvsList()">
+      <input type="search" id="convs-search-input" placeholder="🔍  Buscar por nome ou número..." oninput="handleConvsSearch()">
     </div>
     <button class="convs-new-btn" onclick="openNewConvoModal()">✏️ Nova conversa</button>
     <div class="convs-filter">
@@ -3341,7 +3367,8 @@ let knownPhones = new Set();
 let audioCtx    = null;
 
 // aba Conversas — filtro, pin, não lida, menu contextual
-let convFilter   = sessionStorage.getItem("sartec_conv_filter") || "all";
+let convFilter       = sessionStorage.getItem("sartec_conv_filter") || "all";
+let convsSectionMode = 'convs';
 let pinnedConvs  = [];
 let unreadConvs  = [];
 let convCtxPhone = null;   // phone do card com menu aberto
@@ -4560,7 +4587,7 @@ async function loadConversations() {
     const res    = await fetch(url);
     const data   = await res.json();
     allConversationsList = data.conversations || [];
-    renderConvsList(allConversationsList);
+    if (convsSectionMode === 'convs') renderConvsList(allConversationsList);
   } catch (e) {
     console.error("[loadConversations]", e);
     const list = document.getElementById("convs-list");
@@ -6351,6 +6378,127 @@ function applyPillActiveState() {
     const pill = document.getElementById(`pill-${f}`);
     if (pill) pill.className = `filter-pill${convFilter === f ? ` active-${f}` : ""}`;
   });
+}
+
+// ╔══════════════════════════════════════════════════════════════╗
+// ║  MODO CONTATOS                                               ║
+// ╚══════════════════════════════════════════════════════════════╝
+
+function handleConvsSearch() {
+  if (convsSectionMode === 'contacts') loadContacts();
+  else filterConvsList();
+}
+
+function setConvsMode(mode) {
+  convsSectionMode = mode;
+  const btnConvs    = document.getElementById('mode-btn-convs');
+  const btnContacts = document.getElementById('mode-btn-contacts');
+  if (btnConvs)    btnConvs.classList.toggle('active', mode === 'convs');
+  if (btnContacts) btnContacts.classList.toggle('active', mode === 'contacts');
+  const filterEl = document.querySelector('.convs-filter');
+  const newBtnEl = document.querySelector('.convs-new-btn');
+  if (filterEl) filterEl.style.display = mode === 'convs' ? '' : 'none';
+  if (newBtnEl) newBtnEl.style.display = mode === 'convs' ? '' : 'none';
+  const searchInput = document.getElementById('convs-search-input');
+  if (searchInput) {
+    searchInput.value = '';
+    searchInput.placeholder = mode === 'convs'
+      ? '🔍  Buscar por nome ou número...'
+      : '🔍  Buscar contato por nome ou telefone...';
+  }
+  if (mode === 'contacts') loadContacts();
+  else loadConversations();
+}
+
+async function loadContacts() {
+  const search = document.getElementById('convs-search-input')?.value || '';
+  const list   = document.getElementById('convs-list');
+  try {
+    const url = `/api/contacts?limit=30${search ? `&search=${encodeURIComponent(search)}` : ''}`;
+    const res  = await fetch(url);
+    if (!res.ok) throw new Error('HTTP ' + res.status);
+    const data = await res.json();
+    renderContactsList(data.contacts || []);
+  } catch (e) {
+    console.error('[loadContacts]', e);
+    if (list) list.innerHTML = `<div style="padding:24px 16px;text-align:center;color:var(--text-secondary)">
+      <div style="font-size:.85rem;margin-bottom:12px">Erro ao carregar contatos.</div>
+      <button onclick="loadContacts()" style="background:var(--brand-navy);color:#fff;border:none;padding:8px 18px;border-radius:8px;cursor:pointer;font-size:.8rem;font-weight:600">
+        Tentar novamente
+      </button>
+    </div>`;
+  }
+}
+
+function renderContactsList(contacts) {
+  const list = document.getElementById('convs-list');
+  if (!list) return;
+  list.innerHTML = '';
+  if (!contacts.length) {
+    const search = document.getElementById('convs-search-input')?.value || '';
+    list.innerHTML = `<div style="padding:24px;text-align:center;color:var(--text-muted);font-size:.82rem">${
+      search ? 'Nenhum contato encontrado para essa busca.' : 'Nenhum contato encontrado.'
+    }</div>`;
+    return;
+  }
+  contacts.forEach(c => list.appendChild(buildContactItem(c)));
+}
+
+function buildContactItem(c) {
+  const name  = c.clientName || c.whatsappName || c.phone || '—';
+  const isPJ  = c.clientType === 'pj';
+  const typeBadge = c.clientType
+    ? `<span class="contact-type-badge">${isPJ ? 'PJ' : 'PF'}</span>`
+    : '';
+  const statusLabels = {
+    aguardando_humano: 'Aguardando', resolvido: 'Resolvido',
+    triagem_incompleta: 'Incompleta', ativo: 'Em triagem',
+  };
+  const pipelineLabels = {
+    novo: 'Novo', em_atendimento: 'Em atendimento',
+    em_espera: 'Em espera', finalizado: 'Finalizado', entregue: 'Entregue',
+  };
+  const statusText  = statusLabels[c.lastConversationStatus] || pipelineLabels[c.lastPipelineStatus] || '';
+  const statusBadge = statusText ? `<span class="contact-status-badge">${statusText}</span>` : '';
+  const timeStr     = relTimeCR(c.lastSeenAt || c.lastActivityAt);
+  const phoneStr    = c.phone ? `+${c.phone}` : '';
+
+  const item = document.createElement('div');
+  item.className = 'contact-item';
+  item.innerHTML = `
+    <div class="contact-avatar ${isPJ ? 'pj' : ''}">${esc(initials(name))}</div>
+    <div class="contact-info">
+      <div class="contact-name-row">
+        <span class="contact-name">${esc(name)}</span>
+        <span class="contact-time">${timeStr}</span>
+      </div>
+      ${phoneStr ? `<div class="contact-phone">${esc(phoneStr)}</div>` : ''}
+      <div class="contact-meta">${typeBadge}${statusBadge}</div>
+    </div>
+    <button class="contact-reopen-btn" onclick="reopenContactAttendance('${esc(c.phone)}')">
+      Reabrir
+    </button>
+  `;
+  return item;
+}
+
+async function reopenContactAttendance(phone) {
+  try {
+    const res = await fetch('/api/contacts', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ phone, action: 'reopen' }),
+    });
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({}));
+      showToast(err.error || 'Não foi possível reabrir este contato.', 't-err');
+      return;
+    }
+    showToast('Atendimento reaberto no painel.');
+    loadQueue();
+  } catch {
+    showToast('Não foi possível reabrir este contato.', 't-err');
+  }
 }
 
 // ╔══════════════════════════════════════════════════════════════╗
