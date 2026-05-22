@@ -3293,18 +3293,18 @@ const PF_COLS = [
   { key: "novo",              label: "NOVO",             color: "var(--status-novo)" },
   { key: "em_atendimento",    label: "EM ATENDIMENTO",   color: "var(--status-atend)" },
   { key: "orcamento_enviado", label: "ORÇAMENTO ENVIADO",color: "var(--status-orc)" },
-  { key: "confirmado",        label: "CONFIRMADO",       color: "var(--status-confirm)" },
-  { key: "finalizado",        label: "FINALIZADO",       color: "var(--status-final)" },
-  { key: "resolvido",         label: "RESOLVIDOS",       color: "var(--status-resolvido)", resolved: true },
+  { key: "confirmado",        label: "PEDIDO APROVADO / SEPARAÇÃO", color: "var(--status-confirm)" },
+  { key: "finalizado",        label: "ENTREGA / RETIRADA",          color: "var(--status-final)" },
+  { key: "resolvido",         label: "RESOLVIDOS",                  color: "var(--status-resolvido)", resolved: true },
 ];
 
 const PJ_COLS = [
   { key: "novo",              label: "NOVO",             color: "var(--status-novo)" },
   { key: "em_cotacao",        label: "EM COTAÇÃO",       color: "var(--status-orc)" },
   { key: "proposta_enviada",  label: "PROPOSTA ENVIADA", color: "var(--status-confirm)" },
-  { key: "confirmado",        label: "CONFIRMADO",       color: "var(--status-confirm)" },
-  { key: "entregue",          label: "ENTREGUE",         color: "var(--status-final)" },
-  { key: "resolvido",         label: "RESOLVIDOS",       color: "var(--status-resolvido)", resolved: true },
+  { key: "confirmado",        label: "PEDIDO APROVADO / SEPARAÇÃO", color: "var(--status-confirm)" },
+  { key: "entregue",          label: "ENTREGA / RETIRADA",          color: "var(--status-final)" },
+  { key: "resolvido",         label: "RESOLVIDOS",                  color: "var(--status-resolvido)", resolved: true },
 ];
 
 const DEFAULT_CATEGORIES = {
@@ -3330,11 +3330,11 @@ function saveCategories(cats) {
 
 const STATUS_LABEL_PF = {
   novo:"NOVO", em_atendimento:"EM ATENDIMENTO", orcamento_enviado:"ORÇAMENTO ENVIADO",
-  confirmado:"CONFIRMADO", finalizado:"FINALIZADO", resolvido:"RESOLVIDO",
+  confirmado:"PEDIDO APROVADO / SEPARAÇÃO", finalizado:"ENTREGA / RETIRADA", resolvido:"RESOLVIDO",
 };
 const STATUS_LABEL_PJ = {
   novo:"NOVO", em_cotacao:"EM COTAÇÃO", proposta_enviada:"PROPOSTA ENVIADA",
-  confirmado:"CONFIRMADO", entregue:"ENTREGUE", resolvido:"RESOLVIDO",
+  confirmado:"PEDIDO APROVADO / SEPARAÇÃO", entregue:"ENTREGA / RETIRADA", resolvido:"RESOLVIDO",
 };
 
 // ╔══════════════════════════════════════════════════════════════╗
@@ -6552,8 +6552,8 @@ function updateConvsTabBadge() {
 // ╚══════════════════════════════════════════════════════════════╝
 
 const MOB_STAGES = {
-  pf: [{key:"novo",label:"Novo"},{key:"em_atendimento",label:"Atendimento"},{key:"orcamento_enviado",label:"Orçamento"},{key:"confirmado",label:"Confirmado"},{key:"finalizado",label:"Finalizado"},{key:"resolvido",label:"Resolvidos"}],
-  pj: [{key:"novo",label:"Novo"},{key:"em_cotacao",label:"Cotação"},{key:"proposta_enviada",label:"Proposta"},{key:"confirmado",label:"Confirmado"},{key:"entregue",label:"Entregue"},{key:"resolvido",label:"Resolvidos"}],
+  pf: [{key:"novo",label:"Novo"},{key:"em_atendimento",label:"Atendimento"},{key:"orcamento_enviado",label:"Orçamento"},{key:"confirmado",label:"Aprovado"},{key:"finalizado",label:"Entrega"},{key:"resolvido",label:"Resolvidos"}],
+  pj: [{key:"novo",label:"Novo"},{key:"em_cotacao",label:"Cotação"},{key:"proposta_enviada",label:"Proposta"},{key:"confirmado",label:"Aprovado"},{key:"entregue",label:"Entrega"},{key:"resolvido",label:"Resolvidos"}],
 };
 let _mobActiveStage = { pf: "novo", pj: "novo" };
 
