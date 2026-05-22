@@ -1395,7 +1395,7 @@
     .messages {
       flex: 1;
       overflow-y: auto;
-      padding: 14px 5% 10px;
+      padding: 14px 5% 80px;
       display: flex;
       flex-direction: column;
       gap: 6px;
@@ -5123,6 +5123,10 @@ function appendBubble(container, msg, optimistic = false, history = null) {
 }
 
 function setReplyTarget(prefix, msg) {
+  if (pendingMedia[prefix]) {
+    showToast("Resposta a uma mensagem específica funciona apenas com texto.", "t-warn");
+    return;
+  }
   _replyTarget[prefix] = msg;
   const bar  = document.getElementById(`${prefix}-reply-bar`);
   const text = document.getElementById(`${prefix}-reply-text`);
@@ -5270,6 +5274,11 @@ document.getElementById("media-modal").addEventListener("click", (e) => {
 function handleImageSelect(event, prefix) {
   const file = event.target.files[0];
   if (!file) return;
+  if (_replyTarget[prefix]) {
+    event.target.value = "";
+    showToast("Para anexar um arquivo, cancele a resposta selecionada primeiro.", "t-warn");
+    return;
+  }
 
   const isPdf = file.type === "application/pdf";
   const reader = new FileReader();
