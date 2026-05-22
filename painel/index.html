@@ -186,8 +186,8 @@
     .pfpj-btn-confirm:hover { background:var(--brand-navy-mid); }
 
     /* ── Botão flutuante de atendente (desktop only) ─────────── */
-    .attendant-fab { position:fixed; bottom:24px; right:24px; display:flex; align-items:center; gap:10px; background:#dbeafe; color:#1e3a5f; border:1px solid rgba(30,58,95,.15); border-radius:28px; padding:12px 20px 12px 10px; box-shadow:0 8px 28px rgba(15,23,42,.20),0 2px 8px rgba(15,23,42,.10); cursor:pointer; font-size:.85rem; font-weight:700; z-index:390; transition:background .15s,box-shadow .15s; white-space:nowrap; }
-    .attendant-fab:hover { background:#bfdbfe; box-shadow:0 10px 32px rgba(15,23,42,.24),0 2px 8px rgba(15,23,42,.12); }
+    .attendant-fab { position:fixed; bottom:24px; right:24px; display:flex; align-items:center; gap:10px; background:var(--fab-bg,#dbeafe); color:var(--fab-text,#1e3a5f); border:1px solid rgba(30,58,95,.12); border-radius:28px; padding:12px 20px 12px 10px; box-shadow:0 8px 28px rgba(15,23,42,.22),0 2px 8px rgba(15,23,42,.10); cursor:pointer; font-size:.85rem; font-weight:700; z-index:390; transition:background .15s,box-shadow .15s,color .15s; white-space:nowrap; }
+    .attendant-fab:hover { background:var(--fab-bg-hover,#bfdbfe); box-shadow:0 10px 32px rgba(15,23,42,.26),0 2px 8px rgba(15,23,42,.12); }
     .attendant-fab-avatar { width:38px; height:38px; border-radius:50%; background:rgba(30,58,95,.15); color:#fff; font-size:.72rem; font-weight:700; display:flex; align-items:center; justify-content:center; flex-shrink:0; }
     @media (max-width:768px) { .attendant-fab { display:none !important; } }
 
@@ -7157,6 +7157,18 @@ function getCurrentAttendant() {
   try { return JSON.parse(raw); } catch { return null; }
 }
 
+function getAttendantFabColors(color) {
+  const map = {
+    "#3b82f6": { bg:"#dbeafe", hover:"#bfdbfe", text:"#1e3a5f" }, // azul
+    "#8b5cf6": { bg:"#ede9fe", hover:"#ddd6fe", text:"#3b0764" }, // roxo
+    "#10b981": { bg:"#d1fae5", hover:"#a7f3d0", text:"#065f46" }, // verde
+    "#f59e0b": { bg:"#fef3c7", hover:"#fde68a", text:"#78350f" }, // âmbar
+    "#ec4899": { bg:"#fce7f3", hover:"#fbcfe8", text:"#831843" }, // rosa
+    "#06b6d4": { bg:"#cffafe", hover:"#a5f3fc", text:"#0c4a6e" }, // ciano
+  };
+  return map[color] || { bg:"#dbeafe", hover:"#bfdbfe", text:"#1e3a5f" };
+}
+
 function renderAttendantBadge(att) {
   const avatar = document.getElementById("attendant-avatar");
   const name   = document.getElementById("attendant-name");
@@ -7164,8 +7176,15 @@ function renderAttendantBadge(att) {
   if (name)   name.textContent = "Atendente: " + att.name;
   const fabAvatar = document.getElementById("attendant-fab-avatar");
   const fabName   = document.getElementById("attendant-fab-name");
+  const fab       = document.getElementById("attendant-fab");
   if (fabAvatar) { fabAvatar.textContent = att.initials; fabAvatar.style.background = att.color; }
   if (fabName)   fabName.textContent = "Atendente: " + att.name;
+  if (fab) {
+    const { bg, hover, text } = getAttendantFabColors(att.color);
+    fab.style.setProperty("--fab-bg",       bg);
+    fab.style.setProperty("--fab-bg-hover", hover);
+    fab.style.setProperty("--fab-text",     text);
+  }
 }
 
 function setAttendant(id) {
@@ -7221,7 +7240,8 @@ function introduceAttendant(prefix) {
   inp.focus();
 }
 
-setTimeout(initAttendant, 0);
+// DOMContentLoaded garante que o FAB (definido após </script>) existe no DOM
+document.addEventListener("DOMContentLoaded", initAttendant);
 
 // ╔══════════════════════════════════════════════════════════════╗
 // ║  BUSCA DE CONTATOS                                           ║
