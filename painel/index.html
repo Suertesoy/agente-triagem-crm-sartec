@@ -3234,8 +3234,6 @@
   <button class="pri-option" onclick="setPriorityManual('media')">🟡 Média</button>
   <button class="pri-option" onclick="setPriorityManual('baixa')">⚪ Baixa</button>
   <button class="pri-option" onclick="setPriorityManual('concluindo')">🟢 Concluindo</button>
-  <div class="pri-divider"></div>
-  <button class="pri-option pri-reset" onclick="setPriorityManual(null)">↺ Automático</button>
 </div>
 
 <!-- ══════ CONFIRM MODAL ══════ -->
@@ -4034,12 +4032,9 @@ function buildCard(c, col, cols) {
     else if (c.priorityManual === "media")      cls += " pri-media";
     // "baixa" → sem classe = card branco
   } else {
-    // Sem priorityManual: card neutro/branco — cor só muda com classificação manual
+    // Sem priorityManual: card neutro/branco — cor vem só de prioridade manual
     if (isFinalizando) cls += " card-finalizado";
-    // Indicadores discretos de timing (borda, não cor dominante)
-    if (forgotten)    cls += " forgotten";
-    else if (urgent)  cls += " urgent";
-    else if (warn10)  cls += " warn-10";
+    // warn-10/urgent/forgotten removidos — sem coloração automática por tempo de espera
   }
 
   if (isIncomplete) cls += " triagem_incompleta";
@@ -5697,7 +5692,7 @@ async function setPriorityManual(level) {
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ phone, priorityManual: level }),
     });
-    showToast(level ? "Prioridade atualizada" : "Prioridade resetada para automático");
+    showToast(level ? "Prioridade atualizada" : "Prioridade removida");
   } catch { showToast("Erro ao salvar prioridade", "t-err"); }
 }
 
