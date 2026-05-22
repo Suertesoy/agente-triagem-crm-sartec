@@ -438,7 +438,10 @@
       cursor: pointer;
     }
     .card:hover { box-shadow: 0 2px 6px rgba(15,23,42,.07), 0 8px 20px rgba(15,23,42,.10); transform: translateY(-2px); }
-    .card-new-badge { position:absolute; top:10px; right:10px; width:11px; height:11px; border-radius:50%; background:#ef4444; border:2px solid var(--bg-card,#fff); animation:pulse-dot 2s ease-in-out infinite; pointer-events:none; z-index:3; }
+    /* Badge de nova mensagem no botão Abrir */
+    .card-unread-badge { position:absolute; top:-8px; right:-8px; min-width:18px; height:18px; border-radius:10px; background:#ef4444; color:#fff; font-size:.6rem; font-weight:700; display:flex; align-items:center; justify-content:center; border:2px solid var(--bg-card,#fff); padding:0 3px; pointer-events:none; z-index:4; animation:pulse-dot 2s ease-in-out infinite; }
+    @keyframes card-new-flash { 0%,100% { transform:translateX(0); } 20% { transform:translateX(-5px); } 40% { transform:translateX(5px); } 60% { transform:translateX(-3px); } 80% { transform:translateX(3px); } }
+    .card-new-msg-flash { animation:card-new-flash 0.45s ease-out; box-shadow:0 0 0 2px rgba(59,130,246,.35),0 4px 16px rgba(15,23,42,.1) !important; }
 
     /* ── Semântica: fundo do card = temperatura operacional ── */
     .card.resolvido      { opacity: .72; background: #e8f3ee; border-color: rgba(22,163,74,.22); }
@@ -2586,6 +2589,7 @@
 
     /* ── Botão principal do card — CTA azul full-width ── */
     .card-open-hint {
+      position: relative;
       display: flex;
       align-items: center;
       justify-content: center;
@@ -3395,15 +3399,23 @@ let openConvsPhone    = null;   // conversa aberta na aba Conversas
 let openConvsRedisKey = null;   // chave Redis da conversa aberta (para buscar archives corretamente)
 let pendingMedia    = {};     // { modal: {type,base64,mimeType,filename}, convs: {...} }
 const _replyTarget  = { modal: null, convs: null };
-const _cardLastUserMsg = {};  // phone → ISO string de lastUserMessageAt quando visto pela última vez
+const _cardLastUserMsgAt   = {};       // phone → ISO do último lastUserMessageAt registrado
+const _cardUnreadCount     = {};       // phone → contador de msgs novas não lidas
+const _cardNewJustArrived  = new Set(); // phones com nova msg detectada neste tick
 
-function isCardNew(phone, lastUserMessageAt) {
-  if (!lastUserMessageAt) return false;
-  if (_cardLastUserMsg[phone] === undefined) {
-    _cardLastUserMsg[phone] = lastUserMessageAt; // primeira renderização: sem badge
-    return false;
+function processCardNewMsg(phone, lastUserMessageAt) {
+  if (!lastUserMessageAt) return _cardUnreadCount[phone] || 0;
+  if (_cardLastUserMsgAt[phone] === undefined) {
+    _cardLastUserMsgAt[phone] = lastUserMessageAt; // primeira render: sem badge
+    _cardUnreadCount[phone]   = 0;
+    return 0;
   }
-  return lastUserMessageAt > _cardLastUserMsg[phone];
+  if (lastUserMessageAt > _cardLastUserMsgAt[phone]) {
+    _cardLastUserMsgAt[phone] = lastUserMessageAt;
+    _cardUnreadCount[phone]   = (_cardUnreadCount[phone] || 0) + 1;
+    _cardNewJustArrived.add(phone);
+  }
+  return _cardUnreadCount[phone] || 0;
 }
 let countdownVal    = 30;
 let countdownTimer  = null;
@@ -3720,6 +3732,39 @@ function base64ToBlobUrl(base64, mimeType) {
 // ╔══════════════════════════════════════════════════════════════╗
 // ║  SOUND & NOTIFICATION BADGE                                  ║
 // ╚══════════════════════════════════════════════════════════════╝
+// ── Notificação local do navegador (sem Push/SW) ───────────────
+function requestNotificationPermission() {
+  if (!("Notification" in window) || Notification.permission !== "default") return;
+  Notification.requestPermission().catch(() => {});
+}
+
+function showBrowserNotification(clientName) {
+  if (!("Notification" in window) || Notification.permission !== "granted") return;
+  if (!document.hidden) return;
+  try {
+    const n = new Notification("Nova mensagem no painel", {
+      body: clientName && clientName !== "—"
+        ? clientName + " enviou uma nova mensagem."
+        : "Nova mensagem de cliente.",
+      icon: "/LOGO_SARTEC_PNG.png",
+    });
+    n.onclick = () => { window.focus(); n.close(); };
+    setTimeout(() => n.close(), 5000);
+  } catch {}
+}
+
+// ── Assinatura para evitar re-render desnecessário em Conversas ─
+function convsListSignature(convs) {
+  const f = convFilter === "pf" ? convs.filter(c => (c.clientType||"pf") === "pf")
+          : convFilter === "pj" ? convs.filter(c => c.clientType === "pj") : convs;
+  return convFilter + "|" + f.map(c =>
+    [c.phone, c.lastMessage || "", c.status || "", c.lastActivity || "",
+     c.pipelineStatus || "", c.activeAttendant?.id || "",
+     unreadConvs.includes(c.phone) ? 1 : 0,
+     pinnedConvs.includes(c.phone) ? 1 : 0].join(",")
+  ).join(";");
+}
+
 function playNotificationSound() {
   try {
     if (!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)();
@@ -3903,6 +3948,23 @@ function detectNewCards(convs) {
 function renderPipeline(convs) {
   renderPipelineTab("pf", PF_COLS, convs.filter(c => (c.clientType||"pf") === "pf"));
   renderPipelineTab("pj", PJ_COLS, convs.filter(c => c.clientType === "pj"));
+
+  // Processa novas mensagens detectadas neste tick (animação, som, notificação)
+  if (_cardNewJustArrived.size > 0 && knownPhones.size > 0) {
+    playNotificationSound();
+    _cardNewJustArrived.forEach(phone => {
+      const conv = convs.find(c => c.phone === phone);
+      if (conv) showBrowserNotification(conv.clientName);
+      const cardEl = document.querySelector(`.card[data-phone="${phone}"]`);
+      if (cardEl) {
+        cardEl.classList.remove("card-new-msg-flash");
+        void cardEl.offsetWidth; // force reflow para reiniciar animação
+        cardEl.classList.add("card-new-msg-flash");
+        setTimeout(() => cardEl.classList.remove("card-new-msg-flash"), 500);
+      }
+    });
+    _cardNewJustArrived.clear();
+  }
 }
 
 function renderPipelineTab(tabId, cols, convs) {
@@ -4126,7 +4188,7 @@ function buildCard(c, col, cols) {
   if (isWindowClosed) cls += " card-window-closed";
   card.className = cls;
 
-  const isCardNewMsg = !isResolved && isCardNew(c.phone, c.lastUserMessageAt);
+  const unreadCount = !isResolved ? processCardNewMsg(c.phone, c.lastUserMessageAt) : 0;
 
   const colsForStatus = cols.filter(col => !col.resolved);
   const statusOptions = colsForStatus.map(col =>
@@ -4152,7 +4214,6 @@ function buildCard(c, col, cols) {
     : "";
 
   card.innerHTML = `
-    ${isCardNewMsg ? '<span class="card-new-badge" title="Nova mensagem do cliente"></span>' : ''}
     <span class="card-status-dot"
       role="button"
       tabindex="0"
@@ -4201,7 +4262,7 @@ function buildCard(c, col, cols) {
         ? `<button class="btn-reopen" onclick="reopenCard('${esc(c.phone)}','${clientType}')" style="width:100%">&#8635; Reabrir</button>`
         : `<button class="card-open-hint" type="button"
              onclick="event.stopPropagation();openChat('${esc(c.phone)}')"
-             >${isWindowClosed ? "Reabrir janela de atendimento →" : "Abrir →"}</button>`
+             >${isWindowClosed ? "Reabrir janela de atendimento →" : "Abrir →"}${unreadCount > 0 ? `<span class="card-unread-badge">${unreadCount}</span>` : ""}</button>`
       }
     </div>
 
@@ -4445,25 +4506,39 @@ function quickResolveCard(phone) {
 // ╔══════════════════════════════════════════════════════════════╗
 // ║  AUTO-REFRESH (pipeline)                                     ║
 // ╚══════════════════════════════════════════════════════════════╝
+const POLL_VISIBLE_S = 6;
+const POLL_HIDDEN_S  = 30;
+
 function startAutoRefresh() {
-  countdownVal = 30;
   clearInterval(countdownTimer);
+  countdownVal = document.hidden ? POLL_HIDDEN_S : POLL_VISIBLE_S;
+  const el0 = document.getElementById("countdown");
+  if (el0) el0.textContent = countdownVal;
   countdownTimer = setInterval(() => {
     countdownVal--;
     const el = document.getElementById("countdown");
-    if (el) el.textContent = countdownVal;
-    if (countdownVal <= 0) { countdownVal = 30; loadQueue(); }
+    if (el) el.textContent = Math.max(0, countdownVal);
+    if (countdownVal <= 0) {
+      countdownVal = document.hidden ? POLL_HIDDEN_S : POLL_VISIBLE_S;
+      loadQueue();
+    }
   }, 1000);
 }
 
 function stopAutoRefresh() { clearInterval(countdownTimer); countdownTimer = null; }
+
+document.addEventListener("visibilitychange", () => {
+  if (countdownTimer !== null) startAutoRefresh();
+});
 
 // ╔══════════════════════════════════════════════════════════════╗
 // ║  CHAT MODAL (pipeline "Abrir")                               ║
 // ╚══════════════════════════════════════════════════════════════╝
 async function openChat(phone) {
   openModalPhone = phone;
-  _cardLastUserMsg[phone] = new Date().toISOString(); // marca como visto
+  _cardUnreadCount[phone]   = 0;
+  _cardNewJustArrived.delete(phone);
+  _cardLastUserMsgAt[phone] = new Date().toISOString(); // marca como visto
   if (isConvLockedByOther(phone)) showDupeWarning("modal");
   else hideDupeWarning("modal");
   lockConvTab(phone);
@@ -4711,9 +4786,8 @@ function filterConvsList() {
 function renderConvsList(convs) {
   const list = document.getElementById("convs-list");
   closeConvMenu();
-  list.innerHTML = "";
 
-  // Atualiza contadores das pills
+  // Atualiza contadores das pills sem depender de re-render
   const cntAll = convs.length;
   const cntPF  = convs.filter(c => (c.clientType||"pf") === "pf").length;
   const cntPJ  = convs.filter(c => c.clientType === "pj").length;
@@ -4723,6 +4797,13 @@ function renderConvsList(convs) {
   if (elAll) elAll.textContent = cntAll;
   if (elPF)  elPF.textContent  = cntPF;
   if (elPJ)  elPJ.textContent  = cntPJ;
+
+  // Evita re-render quando os dados não mudaram (elimina piscada)
+  const _sig = convsListSignature(convs);
+  if (list._lastSig === _sig) return;
+  list._lastSig = _sig;
+
+  list.innerHTML = "";
 
   // Aplica filtro PF/PJ
   let filtered = convs;
@@ -7075,6 +7156,7 @@ function setAttendant(id) {
   localStorage.setItem("sartec_current_attendant", JSON.stringify(profile));
   renderAttendantBadge(profile);
   closeAttendantPicker();
+  requestNotificationPermission();
   if (!_obAutoStarted && window.innerWidth > 768 && !localStorage.getItem("sartec_ob_done")) {
     _obAutoStarted = true;
     setTimeout(obStart, 800);
