@@ -48,21 +48,17 @@
       margin-bottom: 28px;
     }
 
-    .logo-brand {
-      font-size: 2rem;
-      font-weight: 900;
-      color: #1a2a5e;
-      letter-spacing: .03em;
-      line-height: 1;
+    .logo-img {
+      max-width: 200px;
+      width: 100%;
+      height: auto;
+      object-fit: contain;
+      display: block;
+      margin: 0 auto;
     }
 
-    .logo-sub {
-      font-size: 1rem;
-      font-weight: 400;
-      color: #cc2222;
-      letter-spacing: .12em;
-      text-transform: uppercase;
-      margin-top: 2px;
+    @media (max-width: 480px) {
+      .logo-img { max-width: 160px; }
     }
 
     .login-subtitle {
@@ -139,8 +135,7 @@
 
 <div class="login-card" id="card">
   <div class="logo">
-    <div class="logo-brand">SARTEC</div>
-    <div class="logo-sub">Papelaria</div>
+    <img src="/LOGO_SARTEC_PNG.png" alt="Sartec Papelaria" class="logo-img">
   </div>
   <div class="login-subtitle">Painel de Atendimento</div>
 
