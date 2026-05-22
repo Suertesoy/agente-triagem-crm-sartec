@@ -1706,6 +1706,13 @@
     }
     .tmpl-card:hover { border-color: var(--brand-navy); background: #f7f9ff; }
     .tmpl-card.selected { border-color: var(--brand-navy); background: #eef1fb; }
+    .tmpl-card-blocked  { opacity: .38; cursor: not-allowed !important; pointer-events: none; }
+    .tmpl-blocked-label {
+      font-size: .58rem; font-weight: 700;
+      background: #fef3c7; color: #92400e;
+      padding: 1px 6px; border-radius: 10px;
+      margin-left: 6px; vertical-align: middle;
+    }
     .tmpl-card-title {
       font-size: .84rem; font-weight: 700;
       color: var(--text-primary); margin-bottom: 3px;
@@ -3139,12 +3146,12 @@
             <div class="tmpl-card-title">↩ Retomar atendimento</div>
             <div class="tmpl-card-text">"Olá, [nome], aqui é da Sartec Papelaria. Recebemos sua solicitação anteriormente e gostaríamos de continuar seu atendimento."</div>
           </div>
-          <div class="tmpl-card" data-ncm-type="budget_update" onclick="selectNcmTemplate('budget_update')">
-            <div class="tmpl-card-title">📋 Orçamento</div>
+          <div class="tmpl-card tmpl-card-blocked" data-ncm-type="budget_update">
+            <div class="tmpl-card-title">📋 Orçamento <span class="tmpl-blocked-label">Em breve</span></div>
             <div class="tmpl-card-text">"Olá, [nome]. Temos uma atualização sobre seu orçamento de [item]. Pode responder para continuarmos?"</div>
           </div>
-          <div class="tmpl-card" data-ncm-type="pj_prospecting" onclick="selectNcmTemplate('pj_prospecting')">
-            <div class="tmpl-card-title">🏢 Prospecção PJ</div>
+          <div class="tmpl-card tmpl-card-blocked" data-ncm-type="pj_prospecting">
+            <div class="tmpl-card-title">🏢 Prospecção PJ <span class="tmpl-blocked-label">Em breve</span></div>
             <div class="tmpl-card-text">"Olá, [nome]. Atendemos empresas com materiais de escritório e reposição recorrente."</div>
           </div>
         </div>
@@ -3183,12 +3190,12 @@
         <div class="tmpl-card-title">↩ Retomar atendimento</div>
         <div class="tmpl-card-text">"Olá, [nome], aqui é da Sartec Papelaria. Recebemos sua solicitação anteriormente e gostaríamos de continuar seu atendimento."</div>
       </div>
-      <div class="tmpl-card" data-type="budget_update" onclick="selectTemplateType('budget_update')">
-        <div class="tmpl-card-title">📋 Orçamento</div>
+      <div class="tmpl-card tmpl-card-blocked" data-type="budget_update">
+        <div class="tmpl-card-title">📋 Orçamento <span class="tmpl-blocked-label">Em breve</span></div>
         <div class="tmpl-card-text">"Olá, [nome]. Temos uma atualização sobre seu orçamento de [item]. Pode responder para continuarmos?"</div>
       </div>
-      <div class="tmpl-card" data-type="pj_prospecting" onclick="selectTemplateType('pj_prospecting')">
-        <div class="tmpl-card-title">🏢 Prospecção PJ</div>
+      <div class="tmpl-card tmpl-card-blocked" data-type="pj_prospecting">
+        <div class="tmpl-card-title">🏢 Prospecção PJ <span class="tmpl-blocked-label">Em breve</span></div>
         <div class="tmpl-card-text">"Olá, [nome]. Atendemos empresas com materiais de escritório e reposição recorrente."</div>
       </div>
     </div>
@@ -3450,32 +3457,37 @@ function resumoOperacional(c) {
   if (fe === "entrega" && end)  return "Pedido com entrega confirmada";
   if (fe === "retirada")        return "Aguardando retirada na loja";
 
-  // 6. Palavras-chave na última mensagem — com extração de produto específico
+  // 6. Palavras-chave na última mensagem — com extração de produto e intenção
   let lm = (c.lastMessage || "").trim();
-  if (!lm && c.history) {
-    const um = [...(c.history || [])].reverse().find(m => m.role === "user" && typeof m.content === "string" && m.content.trim().length > 8);
-    if (um) lm = um.content.trim();
-  }
+  // "Áudio recebido" → tratar como áudio
+  if (lm === "Áudio recebido" || lm === "[áudio]") return "Cliente enviou áudio — revisar atendimento";
+
   if (lm && !_USELESS_MSG.test(lm)) {
     const lc = lm.toLowerCase();
 
-    // Extrai produto específico mencionado
-    const prodM = lm.match(/(?:agenda|caderno|mochila|estojo|kit|caneta|lápis|régua|pasta|fichário|borracha|tesoura)\s+[\w\s'']{0,30}/i);
-    const prod  = prodM ? prodM[0].trim().replace(/\s+/g, " ") : null;
+    // Extrai produto específico — lista completa da operação
+    const _PROD_PAT = "agenda|caderno|mochila|estojo|caneta|l[aá]pis|r[eé]gua|pasta|fich[aá]rio|borracha|apontador|papel sulfite|sulfite|impress[aã]o|xerox|encaderna[cç][aã]o|plastifica[cç][aã]o|material escolar|lista escolar|kit escolar";
+    const prodM = lm.match(new RegExp(`(?:${_PROD_PAT})(?:\\s+[\\w\\s'']{0,28})?`, "i"));
+    const prod  = prodM ? prodM[0].trim().replace(/\s+/g, " ").substring(0, 45) : null;
 
     if (prod) {
-      if (/entrega|buscar|retirar|envi|como.*receb/.test(lc)) return `Dúvida sobre ${prod.toLowerCase()} e entrega`;
-      if (/quanto custa|pre[çc]o|valor|or[çc]amento/.test(lc)) return `Orçamento para ${prod.toLowerCase()}`;
-      if (/têm|tem|disponível|voc[êe]s|há/.test(lc))           return `Disponibilidade de ${prod.toLowerCase()}`;
-      return `Consulta sobre ${prod.toLowerCase()}`;
+      const pl = prod.toLowerCase();
+      if (/entrega|buscar|retirar|envi|como.*receb|dom[ií]c/.test(lc)) return `Dúvida sobre ${pl} e entrega`;
+      if (/quanto custa|pre[çc]o|valor|or[çc]amento/.test(lc))         return `Orçamento para ${pl}`;
+      if (/t[eê]m|disponível|tem.*estoque|em estoque|h[aá]/.test(lc))  return `Disponibilidade de ${pl}`;
+      if (/comprar|adquirir|quero|precis|pedir|encomend/.test(lc))     return `Pedido de ${pl}`;
+      return `Consulta sobre ${pl}`;
     }
 
-    if (/pdf|foto|imagem|arquivo|lista\s*escolar|foto da/.test(lc))     return "Cliente enviou documento";
-    if (/cancelar|cancela|desistir|não quero/.test(lc))                  return "Cliente quer cancelar";
-    if (/quando|prazo|urgente|precis.*hoje|amanhã/.test(lc))             return "Cliente perguntou sobre prazo";
-    if (/entrega|buscar|retirar|como.*receb/.test(lc))                   return "Confirmar forma de entrega";
-    if (/quanto custa|pre[çc]o|valor|or[çc]amento|quantidad/.test(lc))  return "Aguardando orçamento";
-    if (/confirmei|confirmo|pode.*separar|pode.*enviar|quero/.test(lc)) return "Cliente confirmou pedido";
+    // Intenções sem produto específico
+    if (/\[?[áa]udio\]?|áudio recebido/.test(lc))                        return "Cliente enviou áudio — revisar atendimento";
+    if (/pdf|foto|imagem|arquivo|lista\s*escolar|foto da/.test(lc))       return "Cliente enviou documento";
+    if (/cancelar|cancela|desistir|não quero|n[aã]o quero/.test(lc))     return "Cliente quer cancelar";
+    if (/quando|prazo|urgente|precis.*hoje|amanhã|tem pra/.test(lc))      return "Dúvida sobre prazo";
+    if (/entrega|buscar|retirar|como.*receb|dom[ií]c/.test(lc))          return "Confirmar forma de entrega";
+    if (/quanto custa|pre[çc]o|valor|or[çc]amento|quantidad/.test(lc))   return "Aguardando orçamento";
+    if (/confirmei|confirmo|pode.*separar|pode.*enviar|fechado/.test(lc)) return "Cliente confirmou pedido";
+    if (/t[eê]m|disponível|voc[êe]s.*t[eê]m|tem.*estoque/.test(lc))     return "Consulta sobre disponibilidade";
   }
 
   // 7. demandType + pipeline

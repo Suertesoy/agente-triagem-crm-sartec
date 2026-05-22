@@ -78,6 +78,15 @@ export default async function handler(req, res) {
     });
   }
 
+  // ── Bloqueio temporário de testes — remover quando budget_update/pj_prospecting forem validados ──
+  const ALLOWED_IN_TESTING = ["attendance_resume"];
+  if (!ALLOWED_IN_TESTING.includes(templateType)) {
+    return res.status(403).json({
+      error: "Template temporariamente bloqueado para testes. Apenas 'Retomar atendimento' está disponível.",
+      allowed: ALLOWED_IN_TESTING,
+    });
+  }
+
   const PHONE_NUMBER_ID = process.env.WHATSAPP_PHONE_NUMBER_ID;
   const ACCESS_TOKEN    = process.env.WHATSAPP_ACCESS_TOKEN;
 
