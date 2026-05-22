@@ -1395,7 +1395,7 @@
     .messages {
       flex: 1;
       overflow-y: auto;
-      padding: 14px 5% 80px;
+      padding: 14px 5% 44px;
       display: flex;
       flex-direction: column;
       gap: 6px;
@@ -5123,10 +5123,6 @@ function appendBubble(container, msg, optimistic = false, history = null) {
 }
 
 function setReplyTarget(prefix, msg) {
-  if (pendingMedia[prefix]) {
-    showToast("Resposta a uma mensagem específica funciona apenas com texto.", "t-warn");
-    return;
-  }
   _replyTarget[prefix] = msg;
   const bar  = document.getElementById(`${prefix}-reply-bar`);
   const text = document.getElementById(`${prefix}-reply-text`);
@@ -5274,12 +5270,6 @@ document.getElementById("media-modal").addEventListener("click", (e) => {
 function handleImageSelect(event, prefix) {
   const file = event.target.files[0];
   if (!file) return;
-  if (_replyTarget[prefix]) {
-    event.target.value = "";
-    showToast("Para anexar um arquivo, cancele a resposta selecionada primeiro.", "t-warn");
-    return;
-  }
-
   const isPdf = file.type === "application/pdf";
   const reader = new FileReader();
   reader.onload = (e) => {
@@ -5348,6 +5338,12 @@ async function sendMessage(prefix) {
   const hasPending = !!pendingMedia[prefix];
 
   if (!text && !hasPending) return;
+
+  // Bloquear: reply ativo + mídia + texto/legenda no mesmo envio
+  if (hasPending && _replyTarget[prefix] && text) {
+    showToast("Envie o anexo sem texto ou cancele a resposta selecionada.", "t-warn");
+    return;
+  }
 
   const btn = document.getElementById(`${prefix}-send-btn`);
   if (btn) btn.disabled = true;
@@ -5429,33 +5425,39 @@ async function sendTextMessage(prefix, container, text) {
 }
 
 async function sendImageMessage(prefix, container, caption) {
-  const phone = getPhoneForPrefix(prefix);
-  const att   = getCurrentAttendant();
+  const phone  = getPhoneForPrefix(prefix);
+  const att    = getCurrentAttendant();
+  const reply  = _replyTarget[prefix];
   const { base64, mimeType } = pendingMedia[prefix];
 
   appendBubble(container, {
     role:"assistant", content:caption, sentByHuman:true,
     mediaType:"image", mediaData:base64, mediaMimeType:mimeType,
     attendantId: att?.id, attendantName: att?.name,
+    ...(reply?.metaMessageId ? { replyToMsgId: reply.metaMessageId } : {}),
   }, true);
   scrollToBottom(container);
   clearImage(prefix);
 
   try {
+    const payload = {
+      to: phone, type: "image", mediaBase64: base64, mimeType, caption,
+      attendantId:   att?.id   || null,
+      attendantName: att?.name || null,
+    };
+    if (reply?.metaMessageId) payload.replyToMessageId = reply.metaMessageId;
+
     const res = await fetch("/api/send", {
       method:  "POST",
       headers: { "Content-Type": "application/json" },
-      body:    JSON.stringify({
-        to: phone, type: "image", mediaBase64: base64, mimeType, caption,
-        attendantId:   att?.id   || null,
-        attendantName: att?.name || null,
-      }),
+      body:    JSON.stringify(payload),
     });
     if (!res.ok) {
       const err = await res.json();
       alert(`Erro ao enviar imagem: ${err.detail || err.error || "Falha de envio"}`);
       removeLastOptimistic(container);
     } else {
+      clearReplyTarget(prefix);
       prefix === "modal" ? await refreshModal() : await refreshConvsChat(phone);
       showToast("Imagem enviada");
       autoAdvanceAfterHumanReply(phone);
@@ -5464,8 +5466,9 @@ async function sendImageMessage(prefix, container, caption) {
 }
 
 async function sendDocumentMessage(prefix, container, caption) {
-  const phone = getPhoneForPrefix(prefix);
-  const att   = getCurrentAttendant();
+  const phone  = getPhoneForPrefix(prefix);
+  const att    = getCurrentAttendant();
+  const reply  = _replyTarget[prefix];
   const { base64, mimeType, filename } = pendingMedia[prefix];
 
   // Bolha otimista com ícone de documento
@@ -5473,25 +5476,30 @@ async function sendDocumentMessage(prefix, container, caption) {
     role: "assistant", content: caption, sentByHuman: true,
     mediaType: "document", mediaData: base64, mediaMimeType: mimeType, mediaFilename: filename,
     attendantId: att?.id, attendantName: att?.name,
+    ...(reply?.metaMessageId ? { replyToMsgId: reply.metaMessageId } : {}),
   }, true);
   scrollToBottom(container);
   clearImage(prefix);
 
   try {
+    const payload = {
+      to: phone, type: "document", mediaBase64: base64, mimeType, filename, caption,
+      attendantId:   att?.id   || null,
+      attendantName: att?.name || null,
+    };
+    if (reply?.metaMessageId) payload.replyToMessageId = reply.metaMessageId;
+
     const res = await fetch("/api/send", {
       method:  "POST",
       headers: { "Content-Type": "application/json" },
-      body:    JSON.stringify({
-        to: phone, type: "document", mediaBase64: base64, mimeType, filename, caption,
-        attendantId:   att?.id   || null,
-        attendantName: att?.name || null,
-      }),
+      body:    JSON.stringify(payload),
     });
     if (!res.ok) {
       const err = await res.json();
       alert(`Erro ao enviar documento: ${err.detail || err.error || "Falha de envio"}`);
       removeLastOptimistic(container);
     } else {
+      clearReplyTarget(prefix);
       prefix === "modal" ? await refreshModal() : await refreshConvsChat(phone);
       showToast("Documento enviado");
       autoAdvanceAfterHumanReply(phone);

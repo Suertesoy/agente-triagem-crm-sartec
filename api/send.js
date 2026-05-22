@@ -126,7 +126,7 @@ async function sendText(req, res, body, PHONE_NUMBER_ID, ACCESS_TOKEN) {
 
 // ── Envio de imagem ───────────────────────────────────────
 async function sendImage(req, res, body, PHONE_NUMBER_ID, ACCESS_TOKEN) {
-  const { to, mediaBase64, mimeType, caption } = body;
+  const { to, mediaBase64, mimeType, caption, replyToMessageId } = body;
 
   if (!mediaBase64 || !mimeType) {
     return res.status(400).json({ error: "Campos mediaBase64 e mimeType são obrigatórios para type image" });
@@ -171,6 +171,9 @@ async function sendImage(req, res, body, PHONE_NUMBER_ID, ACCESS_TOKEN) {
     image: { id: mediaId },
   };
   if (caption) msgPayload.image.caption = caption;
+  if (replyToMessageId && typeof replyToMessageId === "string") {
+    msgPayload.context = { message_id: replyToMessageId };
+  }
 
   const metaRes = await fetch(
     `https://graph.facebook.com/v19.0/${PHONE_NUMBER_ID}/messages`,
@@ -195,10 +198,10 @@ async function sendImage(req, res, body, PHONE_NUMBER_ID, ACCESS_TOKEN) {
   }
 
   const metaMessageId = metaData?.messages?.[0]?.id || null;
-  console.log(`[send/image] ✅ ID: ${metaMessageId}`);
+  console.log(`[send/image] ✅ ID: ${metaMessageId}${replyToMessageId ? " (reply)" : ""}`);
 
   // 3. Salva no histórico com a referência da mídia
-  await saveToHistory(to, {
+  const imgEntry = {
     role: "assistant",
     content: caption || "",
     sentByHuman:   true,
@@ -208,14 +211,16 @@ async function sendImage(req, res, body, PHONE_NUMBER_ID, ACCESS_TOKEN) {
     attendantId:   body.attendantId   || null,
     attendantName: body.attendantName || null,
     metaMessageId,
-  });
+  };
+  if (replyToMessageId) imgEntry.replyToMsgId = replyToMessageId;
+  await saveToHistory(to, imgEntry);
 
   return res.status(200).json({ success: true });
 }
 
 // ── Envio de documento (PDF) ──────────────────────────────
 async function sendDocument(req, res, body, PHONE_NUMBER_ID, ACCESS_TOKEN) {
-  const { to, mediaBase64, mimeType, filename = "documento.pdf", caption } = body;
+  const { to, mediaBase64, mimeType, filename = "documento.pdf", caption, replyToMessageId } = body;
 
   if (!mediaBase64 || !mimeType) {
     return res.status(400).json({ error: "Campos mediaBase64 e mimeType são obrigatórios para type document" });
@@ -260,6 +265,9 @@ async function sendDocument(req, res, body, PHONE_NUMBER_ID, ACCESS_TOKEN) {
     document: { id: mediaId, filename },
   };
   if (caption) msgPayload.document.caption = caption;
+  if (replyToMessageId && typeof replyToMessageId === "string") {
+    msgPayload.context = { message_id: replyToMessageId };
+  }
 
   const metaRes = await fetch(
     `https://graph.facebook.com/v19.0/${PHONE_NUMBER_ID}/messages`,
@@ -284,10 +292,10 @@ async function sendDocument(req, res, body, PHONE_NUMBER_ID, ACCESS_TOKEN) {
   }
 
   const metaMessageId = metaData?.messages?.[0]?.id || null;
-  console.log(`[send/document] ✅ ID: ${metaMessageId}`);
+  console.log(`[send/document] ✅ ID: ${metaMessageId}${replyToMessageId ? " (reply)" : ""}`);
 
   // 3. Salva no histórico com base64 para exibição no painel
-  await saveToHistory(to, {
+  const docEntry = {
     role:          "assistant",
     content:       caption || "",
     sentByHuman:   true,
@@ -298,7 +306,9 @@ async function sendDocument(req, res, body, PHONE_NUMBER_ID, ACCESS_TOKEN) {
     attendantId:   body.attendantId   || null,
     attendantName: body.attendantName || null,
     metaMessageId,
-  });
+  };
+  if (replyToMessageId) docEntry.replyToMsgId = replyToMessageId;
+  await saveToHistory(to, docEntry);
 
   return res.status(200).json({ success: true });
 }
