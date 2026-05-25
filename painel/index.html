@@ -2983,15 +2983,34 @@
       .ncm-footer button { flex:1 1 100%; }
       /* FAB Nova conversa — visível apenas no mobile */
       .mob-new-fab { display:flex; }
-      /* ── Prevenir overflow horizontal ───────────────────── */
-      html, body { max-width: 100vw; }
-      .top-header { max-width: 100vw; overflow: hidden; }
-      .view.active { max-width: 100vw; }
-      #view-convs.active { width: 100%; max-width: 100vw; }
-      .convs-sidebar, .convs-main { max-width: 100vw; overflow-x: hidden; }
-      .window-status-bar { min-width: 0; overflow: hidden; }
+      /* ── Contenção estrutural do viewport mobile ────────── */
+      html, body { width: 100%; max-width: 100vw; overflow-x: hidden; }
+      body { position: relative; }
+      /* Header: largura total, conteúdo clipado para não empurrar a página */
+      .top-header { width: 100%; max-width: 100vw; left: 0; right: 0; overflow: hidden; box-sizing: border-box; }
+      .header-nav-row { width: 100%; overflow: hidden; box-sizing: border-box; }
+      .waiting-counter { min-width: 0; max-width: 160px; overflow: hidden; flex-shrink: 1; }
+      #waiting-count { display: block; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
+      /* Views: largura máxima 100vw com box-sizing */
+      .view.active { width: 100%; max-width: 100vw; box-sizing: border-box; }
+      #view-pf.active, #view-pj.active { width: 100%; box-sizing: border-box; }
+      #view-convs.active { width: 100%; max-width: 100vw; box-sizing: border-box; }
+      /* Kanban mobile: chips e cards contidos, scroll horizontal isolado */
+      .mob-only { width: 100%; max-width: 100vw; box-sizing: border-box; }
+      .mob-stage-chips { width: 100%; max-width: 100vw; box-sizing: border-box; overscroll-behavior-x: contain; }
+      /* Pipeline (desktop, oculto no mobile) contido se visível */
+      .pipeline-wrap { width: 100%; max-width: 100vw; box-sizing: border-box; overscroll-behavior-x: contain; }
+      /* Conversas: sidebar e main contidos */
+      .convs-sidebar, .convs-main { width: 100%; max-width: 100vw; overflow-x: hidden; box-sizing: border-box; }
+      /* Chat: status bar, messages, composer */
+      .window-status-bar { min-width: 0; overflow: hidden; max-width: 100%; box-sizing: border-box; }
+      .messages { max-width: 100%; box-sizing: border-box; }
+      .convs-main .messages { max-width: 100%; padding-left: 12px; padding-right: 12px; }
+      .composer { max-width: 100%; box-sizing: border-box; }
+      .composer-row { max-width: 100%; box-sizing: border-box; }
       .composer-row textarea { min-width: 0; }
-      .waiting-counter { min-width: 0; }
+      /* Bottom nav: largura total, box-sizing explícito */
+      .mob-nav { width: 100%; max-width: 100vw; box-sizing: border-box; }
     }
   </style>
 </head>
