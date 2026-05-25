@@ -190,6 +190,8 @@
     .attendant-fab:hover { background:var(--fab-bg-hover,#bfdbfe); box-shadow:0 10px 32px rgba(15,23,42,.26),0 2px 8px rgba(15,23,42,.12); }
     .attendant-fab-avatar { width:38px; height:38px; border-radius:50%; background:rgba(30,58,95,.15); color:#fff; font-size:.72rem; font-weight:700; display:flex; align-items:center; justify-content:center; flex-shrink:0; }
     @media (max-width:768px) { .attendant-fab { display:none !important; } }
+    .mob-new-fab { display:none; position:fixed; bottom:68px; right:16px; width:48px; height:48px; border-radius:50%; background:var(--accent,#2563eb); color:#fff; border:none; box-shadow:0 4px 16px rgba(15,23,42,.30); font-size:1.35rem; align-items:center; justify-content:center; cursor:pointer; z-index:390; transition:background .15s,box-shadow .15s; }
+    .mob-new-fab:active { background:var(--accent-dark,#1d4ed8); }
 
     /* ── Modal de aviso: reply + anexo + texto ───────────────── */
     .reply-warn-box { background:#fff; border-radius:14px; padding:24px; width:360px; max-width:calc(100vw - 32px); box-shadow:0 16px 48px rgba(15,23,42,.18); }
@@ -2972,6 +2974,14 @@
       .tmpl-var-row input,
       .ncm-field input,
       .ncm-field select { font-size: 1rem; }
+      /* Modal Nova conversa — bottom-sheet no mobile */
+      #new-convo-modal { padding:0; align-items:flex-end; }
+      .ncm-box { max-width:100%; border-radius:16px 16px 0 0; max-height:88vh; }
+      .ncm-contact-grid { grid-template-columns:1fr; }
+      .ncm-footer { flex-wrap:wrap; }
+      .ncm-footer button { flex:1 1 100%; }
+      /* FAB Nova conversa — visível apenas no mobile */
+      .mob-new-fab { display:flex; }
     }
   </style>
 </head>
@@ -7635,7 +7645,7 @@ async function openContactResult(contact) {
 <nav class="mob-nav" id="mob-nav">
   <button class="mob-nav-btn active" data-tab="convs" id="mob-btn-convs" onclick="switchTab('convs')"><span class="mob-nav-icon">💬</span><span>Conversas</span></button>
   <button class="mob-nav-btn" data-tab="kanban" id="mob-btn-kanban" onclick="mobSwitchKanban()"><span class="mob-nav-icon">📋</span><span>Kanban</span></button>
-  <button class="mob-nav-btn" data-tab="nova" id="mob-btn-nova" onclick="openNewConvoModal()"><span class="mob-nav-icon">✏️</span><span>Nova</span></button>
 </nav>
+<button class="mob-new-fab" id="mob-new-fab" onclick="openNewConvoModal()" title="Nova conversa">✏️</button>
 </body>
 </html>
