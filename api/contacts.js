@@ -183,13 +183,18 @@ async function handleReopen(req, res) {
   }
 }
 
-// ── POST /api/contacts  { phone, action: "update", clientName?, clientType?, contactNotes? } ──
+const VALID_DEMAND_TYPES = new Set(["outro", "lista", "cotacao_pj", "xerox", "produto", "duvida"]);
+
+// ── POST /api/contacts  { phone, action: "update", clientName?, clientType?, demandType?, contactNotes? } ──
 async function handleUpdate(req, res) {
-  const { phone, clientName, clientType, contactNotes } = req.body || {};
+  const { phone, clientName, clientType, demandType, contactNotes } = req.body || {};
 
   if (!phone) return res.status(400).json({ error: "Campo phone obrigatório" });
   if (clientType && clientType !== "pf" && clientType !== "pj") {
     return res.status(400).json({ error: "clientType deve ser pf ou pj" });
+  }
+  if (demandType !== undefined && demandType !== "" && !VALID_DEMAND_TYPES.has(demandType)) {
+    return res.status(400).json({ error: `demandType inválido: "${demandType}"`, valid: [...VALID_DEMAND_TYPES] });
   }
 
   const redis = getRedis();
@@ -201,21 +206,24 @@ async function handleUpdate(req, res) {
 
     const contact = JSON.parse(rawContact);
 
-    if (clientName  !== undefined) contact.clientName  = String(clientName).trim().slice(0, 120) || contact.clientName;
-    if (clientType  !== undefined) contact.clientType  = clientType;
+    if (clientName   !== undefined) contact.clientName   = String(clientName).trim().slice(0, 120) || contact.clientName;
+    if (clientType   !== undefined) contact.clientType   = clientType;
+    // demandType vazio ("") preserva valor anterior — merge seguro
+    if (demandType)                 contact.demandType   = demandType;
     if (contactNotes !== undefined) contact.contactNotes = String(contactNotes).trim().slice(0, 500);
     contact.updatedAt = now;
 
     await redis.set(`sartec:contact:${phone}`, JSON.stringify(contact));
 
-    // Propaga clientName e clientType para a sessão ativa, sem tocar em status/pipeline/histórico
-    if (clientName !== undefined || clientType !== undefined) {
+    // Propaga clientName, clientType e demandType para a sessão ativa, sem tocar em status/pipeline/histórico
+    if (clientName !== undefined || clientType !== undefined || demandType) {
       await withSessionLock(redis, phone, async () => {
         const rawSession = await redis.get(`sartec:${phone}`);
         if (!rawSession) return;
         const session = JSON.parse(rawSession);
         if (clientName !== undefined) session.clientName = String(clientName).trim().slice(0, 120) || session.clientName;
         if (clientType !== undefined) session.clientType = clientType;
+        if (demandType)               session.demandType = demandType;
         await redis.set(`sartec:${phone}`, JSON.stringify(session), "EX", SESSION_TTL);
       });
     }

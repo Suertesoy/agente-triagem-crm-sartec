@@ -1459,14 +1459,14 @@
 
     /* Centraliza conversa na aba Conversas (área mais larga) */
     .convs-main .messages {
-      max-width: 800px;
+      max-width: 1120px;
       margin-left: auto;
       margin-right: auto;
       padding-left: 24px;
       padding-right: 24px;
     }
 
-    .bubble-wrap { display: flex; flex-direction: column; max-width: min(64%, 560px); }
+    .bubble-wrap { display: flex; flex-direction: column; max-width: min(68%, 680px); }
     .bubble-wrap.left  { align-self: flex-start; align-items: flex-start; }
     .bubble-wrap.right { align-self: flex-end;   align-items: flex-end;   }
 
@@ -2642,7 +2642,8 @@
       cursor: pointer;
       letter-spacing: .02em;
       transition: background .15s, opacity .15s;
-      white-space: nowrap;
+      white-space: normal;
+      text-align: center;
     }
     .card-open-hint:hover { background: var(--brand-navy-mid); opacity: .94; }
 
@@ -4304,7 +4305,7 @@ function buildCard(c, col, cols) {
         ? `<button class="btn-reopen" onclick="reopenCard('${esc(c.phone)}','${clientType}')" style="width:100%">&#8635; Reabrir</button>`
         : `<button class="card-open-hint" type="button"
              onclick="event.stopPropagation();openChat('${esc(c.phone)}')"
-             >${isWindowClosed ? "Reabrir janela de atendimento →" : "Abrir →"}${unreadCount > 0 ? `<span class="card-unread-badge">${unreadCount}</span>` : ""}</button>`
+             >${isWindowClosed ? "Reabrir conversa →" : "Abrir →"}${unreadCount > 0 ? `<span class="card-unread-badge">${unreadCount}</span>` : ""}</button>`
       }
     </div>
 
@@ -6775,6 +6776,8 @@ function buildContactItem(c) {
     papelaria: 'Papelaria', escolar: 'Material escolar',
     grafica: 'Gráfica', brinde: 'Brinde',
     info: 'Informação', outro: 'Outro',
+    lista: 'Lista Escolar', cotacao_pj: 'Cotação PJ',
+    xerox: 'Xerox/Impressão', produto: 'Produtos', duvida: 'Dúvida',
   };
   const statusText  = statusLabels[c.lastConversationStatus] || pipelineLabels[c.lastPipelineStatus] || '';
   const statusBadge = statusText ? `<span class="contact-status-badge">${statusText}</span>` : '';
@@ -6824,13 +6827,13 @@ function openContactDetail(c) {
   const phoneStr = c.phone ? `+${c.phone}` : '';
 
   const demandOptions = [
-    { v: '',          l: '—' },
-    { v: 'papelaria', l: 'Papelaria' },
-    { v: 'escolar',   l: 'Material escolar' },
-    { v: 'grafica',   l: 'Gráfica' },
-    { v: 'brinde',    l: 'Brinde' },
-    { v: 'info',      l: 'Informação' },
-    { v: 'outro',     l: 'Outro' },
+    { v: '',           l: '— Sem categoria' },
+    { v: 'outro',      l: 'Outro' },
+    { v: 'lista',      l: 'Lista Escolar' },
+    { v: 'cotacao_pj', l: 'Cotação PJ' },
+    { v: 'xerox',      l: 'Xerox/Impressão' },
+    { v: 'produto',    l: 'Produtos' },
+    { v: 'duvida',     l: 'Dúvida' },
   ].map(o => `<option value="${o.v}"${(c.demandType || '') === o.v ? ' selected' : ''}>${o.l}</option>`).join('');
 
   // Wrapper flex-column para que cd-wrap (flex:1) preencha a altura no mobile e desktop
@@ -6868,7 +6871,7 @@ function openContactDetail(c) {
             </div>
             <div class="cd-field">
               <div class="cd-label">Categoria</div>
-              <select id="cd-demandType" class="cd-select" disabled title="Editável via pipeline">
+              <select id="cd-demandType" class="cd-select">
                 ${demandOptions}
               </select>
             </div>
@@ -6897,6 +6900,7 @@ function openContactDetail(c) {
 async function saveContactEdit(phone) {
   const clientName   = document.getElementById('cd-clientName')?.value?.trim() ?? undefined;
   const clientType   = document.getElementById('cd-clientType')?.value || undefined;
+  const demandType   = document.getElementById('cd-demandType')?.value || undefined;
   const contactNotes = document.getElementById('cd-contactNotes')?.value ?? undefined;
 
   const saveBtn = document.querySelector('.cd-save-btn');
@@ -6906,6 +6910,7 @@ async function saveContactEdit(phone) {
     const payload = { phone, action: 'update' };
     if (clientName   !== undefined) payload.clientName   = clientName;
     if (clientType   !== undefined) payload.clientType   = clientType || null;
+    if (demandType   !== undefined) payload.demandType   = demandType;
     if (contactNotes !== undefined) payload.contactNotes = contactNotes;
 
     const res = await fetch('/api/contacts', {
