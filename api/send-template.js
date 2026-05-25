@@ -94,15 +94,6 @@ export default async function handler(req, res) {
     return res.status(500).json({ error: "Variáveis de ambiente do WhatsApp ausentes" });
   }
 
-  // ── DIAGNÓSTICO TEMPORÁRIO ────────────────────────────────────────────────
-  console.log("[send-template] 🔍 templateType recebido      :", JSON.stringify(templateType));
-  console.log("[send-template] 🔍 TEMPLATE_ATTENDANCE_RESUME_NAME (env):", JSON.stringify(process.env.TEMPLATE_ATTENDANCE_RESUME_NAME));
-  console.log("[send-template] 🔍 templateName final          :", JSON.stringify(templateName));
-  console.log("[send-template] 🔍 TEMPLATE_LANGUAGE_CODE (env):", JSON.stringify(process.env.TEMPLATE_LANGUAGE_CODE));
-  console.log("[send-template] 🔍 language code final         :", JSON.stringify(getLanguageCode()));
-  console.log("[send-template] 🔍 WHATSAPP_PHONE_NUMBER_ID    :", PHONE_NUMBER_ID ? `...${PHONE_NUMBER_ID.slice(-4)}` : "AUSENTE");
-  // ── FIM DIAGNÓSTICO (remover após confirmar) ──────────────────────────────
-
   // ── Monta payload do template ────────────────────────────────────────────
   const templatePayload = {
     messaging_product: "whatsapp",
@@ -127,10 +118,6 @@ export default async function handler(req, res) {
     ];
   }
 
-  // ── DIAGNÓSTICO: payload completo ────────────────────────────────────────
-  console.log("[send-template] 🔍 payload final para Meta:", JSON.stringify(templatePayload, null, 2));
-  // ── FIM DIAGNÓSTICO ───────────────────────────────────────────────────────
-
   try {
     const metaRes = await fetch(
       `https://graph.facebook.com/v19.0/${PHONE_NUMBER_ID}/messages`,
@@ -147,9 +134,6 @@ export default async function handler(req, res) {
     const metaData = await metaRes.json();
 
     if (!metaRes.ok) {
-      // ── DIAGNÓSTICO: resposta completa de erro ────────────────────────────
-      console.error("[send-template] 🔍 resposta completa de erro Meta:", JSON.stringify(metaData, null, 2));
-      // ── FIM DIAGNÓSTICO ───────────────────────────────────────────────────
       console.error(
         `[send-template] ❌ Meta erro ${metaData?.error?.code}: ${metaData?.error?.message}`
       );
