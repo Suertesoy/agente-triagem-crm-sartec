@@ -6797,36 +6797,10 @@ function buildContactItem(c) {
       ${phoneStr ? `<div class="contact-phone">${esc(phoneStr)}</div>` : ''}
       <div class="contact-meta">${typeBadge}${demandBadge}${statusBadge}</div>
     </div>
-    <button class="contact-reopen-btn" onclick="event.stopPropagation();reopenContactAttendance('${esc(c.phone)}')">
-      ${c.lastConversationStatus === 'resolvido' ? 'Reabrir' : 'Abrir'}
-    </button>
+    <button class="contact-reopen-btn">Abrir contato</button>
   `;
-  item.addEventListener('click', (e) => {
-    if (e.target.closest('.contact-reopen-btn')) return;
-    openContactDetail(c);
-  });
+  item.addEventListener('click', () => openContactDetail(c));
   return item;
-}
-
-async function reopenContactAttendance(phone) {
-  try {
-    const res = await fetch('/api/contacts', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ phone, action: 'reopen' }),
-    });
-    if (!res.ok) {
-      const err = await res.json().catch(() => ({}));
-      showToast(err.error || 'Não foi possível abrir este contato.', 't-err');
-      return;
-    }
-    showToast('Atendimento aberto. Abrindo conversa...');
-    loadQueue();
-    setConvsMode('convs');
-    openConvsChat(phone, `sartec:${phone}`, false);
-  } catch {
-    showToast('Não foi possível abrir este contato.', 't-err');
-  }
 }
 
 function openContactDetail(c) {
