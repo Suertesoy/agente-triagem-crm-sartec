@@ -183,9 +183,59 @@ async function handleReopen(req, res) {
   }
 }
 
+// ── POST /api/contacts  { phone, action: "update", clientName?, clientType?, contactNotes? } ──
+async function handleUpdate(req, res) {
+  const { phone, clientName, clientType, contactNotes } = req.body || {};
+
+  if (!phone) return res.status(400).json({ error: "Campo phone obrigatório" });
+  if (clientType && clientType !== "pf" && clientType !== "pj") {
+    return res.status(400).json({ error: "clientType deve ser pf ou pj" });
+  }
+
+  const redis = getRedis();
+  const now   = new Date().toISOString();
+
+  try {
+    const rawContact = await redis.get(`sartec:contact:${phone}`);
+    if (!rawContact) return res.status(404).json({ error: "Contato não encontrado" });
+
+    const contact = JSON.parse(rawContact);
+
+    if (clientName  !== undefined) contact.clientName  = String(clientName).trim().slice(0, 120) || contact.clientName;
+    if (clientType  !== undefined) contact.clientType  = clientType;
+    if (contactNotes !== undefined) contact.contactNotes = String(contactNotes).trim().slice(0, 500);
+    contact.updatedAt = now;
+
+    await redis.set(`sartec:contact:${phone}`, JSON.stringify(contact));
+
+    // Propaga clientName e clientType para a sessão ativa, sem tocar em status/pipeline/histórico
+    if (clientName !== undefined || clientType !== undefined) {
+      await withSessionLock(redis, phone, async () => {
+        const rawSession = await redis.get(`sartec:${phone}`);
+        if (!rawSession) return;
+        const session = JSON.parse(rawSession);
+        if (clientName !== undefined) session.clientName = String(clientName).trim().slice(0, 120) || session.clientName;
+        if (clientType !== undefined) session.clientType = clientType;
+        await redis.set(`sartec:${phone}`, JSON.stringify(session), "EX", SESSION_TTL);
+      });
+    }
+
+    console.log(`[contacts/update] ✅ +${phone}`);
+    return res.status(200).json({ success: true, phone, contact });
+  } catch (err) {
+    console.error("[contacts/update] ❌", err.message);
+    return res.status(500).json({ error: "Erro ao atualizar contato", detail: err.message });
+  }
+}
+
 // ── Dispatcher ─────────────────────────────────────────────
 export default async function handler(req, res) {
-  if (req.method === "GET")  return handleGet(req, res);
-  if (req.method === "POST") return handleReopen(req, res);
+  if (req.method === "GET") return handleGet(req, res);
+  if (req.method === "POST") {
+    const { action } = req.body || {};
+    if (action === "reopen") return handleReopen(req, res);
+    if (action === "update") return handleUpdate(req, res);
+    return res.status(400).json({ error: "action inválida. Use 'reopen' ou 'update'" });
+  }
   return res.status(405).json({ error: "Method Not Allowed" });
 }
