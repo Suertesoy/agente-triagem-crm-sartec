@@ -6697,8 +6697,10 @@ function handleConvsSearch() {
 }
 
 function setConvsMode(mode) {
-  // If leaving contacts mode while a detail panel is open, clear it
-  if (convsSectionMode === 'contacts' && mode !== 'contacts' && _contactDetailPhone) {
+  const changing = mode !== convsSectionMode;
+
+  if (changing) {
+    // Limpa painel direito e estado de detalhe ao trocar de modo
     _contactDetailPhone = null;
     const main = document.getElementById('convs-main');
     if (main) main.innerHTML = '';
@@ -6720,8 +6722,24 @@ function setConvsMode(mode) {
       ? '🔍  Buscar por nome ou número...'
       : '🔍  Buscar contato por nome ou telefone...';
   }
-  if (mode === 'contacts') loadContacts();
-  else loadConversations();
+
+  if (mode === 'contacts') {
+    if (changing) {
+      const list = document.getElementById('convs-list');
+      if (list) list.innerHTML = '<div style="padding:16px;text-align:center;color:var(--text-secondary);font-size:.82rem">Carregando contatos...</div>';
+    }
+    loadContacts();
+  } else {
+    if (changing) {
+      // Renderiza cache imediatamente para troca visual instantânea, depois refresca
+      if (allConversationsList.length) renderConvsList(allConversationsList);
+      else {
+        const list = document.getElementById('convs-list');
+        if (list) list.innerHTML = '<div style="padding:16px;text-align:center;color:var(--text-secondary);font-size:.82rem">Carregando conversas...</div>';
+      }
+    }
+    loadConversations();
+  }
 }
 
 async function loadContacts() {
@@ -6759,32 +6777,9 @@ function renderContactsList(contacts) {
 }
 
 function buildContactItem(c) {
-  const name  = c.clientName || c.whatsappName || c.phone || '—';
-  const isPJ  = c.clientType === 'pj';
-  const typeBadge = c.clientType
-    ? `<span class="contact-type-badge">${isPJ ? 'PJ' : 'PF'}</span>`
-    : '';
-  const statusLabels = {
-    aguardando_humano: 'Aguardando', resolvido: 'Resolvido',
-    triagem_incompleta: 'Incompleta', ativo: 'Em triagem',
-  };
-  const pipelineLabels = {
-    novo: 'Novo', em_atendimento: 'Em atendimento',
-    em_espera: 'Em espera', finalizado: 'Finalizado', entregue: 'Entregue',
-  };
-  const demandLabels = {
-    papelaria: 'Papelaria', escolar: 'Material escolar',
-    grafica: 'Gráfica', brinde: 'Brinde',
-    info: 'Informação', outro: 'Outro',
-    lista: 'Lista Escolar', cotacao_pj: 'Cotação PJ',
-    xerox: 'Xerox/Impressão', produto: 'Produtos', duvida: 'Dúvida',
-  };
-  const statusText  = statusLabels[c.lastConversationStatus] || pipelineLabels[c.lastPipelineStatus] || '';
-  const statusBadge = statusText ? `<span class="contact-status-badge">${statusText}</span>` : '';
-  const demandText  = demandLabels[c.demandType] || '';
-  const demandBadge = demandText ? `<span class="contact-type-badge" style="background:var(--brand-navy);color:#fff">${demandText}</span>` : '';
-  const timeStr     = relTimeCR(c.lastSeenAt || c.lastActivityAt);
-  const phoneStr    = c.phone ? `+${c.phone}` : '';
+  const name     = c.clientName || c.whatsappName || c.phone || '—';
+  const isPJ     = c.clientType === 'pj';
+  const phoneStr = c.phone ? `+${c.phone}` : '';
 
   const item = document.createElement('div');
   item.className = 'contact-item';
@@ -6795,10 +6790,8 @@ function buildContactItem(c) {
     <div class="contact-info">
       <div class="contact-name-row">
         <span class="contact-name">${esc(name)}</span>
-        <span class="contact-time">${timeStr}</span>
       </div>
       ${phoneStr ? `<div class="contact-phone">${esc(phoneStr)}</div>` : ''}
-      <div class="contact-meta">${typeBadge}${demandBadge}${statusBadge}</div>
     </div>
     <button class="contact-reopen-btn">Abrir contato</button>
   `;
