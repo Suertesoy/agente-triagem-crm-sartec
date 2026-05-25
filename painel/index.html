@@ -17,6 +17,7 @@
        RESET + VARIÁVEIS
     ══════════════════════════════════════════════════ */
     *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    html { overflow-x: hidden; }
 
     :root {
       --brand-navy:       #1a2a5e;
@@ -2982,6 +2983,15 @@
       .ncm-footer button { flex:1 1 100%; }
       /* FAB Nova conversa — visível apenas no mobile */
       .mob-new-fab { display:flex; }
+      /* ── Prevenir overflow horizontal ───────────────────── */
+      html, body { max-width: 100vw; }
+      .top-header { max-width: 100vw; overflow: hidden; }
+      .view.active { max-width: 100vw; }
+      #view-convs.active { width: 100%; max-width: 100vw; }
+      .convs-sidebar, .convs-main { max-width: 100vw; overflow-x: hidden; }
+      .window-status-bar { min-width: 0; overflow: hidden; }
+      .composer-row textarea { min-width: 0; }
+      .waiting-counter { min-width: 0; }
     }
   </style>
 </head>
