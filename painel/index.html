@@ -6737,12 +6737,13 @@ function setConvsMode(mode) {
     loadContacts();
   } else {
     if (changing) {
+      // Invalida cache de assinatura: garante re-render mesmo que os dados não tenham mudado
+      // desde a última vez que Conversas foi exibido (o _lastSig persiste no DOM durante a visita a Contatos)
+      const list = document.getElementById('convs-list');
+      if (list) list._lastSig = null;
       // Renderiza cache imediatamente para troca visual instantânea, depois refresca
       if (allConversationsList.length) renderConvsList(allConversationsList);
-      else {
-        const list = document.getElementById('convs-list');
-        if (list) list.innerHTML = '<div style="padding:16px;text-align:center;color:var(--text-secondary);font-size:.82rem">Carregando conversas...</div>';
-      }
+      else if (list) list.innerHTML = '<div style="padding:16px;text-align:center;color:var(--text-secondary);font-size:.82rem">Carregando conversas...</div>';
     }
     loadConversations();
   }
