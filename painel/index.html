@@ -6700,10 +6700,16 @@ function setConvsMode(mode) {
   const changing = mode !== convsSectionMode;
 
   if (changing) {
-    // Limpa painel direito e estado de detalhe ao trocar de modo
     _contactDetailPhone = null;
+    // Remove estado mobile aberto (mob-chat-open) ao trocar de aba
+    document.getElementById('view-convs')?.classList.remove('mob-chat-open');
     const main = document.getElementById('convs-main');
-    if (main) main.innerHTML = '';
+    if (main) {
+      // Ao voltar para conversas, restaura o empty-state; em contatos, limpa completamente
+      main.innerHTML = mode === 'convs'
+        ? '<div class="convs-empty" id="convs-empty"><div class="convs-empty-icon">💬</div><div class="convs-empty-text">Selecione uma conversa</div></div>'
+        : '';
+    }
   }
 
   convsSectionMode = mode;
@@ -6750,9 +6756,11 @@ async function loadContacts() {
     const res  = await fetch(url);
     if (!res.ok) throw new Error('HTTP ' + res.status);
     const data = await res.json();
+    if (convsSectionMode !== 'contacts') return; // modo mudou durante o fetch — não sobrescreve conversas
     renderContactsList(data.contacts || []);
   } catch (e) {
     console.error('[loadContacts]', e);
+    if (convsSectionMode !== 'contacts') return; // modo mudou durante o fetch
     if (list) list.innerHTML = `<div style="padding:24px 16px;text-align:center;color:var(--text-secondary)">
       <div style="font-size:.85rem;margin-bottom:12px">Erro ao carregar contatos.</div>
       <button onclick="loadContacts()" style="background:var(--brand-navy);color:#fff;border:none;padding:8px 18px;border-radius:8px;cursor:pointer;font-size:.8rem;font-weight:600">
