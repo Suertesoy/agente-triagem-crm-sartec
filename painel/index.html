@@ -7206,13 +7206,12 @@ if (window.innerWidth <= 768) { initMobileKanban(); }
 // ║  ONBOARDING TOUR                                             ║
 // ╚══════════════════════════════════════════════════════════════╝
 const OB_STEPS = [
-  { sel: ".top-header",        title: "Painel de atendimento",  text: "Acompanhe todos os atendimentos ativos. O contador mostra quem está aguardando e as métricas de janela WhatsApp." },
-  { sel: ".pipeline-wrap",     title: "Fluxo de atendimento",   text: "Cada coluna é uma etapa. Arraste os cards para avançar. A cor indica a urgência operacional." },
-  { sel: ".card",              title: "Card de cliente",        text: "Cada card é um cliente. Vermelho = atenção, amarelo = acompanhamento, verde = finalizando, branco = normal." },
-  { sel: ".card-status-dot",   title: "Prioridade manual",      text: "Clique no círculo colorido para definir urgência: Alta, Média, Baixa ou Concluindo. A cor do card e do círculo indicam o estado." },
-  { sel: ".card-open-hint",    title: "Abrir atendimento",      text: "Acesse o histórico completo, envie mensagens e use templates WhatsApp." },
-  { sel: ".card-expand-btn",   title: "Detalhes rápidos",       text: "Expanda para ver o resumo operacional e os dados do pedido sem sair do Kanban." },
-  { sel: ".btn-resolve-inline",title: "Resolver atendimento",   text: "Quando concluído, resolva para arquivar e liberar a fila de atendimento." },
+  { sel: ".attendant-fab",  title: "Seu perfil de atendente", text: "Escolha seu nome antes de começar. Assim o painel identifica quem está atendendo cada cliente e evita que duas pessoas respondam a mesma conversa ao mesmo tempo." },
+  { sel: ".top-header",     title: "Visão geral do painel",   text: "Aqui você acompanha os atendimentos em tempo real. O contador mostra quem está aguardando atendimento, e o perfil no topo indica quem está usando o painel agora." },
+  { sel: ".tab-bar",        title: "Áreas do painel",         text: "Use as abas para alternar entre Kanban, Conversas e Contatos. O Kanban organiza a fila por etapa, Conversas mostra o histórico completo e Contatos ajuda a encontrar clientes já cadastrados." },
+  { sel: ".pipeline-wrap",  title: "Kanban de atendimento",   text: "O Kanban tem filas separadas para Pessoa Física e Pessoa Jurídica. Arraste os cards entre as colunas para indicar em qual etapa cada atendimento está." },
+  { sel: ".card",           title: "Cards e prioridade",      text: "Cada card representa um cliente. Use o círculo de prioridade para marcar Alta, Média, Baixa ou Concluindo. Você também pode expandir o card para ver dados do pedido sem abrir o chat." },
+  { sel: ".card-open-hint", title: "Abrir e responder",       text: "Abra o atendimento para ver o histórico completo, responder, enviar imagem ou PDF e acompanhar a janela do WhatsApp. Se a janela estiver fechada, use um template aprovado. Ao finalizar, clique em Resolver." },
 ];
 
 let _obStep = 0;
@@ -7723,7 +7722,7 @@ async function openContactResult(contact) {
   <div id="ob-right"  class="ob-strip"></div>
   <div id="ob-ring"   class="ob-ring"></div>
   <div id="ob-tooltip" class="ob-tooltip">
-    <div class="ob-badge" id="ob-badge">1 / 7</div>
+    <div class="ob-badge" id="ob-badge">1 / 6</div>
     <h3  id="ob-title" class="ob-title"></h3>
     <p   id="ob-text"  class="ob-text"></p>
     <div class="ob-footer">
