@@ -71,6 +71,24 @@ export default async function handler(req, res) {
 
     // Normaliza history preservando mídia (imagens e documentos/PDF)
     const history = (session.history || []).map((m) => {
+      // Eventos de template — retornar campos diretamente sem normalizar como mídia
+      if (m.sentByTemplate || m.messageType === "template") {
+        const tItem = {
+          role:           m.role,
+          content:        m.content        || "",
+          sentByHuman:    false,
+          sentByTemplate: true,
+          messageType:    "template",
+          templateType:   m.templateType   || null,
+          templateName:   m.templateName   || null,
+          templateLabel:  m.templateLabel  || null,
+          templateText:   m.templateText   || null,
+          createdAt:      m.createdAt      || null,
+        };
+        if (m.metaMessageId) tItem.metaMessageId = m.metaMessageId;
+        return tItem;
+      }
+
       let content       = m.content;
       let mediaType     = m.mediaType     || null;
       let mediaData     = m.mediaData     || null;

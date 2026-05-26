@@ -5260,6 +5260,25 @@ function appendBubble(container, msg, optimistic = false, history = null) {
   const { role, content, sentByHuman, mediaType, mediaData, mediaMimeType, mediaFilename,
           attendantId, attendantName, transcription, transcriptionError } = msg;
 
+  // ── Evento de template enviado ──
+  if (msg.sentByTemplate || msg.messageType === "template") {
+    const _twrap = document.createElement("div");
+    _twrap.style.cssText = "display:flex;justify-content:center;margin:6px 0;padding:0 8px;";
+    const _tcard = document.createElement("div");
+    _tcard.style.cssText = "background:#eef2fb;border:1px solid #c8d4ee;border-radius:10px;padding:9px 14px;max-width:420px;width:100%;box-sizing:border-box;";
+    const _ttitle = document.createElement("div");
+    _ttitle.style.cssText = "font-size:.78rem;font-weight:700;color:var(--brand-navy,#1a1a2e);margin-bottom:4px;";
+    _ttitle.textContent = `↩ Template enviado: ${msg.templateLabel || msg.templateType || "template"}`;
+    _tcard.appendChild(_ttitle);
+    const _ttext = document.createElement("div");
+    _ttext.style.cssText = "font-size:.78rem;color:var(--text-secondary,#5a6380);line-height:1.45;";
+    _ttext.textContent = msg.templateText || "Mensagem aprovada enviada ao cliente para reabrir a conversa.";
+    _tcard.appendChild(_ttext);
+    _twrap.appendChild(_tcard);
+    container.appendChild(_twrap);
+    return;
+  }
+
   const wrap = document.createElement("div");
   wrap.className = `bubble-wrap ${role === "user" ? "left" : "right"}`;
 

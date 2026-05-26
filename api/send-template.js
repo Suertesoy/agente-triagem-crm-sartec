@@ -150,7 +150,7 @@ export default async function handler(req, res) {
     );
 
     // ── Persiste estado de espera na sessão Redis ─────────────────────────
-    await markTemplateSent(to, templateType, { clientName, clientType });
+    await markTemplateSent(to, templateType, { clientName, clientType, variables, msgId, templateName });
 
     return res.status(200).json({ success: true, templateName, messageId: msgId });
 
@@ -186,6 +186,22 @@ function buildNewProspectSession(phone, clientName, clientType) {
   };
 }
 
+// ── Monta texto renderizado do template substituindo variáveis ───────────────
+const _TEMPLATE_BASE_TEXTS = {
+  attendance_resume: "Olá, {{1}}, aqui é da Sartec Papelaria. Recebemos sua solicitação anteriormente e gostaríamos de continuar seu atendimento. Pode responder esta mensagem para continuarmos?",
+  budget_update:     "Olá, {{1}}, temos uma atualização sobre seu orçamento na Sartec Papelaria. Pode responder esta mensagem para continuarmos?",
+  pj_prospecting:    "Olá, {{1}}, aqui é da Sartec Papelaria. Gostaríamos de apresentar nossas condições especiais para empresas. Pode responder esta mensagem?",
+};
+
+function buildTemplateText(templateType, variables = []) {
+  let text = _TEMPLATE_BASE_TEXTS[templateType] || "";
+  if (!text) return "";
+  variables.forEach((v, i) => {
+    text = text.replace(new RegExp(`\\{\\{${i + 1}\\}\\}`, "g"), v || "");
+  });
+  return text.trim();
+}
+
 // ── Atualiza (ou cria) sessão Redis após envio bem-sucedido ──────────────────
 // Registra templateSentAt (usado por computeWindowInfo para derivar
 // conversationWindowStatus = "waiting_template_reply" enquanto
@@ -193,7 +209,7 @@ function buildNewProspectSession(phone, clientName, clientType) {
 //
 // Se a sessão não existe (número novo), cria uma sessão inicial.
 // clientName / clientType só sobrescrevem se a sessão for nova ou os campos estiverem vazios.
-async function markTemplateSent(phone, templateType, { clientName, clientType } = {}) {
+async function markTemplateSent(phone, templateType, { clientName, clientType, variables = [], msgId = null, templateName = "" } = {}) {
   try {
     const redis = getRedis();
     const raw   = await redis.get(`sartec:${phone}`);
@@ -232,6 +248,24 @@ async function markTemplateSent(phone, templateType, { clientName, clientType } 
       pj_prospecting:    "Prospecção PJ",
     };
     session.proactiveNote = `Template enviado: ${templateLabels[templateType] || templateType} — aguardando resposta do cliente`;
+
+    // Registra evento de template no histórico do chat
+    if (!Array.isArray(session.history)) session.history = [];
+    const _tmplText  = buildTemplateText(templateType, variables);
+    const _tmplEntry = {
+      role:           "system",
+      content:        `Template enviado: ${templateLabels[templateType] || templateType}`,
+      messageType:    "template",
+      templateType,
+      templateName:   templateName || templateType,
+      templateLabel:  templateLabels[templateType] || templateType,
+      templateText:   _tmplText,
+      sentByTemplate: true,
+      sentByHuman:    false,
+      createdAt:      now,
+    };
+    if (msgId) _tmplEntry.metaMessageId = msgId;
+    session.history.push(_tmplEntry);
 
     await redis.set(
       `sartec:${phone}`,
