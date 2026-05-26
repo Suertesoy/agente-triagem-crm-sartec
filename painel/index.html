@@ -2290,8 +2290,10 @@
       letter-spacing: .04em;
       white-space: nowrap;
     }
-    .conv-waiting  { background: #dbeafe; color: #1e40af; }
-    .conv-resolved { background: #dcfce7; color: #166534; }
+    .conv-waiting     { background: #dbeafe; color: #1e40af; }
+    .conv-resolved    { background: #dcfce7; color: #166534; }
+    .conv-win-closed  { background: #fee2e2; color: #991b1b; }
+    .conv-win-waiting { background: #fef9c3; color: #854d0e; }
     .conv-new-msg-badge { font-size:.52rem; font-weight:700; padding:1px 7px; border-radius:8px; background:#ef4444; color:#fff; white-space:nowrap; }
 
     /* Bolinha azul de não lida — direita do card */
@@ -4948,6 +4950,13 @@ function buildConvItem(c) {
     : "";
   // Mantém badge "Resolvido"; remove "Aguardando" (substituído pelo badge de nova msg)
   const statusDot = isResolved ? `<span class="conv-status-badge conv-resolved">Resolvido</span>` : "";
+  const ws = !isResolved && !isArchiveConv ? c.conversationWindowStatus : null;
+  const windowBadge =
+    ws === "waiting_template_reply"
+      ? `<span class="conv-status-badge conv-win-waiting">Aguardando resposta</span>`
+    : ws === "closed"
+      ? `<span class="conv-status-badge conv-win-closed">Janela fechada</span>`
+    : "";
 
   const item = document.createElement("div");
   item.className = "conv-item"
@@ -4972,6 +4981,7 @@ function buildConvItem(c) {
       <div class="conv-meta">
         <span class="demand-tag ${demandClass(c.demandType)}"
           style="font-size:.55rem;padding:1px 5px">${demandLabel(c.demandType)}</span>
+        ${windowBadge}
         ${statusDot || ""}
         ${newMsgBadge}
         ${isArchiveConv ? `<span class="conv-archive-badge">📁 arquivada</span>` : ""}
