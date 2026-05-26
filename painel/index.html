@@ -3050,7 +3050,6 @@
       <div class="waiting-dot" id="waiting-dot" style="display:none"></div>
       <span id="waiting-count">Carregando...</span>
     </div>
-    <span id="header-critical" style="display:none;font-size:.72rem;background:rgba(204,34,34,.22);color:#ffb3b3;padding:2px 9px;border-radius:20px;font-weight:700;white-space:nowrap;flex-shrink:0"></span>
     <!-- Bloco central: título + busca (absoluto, não afeta o flex dos botões) -->
     <div class="header-center">
       <span class="header-nav-title">PAINEL DE ATENDIMENTO</span>
@@ -3997,18 +3996,6 @@ function updateHeader(convs) {
     waiting === 1 ? "1 aguardando atendimento" :
     `${waiting} aguardando atendimento`;
   document.getElementById("waiting-dot").style.display = waiting > 0 ? "block" : "none";
-
-  // Chip de críticos
-  const critical = convs.filter(c => computePriority(c).level === "critica").length;
-  const critEl = document.getElementById("header-critical");
-  if (critEl) {
-    if (critical > 0) {
-      critEl.style.display = "inline";
-      critEl.textContent = `${critical} crítico${critical > 1 ? "s" : ""}`;
-    } else {
-      critEl.style.display = "none";
-    }
-  }
 
   // Stats strip — métricas discretas derivadas de allConvs
   const ativas     = convs.filter(c => c.status !== "resolvido").length;
