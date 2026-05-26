@@ -7206,12 +7206,19 @@ if (window.innerWidth <= 768) { initMobileKanban(); }
 // ║  ONBOARDING TOUR                                             ║
 // ╚══════════════════════════════════════════════════════════════╝
 const OB_STEPS = [
-  { sel: ".attendant-fab",  title: "Seu perfil de atendente", text: "Escolha seu nome antes de começar. Assim o painel identifica quem está atendendo cada cliente e evita que duas pessoas respondam a mesma conversa ao mesmo tempo." },
-  { sel: ".top-header",     title: "Visão geral do painel",   text: "Aqui você acompanha os atendimentos em tempo real. O contador mostra quem está aguardando atendimento, e o perfil no topo indica quem está usando o painel agora." },
-  { sel: ".tab-bar",        title: "Áreas do painel",         text: "Use as abas para alternar entre Kanban, Conversas e Contatos. O Kanban organiza a fila por etapa, Conversas mostra o histórico completo e Contatos ajuda a encontrar clientes já cadastrados." },
-  { sel: ".pipeline-wrap",  title: "Kanban de atendimento",   text: "O Kanban tem filas separadas para Pessoa Física e Pessoa Jurídica. Arraste os cards entre as colunas para indicar em qual etapa cada atendimento está." },
-  { sel: ".card",           title: "Cards e prioridade",      text: "Cada card representa um cliente. Use o círculo de prioridade para marcar Alta, Média, Baixa ou Concluindo. Você também pode expandir o card para ver dados do pedido sem abrir o chat." },
-  { sel: ".card-open-hint", title: "Abrir e responder",       text: "Abra o atendimento para ver o histórico completo, responder, enviar imagem ou PDF e acompanhar a janela do WhatsApp. Se a janela estiver fechada, use um template aprovado. Ao finalizar, clique em Resolver." },
+  { sel: ".top-header",        title: "Visão geral do painel",          text: "Aqui você acompanha os atendimentos em tempo real. O contador mostra quem está aguardando atendimento, e o botão de ajuda permite rever este tutorial quando precisar." },
+  { sel: ".tab-bar",           title: "Pessoa Física e Pessoa Jurídica", text: "O atendimento é separado em duas filas: Pessoa Física e Pessoa Jurídica. Use essas abas para alternar entre os dois tipos de cliente, porque cada um tem etapas diferentes no Kanban." },
+  { sel: ".pipeline-wrap",     title: "Kanban de atendimento",           text: "Cada coluna representa uma etapa do atendimento. Arraste os cards entre as colunas para manter a fila atualizada e mostrar em que ponto cada pedido está." },
+  { sel: ".card",              title: "Card do cliente",                 text: "Cada card representa um atendimento. Ele reúne o cliente, o resumo do pedido, a categoria, a janela do WhatsApp e os principais botões de ação." },
+  { sel: ".card-status-dot",   title: "Prioridade do atendimento",       text: "Use o círculo colorido para marcar a prioridade manualmente: Alta, Média, Baixa ou Concluindo. Isso ajuda a equipe a organizar o que precisa de mais atenção." },
+  { sel: ".card-name",         title: "Nome do cliente",                 text: "O nome identifica quem está sendo atendido. Quando necessário, ele pode ser ajustado para manter o card claro para toda a equipe." },
+  { sel: ".card-title",        title: "Resumo do atendimento",           text: "O resumo mostra rapidamente o que o cliente precisa. Use essa área para entender o pedido sem abrir a conversa inteira." },
+  { sel: ".demand-select",     title: "Categoria do pedido",             text: "A categoria ajuda a identificar o tipo de solicitação, como produtos, dúvida, lista escolar ou cotação PJ. Ela também pode ser ajustada quando o atendimento mudar de contexto." },
+  { sel: ".card-win-time",     title: "Janela do WhatsApp",              text: "O tempo indica a situação da janela de atendimento. Com a janela aberta, é possível responder livremente. Com a janela fechada, será necessário usar um template aprovado." },
+  { sel: ".card-open-hint",    title: "Abrir conversa",                  text: "Use este botão para abrir o histórico completo do cliente, responder mensagens, enviar imagem ou PDF e acompanhar os detalhes do atendimento." },
+  { sel: ".pf-pj-toggle",      title: "Tipo de cliente",                 text: "Use PF ou PJ para classificar o atendimento corretamente. Isso ajuda a manter o cliente na fila certa e com o fluxo adequado." },
+  { sel: ".btn-resolve-inline", title: "Finalizar atendimento",          text: "Quando o atendimento estiver concluído, use Finalizar ou Resolver para arquivar a conversa e liberar a fila." },
+  { sel: ".card-expand-btn",   title: "Detalhes do pedido",              text: "Expanda o card para ver dados adicionais do pedido sem abrir o chat. Essa área ajuda a conferir informações rápidas durante o atendimento." },
 ];
 
 let _obStep = 0;
@@ -7722,7 +7729,7 @@ async function openContactResult(contact) {
   <div id="ob-right"  class="ob-strip"></div>
   <div id="ob-ring"   class="ob-ring"></div>
   <div id="ob-tooltip" class="ob-tooltip">
-    <div class="ob-badge" id="ob-badge">1 / 6</div>
+    <div class="ob-badge" id="ob-badge">1 / 13</div>
     <h3  id="ob-title" class="ob-title"></h3>
     <p   id="ob-text"  class="ob-text"></p>
     <div class="ob-footer">
