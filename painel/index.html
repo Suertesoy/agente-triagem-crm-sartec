@@ -3935,6 +3935,7 @@ function switchTab(tab) {
     const isKanban=(tab==="pf"||tab==="pj");
     document.querySelectorAll(".mob-nav-btn").forEach(b=>{const t=b.dataset.tab;b.classList.toggle("active",t===tab||(t==="kanban"&&isKanban));});
   }
+  updateHeader(allConvs);
 }
 
 // ╔══════════════════════════════════════════════════════════════╗
@@ -3992,7 +3993,9 @@ async function loadQueue() {
 }
 
 function updateHeader(convs) {
-  const waiting = convs.filter(c => c.status === "aguardando_humano").length;
+  const tabType = currentTab === "pf" ? "pf" : currentTab === "pj" ? "pj" : null;
+  const scopedConvs = tabType ? convs.filter(c => c.clientType === tabType) : convs;
+  const waiting = scopedConvs.filter(c => c.status === "aguardando_humano").length;
   document.getElementById("waiting-count").textContent =
     waiting === 0 ? "Nenhuma aguardando" :
     waiting === 1 ? "1 aguardando atendimento" :
