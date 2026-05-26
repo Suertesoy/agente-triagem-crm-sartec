@@ -121,6 +121,9 @@ export default async function handler(req, res) {
         if (mediaFilename) item.mediaFilename = mediaFilename;
       }
 
+      if (m.transcription)      item.transcription      = m.transcription;
+      if (m.transcriptionError) item.transcriptionError = m.transcriptionError;
+
       return item;
     });
 

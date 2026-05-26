@@ -642,9 +642,13 @@ function generateCardTitle(session) {
 
 function addMessage(session, role, content, meta = {}) {
   const item = { role, content };
-  if (meta.metaMessageId) item.metaMessageId = meta.metaMessageId;
-  if (meta.replyToMsgId)  item.replyToMsgId  = meta.replyToMsgId;
-  if (meta.replyToFrom)   item.replyToFrom   = meta.replyToFrom;
+  if (meta.metaMessageId)      item.metaMessageId      = meta.metaMessageId;
+  if (meta.replyToMsgId)       item.replyToMsgId       = meta.replyToMsgId;
+  if (meta.replyToFrom)        item.replyToFrom        = meta.replyToFrom;
+  if (meta.mediaType)          item.mediaType          = meta.mediaType;
+  if (meta.mediaMimeType)      item.mediaMimeType      = meta.mediaMimeType;
+  if (meta.transcription)      item.transcription      = meta.transcription;
+  if (meta.transcriptionError) item.transcriptionError = meta.transcriptionError;
   session.history.push(item);
 
   if (role === "assistant" && isHandoff(content)) {
@@ -712,7 +716,17 @@ function trimHistory(session) {
 function getMessages(session) {
   const msgs = session.history
     .filter((m) => m.role !== "system")
-    .map((m) => ({ role: m.role, content: m.content }));
+    .map((m) => {
+      if (m.mediaType === "audio") {
+        return {
+          role: m.role,
+          content: m.transcription
+            ? `[Áudio transcrito]: ${m.transcription}`
+            : "[Cliente enviou um áudio — transcrição indisponível]",
+        };
+      }
+      return { role: m.role, content: m.content };
+    });
 
   if (!session.historySummary) return msgs;
 
@@ -765,6 +779,48 @@ async function downloadMedia(mediaId) {
   const base64 = Buffer.from(buffer).toString("base64");
 
   return { base64, mimeType: mime_type };
+}
+
+// ============================================================
+// TRANSCRIÇÃO DE ÁUDIO — OpenAI gpt-4o-mini-transcribe
+// ============================================================
+
+async function transcribeAudio(base64, mimeType) {
+  const key = process.env.OPENAI_API_KEY;
+  if (!key) throw new Error("OPENAI_API_KEY não configurada");
+
+  const extMap = {
+    "audio/ogg":  "ogg",
+    "audio/mpeg": "mp3",
+    "audio/mp4":  "mp4",
+    "audio/aac":  "aac",
+    "audio/amr":  "amr",
+    "audio/webm": "webm",
+  };
+  const ext      = extMap[mimeType] || "ogg";
+  const filename = `audio.${ext}`;
+
+  const buffer = Buffer.from(base64, "base64");
+  const blob   = new Blob([buffer], { type: mimeType || "audio/ogg" });
+
+  const form = new FormData();
+  form.append("file", blob, filename);
+  form.append("model", "gpt-4o-mini-transcribe");
+  form.append("language", "pt");
+  form.append("response_format", "text");
+
+  const res = await fetch("https://api.openai.com/v1/audio/transcriptions", {
+    method:  "POST",
+    headers: { Authorization: `Bearer ${key}` },
+    body:    form,
+  });
+
+  if (!res.ok) {
+    const detail = await res.text();
+    throw new Error(`OpenAI Transcription ${res.status}: ${detail.substring(0, 200)}`);
+  }
+
+  return (await res.text()).trim();
 }
 
 // ============================================================
@@ -1079,63 +1135,134 @@ async function handleIncomingMessage(req, res) {
 
           await upsertContact(getRedis(), from, { whatsappName: name !== "—" ? name : null });
 
-          // ── ÁUDIO — dois estágios, sem chamar Claude ─────────
+          // ── ÁUDIO — baixa, transcreve, salva e responde ──────
           if (type === "audio") {
+            // Fase 1: download + transcrição fora do lock (I/O lento)
+            let _audioTranscription = null;
+            let _audioMimeType      = null;
+            let _transcriptionFailed = false;
+            try {
+              const _audioMedia     = await downloadMedia(message.audio.id);
+              _audioMimeType        = _audioMedia.mimeType;
+              _audioTranscription   = await transcribeAudio(_audioMedia.base64, _audioMedia.mimeType);
+              console.log(`[Audio] ✅ Transcrição +${from}: "${_audioTranscription.substring(0, 80)}"`);
+            } catch (_audioErr) {
+              console.error("[Audio] ❌ Falha ao baixar/transcrever:", _audioErr.message);
+              _transcriptionFailed = true;
+            }
+
+            // Fase 2: atualiza sessão e responde (dentro do lock)
+            const _audioMeta = {
+              ...msgMeta,
+              mediaType:    "audio",
+              mediaMimeType: _audioMimeType || undefined,
+              ...((_audioTranscription)  && { transcription:      _audioTranscription }),
+              ...(_transcriptionFailed   && { transcriptionError: true }),
+            };
+
             const audioReply = await withSessionLock(getRedis(), from, async () => {
               const session = await loadSession(from);
-              // Áudio é mensagem do cliente → reinicia janela de 24h
+
+              // Reinicia janela de 24h
               const _audioNow = new Date();
               session.lastUserMessageAt = _audioNow.toISOString();
               session.windowExpiresAt   = new Date(_audioNow.getTime() + 24 * 60 * 60 * 1000).toISOString();
+
+              // Template de retomada → humano assume
               if (session.templateWaitingReply) {
                 const isResume = session.lastTemplateType === "attendance_resume";
                 session.templateWaitingReply = false;
                 console.log(`[Audio] 🔓 Template respondido (áudio) — janela reaberta: +${from}`);
-
                 if (isResume) {
                   console.log(`[Audio] 🔄 Retomada via áudio — silenciando bot para +${from}`);
                   session.handoffDone          = true;
                   session.status               = "aguardando_humano";
                   session.postHandoffReplySent = true;
-                  session.handoffAt            = new Date().toISOString(); // Atualiza timestamp na fila
+                  session.handoffAt            = new Date().toISOString();
                   if (!session.pipelineStatus || session.pipelineStatus === "finalizado" || session.pipelineStatus === "entregue") {
                     session.pipelineStatus = "em_atendimento";
                   }
-                  addMessage(session, "user", "[áudio]", msgMeta);
+                  addMessage(session, "user", "[áudio]", _audioMeta);
                   await saveSession(from, session);
-                  return null; // Silêncio total
+                  return null;
                 }
               }
-              // Pós-handoff: bot fica silencioso, apenas registra o áudio
+
+              // Pós-handoff: registra transcrição e fica em silêncio
               if (session.handoffDone) {
-                addMessage(session, "user", "[áudio]", msgMeta);
+                addMessage(session, "user", "[áudio]", _audioMeta);
                 await saveSession(from, session);
                 return null;
               }
 
-              session.audioCount = (session.audioCount || 0) + 1;
+              if (name) session.clientName = name;
+              session.clientPhone = from;
 
-              let reply;
-              if (session.audioCount === 1) {
-                reply = "Tive dificuldade pra entender seu áudio 🙏 Consegue mandar por escrito?";
-              } else {
-                reply = "Não consigo ouvir áudios por aqui 🙏 Vou te passar para nossa equipe que vai te atender diretamente 🤝";
-                session.handoffDone          = true;
-                session.postHandoffReplySent = false;
-                session.status               = "aguardando_humano";
-                session.clientName           = name;
-                session.clientPhone          = from;
-                session.demandType           = session.demandType || "outro";
-                session.handoffAt            = session.handoffAt  || new Date().toISOString();
-                if (!session.cardTitle)      session.cardTitle    = generateCardTitle(session);
+              // Detecta sinais PJ na transcrição
+              if (!session.clientType && _audioTranscription && detectPJSignals(_audioTranscription)) {
+                session.clientType = "pj";
+                session.demandType = "cotacao_pj";
+                console.log(`[Audio] 🏢 PJ detectado na transcrição +${from}`);
               }
 
-              addMessage(session, "user", "[áudio]", msgMeta);
-              if (reply) addMessage(session, "assistant", reply);
+              // Fallback quando transcrição falhou
+              if (_transcriptionFailed || !_audioTranscription) {
+                session.audioCount = (session.audioCount || 0) + 1;
+                let reply;
+                if (session.audioCount === 1) {
+                  reply = "Tive dificuldade pra entender seu áudio 🙏 Consegue mandar por escrito?";
+                } else {
+                  reply = "Não consigo ouvir áudios por aqui 🙏 Vou te passar para nossa equipe que vai te atender diretamente 🤝";
+                  session.handoffDone = true;
+                  session.postHandoffReplySent = false;
+                  session.status    = "aguardando_humano";
+                  session.demandType = session.demandType || "outro";
+                  session.handoffAt  = session.handoffAt  || new Date().toISOString();
+                  if (!session.cardTitle) session.cardTitle = generateCardTitle(session);
+                }
+                addMessage(session, "user", "[áudio]", _audioMeta);
+                addMessage(session, "assistant", reply);
+                await saveSession(from, session);
+                return reply;
+              }
+
+              // Transcrição OK → decide se responde
+              const decision = shouldRespond(session, _audioTranscription);
+
+              if (decision === "post_handoff_default") {
+                const reply = "Nossa equipe já está ciente e vai te atender em breve 🤝";
+                addMessage(session, "user", "[áudio]", _audioMeta);
+                addMessage(session, "assistant", reply);
+                session.postHandoffReplySent = true;
+                await saveSession(from, session);
+                return reply;
+              }
+
+              if (decision === false) {
+                addMessage(session, "user", "[áudio]", _audioMeta);
+                await saveSession(from, session);
+                return null;
+              }
+
+              // Salva mensagem com transcrição e chama Claude com texto puro
+              addMessage(session, "user", "[áudio]", _audioMeta);
+
+              console.log(`[Audio] 🤖 +${from} | ${getMessages(session).length} msgs`);
+              const _aiRes = await anthropic.messages.create({
+                model:      "claude-haiku-4-5-20251001",
+                max_tokens: 500,
+                system:     SYSTEM_PROMPT,
+                messages:   getMessages(session),
+              });
+              const reply = _aiRes.content[0]?.type === "text" ? _aiRes.content[0].text : "";
+
+              addMessage(session, "assistant", reply);
               await saveSession(from, session);
+              console.log(`[Audio] ✅ "${reply.substring(0, 80)}..." | ${_aiRes.usage?.input_tokens}in/${_aiRes.usage?.output_tokens}out`);
               return reply;
             });
-            await sendTextMessage(from, audioReply);
+
+            if (audioReply) await sendTextMessage(from, audioReply);
             continue;
           }
 

@@ -5250,7 +5250,7 @@ function getQuotedPreview(msg, history) {
 
 function appendBubble(container, msg, optimistic = false, history = null) {
   const { role, content, sentByHuman, mediaType, mediaData, mediaMimeType, mediaFilename,
-          attendantId, attendantName } = msg;
+          attendantId, attendantName, transcription, transcriptionError } = msg;
 
   const wrap = document.createElement("div");
   wrap.className = `bubble-wrap ${role === "user" ? "left" : "right"}`;
@@ -5315,23 +5315,35 @@ function appendBubble(container, msg, optimistic = false, history = null) {
     bubble.appendChild(card);
 
   // ── Áudio ──
-  } else if (mediaType === "audio" && mediaData) {
-    const audio = document.createElement("audio");
-    audio.controls = true;
-    audio.src      = `data:${mediaMimeType || "audio/ogg"};base64,${mediaData}`;
-    audio.style.maxWidth = "220px";
-    bubble.appendChild(audio);
+  } else if (mediaType === "audio") {
+    if (mediaData) {
+      const audio = document.createElement("audio");
+      audio.controls = true;
+      audio.src      = `data:${mediaMimeType || "audio/ogg"};base64,${mediaData}`;
+      audio.style.maxWidth = "220px";
+      bubble.appendChild(audio);
+    }
+    if (transcription) {
+      const _txDiv = document.createElement("div");
+      _txDiv.style.cssText = "margin-top:4px;font-size:.82rem;color:var(--text-secondary,#5a6380);font-style:italic;line-height:1.4";
+      _txDiv.textContent = `🎧 "${transcription}"`;
+      bubble.appendChild(_txDiv);
+    } else if (transcriptionError) {
+      const _errDiv = document.createElement("div");
+      _errDiv.style.cssText = "font-size:.82rem;color:var(--text-muted,#9aa0b4);font-style:italic";
+      _errDiv.textContent = "🎧 Não foi possível transcrever este áudio.";
+      bubble.appendChild(_errDiv);
+    } else if (!mediaData) {
+      const _fbDiv = document.createElement("div");
+      _fbDiv.style.cssText = "font-size:.82rem;font-style:italic;opacity:.82";
+      _fbDiv.textContent = "🎧 Áudio recebido — transcrição indisponível.";
+      bubble.appendChild(_fbDiv);
+    }
 
   // ── Texto ──
   } else {
     const _textNode = document.createElement("span");
-    if (typeof content === "string" && content.trim() === "[áudio]") {
-      _textNode.textContent  = "🎧 Áudio recebido — peça ao cliente para enviar por texto.";
-      _textNode.style.fontStyle = "italic";
-      _textNode.style.opacity   = ".82";
-    } else {
-      _textNode.textContent = content || "[mídia]";
-    }
+    _textNode.textContent = content || "[mídia]";
     bubble.appendChild(_textNode);
   }
 
