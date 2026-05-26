@@ -1226,7 +1226,8 @@ async function handleIncomingMessage(req, res) {
                 return reply;
               }
 
-              // Transcrição OK → decide se responde
+              // Transcrição OK → zera contador de falhas consecutivas e decide se responde
+              session.audioCount = 0;
               const decision = shouldRespond(session, _audioTranscription);
 
               if (decision === "post_handoff_default") {
