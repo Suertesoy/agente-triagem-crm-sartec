@@ -2925,6 +2925,11 @@
     .mob-chip .tab-badge { display:inline-flex;align-items:center;justify-content:center;background:var(--brand-red);color:#fff;font-size:.55rem;font-weight:700;min-width:14px;height:14px;padding:0 3px;border-radius:7px;margin-left:4px;vertical-align:middle; }
     .mob-chip .tab-badge:empty { display:none; }
     #mob-stage-cards-pf, #mob-stage-cards-pj { flex:1;overflow-y:auto;padding:10px 10px 16px;display:flex;flex-direction:column;gap:10px; }
+    .mob-pfpj-selector { display:flex; background:rgba(26,42,94,.06); border-radius:10px; padding:4px; margin:12px 12px 6px 12px; flex-shrink:0; }
+    .mob-pfpj-btn { flex:1; border:none; background:transparent; padding:8px 12px; border-radius:8px; font-size:.8rem; font-weight:600; color:var(--text-secondary); cursor:pointer; display:flex; align-items:center; justify-content:center; gap:6px; transition:background .15s, color .15s, box-shadow .15s; -webkit-tap-highlight-color:transparent; }
+    .mob-pfpj-btn.active { background:#fff; color:var(--brand-navy); box-shadow:0 2px 6px rgba(15,23,42,.08), 0 1px 2px rgba(15,23,42,.04); }
+    .mob-pfpj-btn .tab-badge { display:inline-flex; align-items:center; justify-content:center; background:var(--brand-red); color:#fff; font-size:.62rem; font-weight:700; min-width:16px; height:16px; padding:0 4px; border-radius:8px; margin-left:4px; }
+    .mob-pfpj-btn .tab-badge:empty { display:none; }
     @media (max-width: 768px) {
       /* Mobile: ocultar logo e bloco central, apenas faixa navy compacta */
       .top-header { background:var(--brand-navy); }
@@ -4015,6 +4020,14 @@ function updateHeader(convs) {
   const pjWaiting = convs.filter(c => c.clientType === "pj" && c.status === "aguardando_humano" && c.pipelineStatus === "novo").length;
   document.getElementById("badge-pf").textContent = pfWaiting || "";
   document.getElementById("badge-pj").textContent = pjWaiting || "";
+
+  // Atualizar badges nas abas mobile
+  ["pf", "pj"].forEach(t => {
+    const bPf = document.getElementById("mob-badge-pf-" + t);
+    if (bPf) bPf.textContent = pfWaiting || "";
+    const bPj = document.getElementById("mob-badge-pj-" + t);
+    if (bPj) bPj.textContent = pjWaiting || "";
+  });
 }
 
 function detectNewCards(convs) {
@@ -7088,12 +7101,22 @@ function initMobileKanban() {
     const filterEl = document.createElement("div");
     filterEl.className = "mob-only";
     filterEl.id = "mob-filter-" + tab;
+
+    // Obter valores atuais das badges desktop para pre-população
+    const pfVal = document.getElementById("badge-pf") ? document.getElementById("badge-pf").textContent : "";
+    const pjVal = document.getElementById("badge-pj") ? document.getElementById("badge-pj").textContent : "";
+
+    let selector = '<div class="mob-pfpj-selector">';
+    selector += '  <button class="mob-pfpj-btn' + (tab === "pf" ? " active" : "") + '" onclick="switchTab(\'pf\')">Pessoa Física <span class="tab-badge" id="mob-badge-pf-' + tab + '">' + pfVal + '</span></button>';
+    selector += '  <button class="mob-pfpj-btn' + (tab === "pj" ? " active" : "") + '" onclick="switchTab(\'pj\')">Pessoa Jurídica <span class="tab-badge" id="mob-badge-pj-' + tab + '">' + pjVal + '</span></button>';
+    selector += '</div>';
+
     let chips = '<div class="mob-stage-chips" id="mob-chips-' + tab + '">';
     stages.forEach(function(s, i) {
       chips += '<button class="mob-chip' + (i===0?" active":"") + '" data-stage="' + s.key + '" onclick="selectMobStage(\'' + tab + '\',\'' + s.key + '\',this)">' + s.label + '</button>';
     });
     chips += '</div>';
-    filterEl.innerHTML = chips + '<div id="mob-stage-cards-' + tab + '"></div>';
+    filterEl.innerHTML = selector + chips + '<div id="mob-stage-cards-' + tab + '"></div>';
     view.insertBefore(filterEl, wrap || view.firstChild);
   });
 }
