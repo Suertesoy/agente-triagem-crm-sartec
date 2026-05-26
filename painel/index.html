@@ -2948,7 +2948,8 @@
       .convs-sidebar { width:100%;height:100%;border-right:none; }
       .convs-main { display:none;width:100%;height:100%;flex-direction:column; }
       #view-convs.mob-chat-open .convs-sidebar { display:none; }
-      #view-convs.mob-chat-open .convs-main { display:flex; }
+      #view-convs.mob-chat-open .convs-main { display:flex; width:100%; height:100%; }
+      .convs-empty { display:none; }
       .mob-back-btn { display:flex;align-items:center;gap:5px;background:rgba(255,255,255,.15);border:none;color:#fff;padding:5px 10px;border-radius:7px;font-size:.78rem;font-weight:600;cursor:pointer;flex-shrink:0;white-space:nowrap; }
       .mob-back-btn:active { background:rgba(255,255,255,.28); }
       .modal-overlay { padding:0;align-items:flex-end; }
@@ -3010,7 +3011,7 @@
       .convs-filter { flex-shrink: 0; overflow-x: auto; overscroll-behavior-x: contain; }
       .convs-list { flex: 1; min-height: 0; overflow-y: auto; -webkit-overflow-scrolling: touch; }
       /* Chat: header e composer fixos, mensagens rolam */
-      .convs-main { flex: 1; min-height: 0; overflow: hidden; display: flex; flex-direction: column; box-sizing: border-box; }
+      .convs-main { flex: 1; min-height: 0; overflow: hidden; flex-direction: column; box-sizing: border-box; }
       .window-status-bar { flex-shrink: 0; min-width: 0; overflow: hidden; }
       .messages { flex: 1; min-height: 0; overflow-y: auto; -webkit-overflow-scrolling: touch; }
       .convs-main .messages { max-width: 100%; padding-left: 12px; padding-right: 12px; }
@@ -6750,14 +6751,17 @@ function setConvsMode(mode) {
 
   if (changing) {
     _contactDetailPhone = null;
-    // Remove estado mobile aberto (mob-chat-open) ao trocar de aba
-    document.getElementById('view-convs')?.classList.remove('mob-chat-open');
+    // Remove estado mobile aberto (mob-chat-open) ao trocar de aba, liberando lock e poll
+    const viewConvs = document.getElementById('view-convs');
+    if (viewConvs?.classList.contains('mob-chat-open')) {
+      viewConvs.classList.remove('mob-chat-open');
+      stopConvsChatPoll();
+      if (openConvsPhone) { unlockConvTab(openConvsPhone); openConvsPhone = null; openConvsRedisKey = null; }
+      document.querySelectorAll('.conv-item').forEach(el => el.classList.remove('active'));
+    }
     const main = document.getElementById('convs-main');
     if (main) {
-      // Ao voltar para conversas, restaura o empty-state; em contatos, limpa completamente
-      main.innerHTML = mode === 'convs'
-        ? '<div class="convs-empty" id="convs-empty"><div class="convs-empty-icon">💬</div><div class="convs-empty-text">Selecione uma conversa</div></div>'
-        : '';
+      main.innerHTML = '';
     }
   }
 
@@ -7144,12 +7148,22 @@ function renderMobStageCards(tabId, stage) {
 }
 
 function closeMobChat() {
+  const prevPhone = openConvsPhone;
   document.getElementById("view-convs").classList.remove("mob-chat-open");
-  // Se estava no detalhe de contato, limpa o painel principal
+
+  stopConvsChatPoll();
+  if (prevPhone) unlockConvTab(prevPhone);
+
+  openConvsPhone    = null;
+  openConvsRedisKey = null;
+
+  const main = document.getElementById('convs-main');
+  if (main) main.innerHTML = '';
+
+  document.querySelectorAll('.conv-item').forEach(el => el.classList.remove('active'));
+
   if (convsSectionMode === 'contacts' && _contactDetailPhone) {
     _contactDetailPhone = null;
-    const main = document.getElementById('convs-main');
-    if (main) main.innerHTML = '';
     document.querySelectorAll('.contact-item').forEach(el => el.classList.remove('contact-item-active'));
   }
 }
