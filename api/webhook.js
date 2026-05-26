@@ -674,26 +674,54 @@ function addMessage(session, role, content, meta = {}) {
   if (session.history.length > MAX_MESSAGES) trimHistory(session);
 }
 
-function trimHistory(session) {
-  const recent  = session.history.slice(-10);
-  const older   = session.history.slice(0, -10);
-  const summary = older
-    .filter((m) => m.role === "user")
-    .map((m) => (typeof m.content === "string" ? m.content : "[mídia]"))
-    .join(" | ")
-    .substring(0, 300);
+function hasMedia(msg) {
+  if (Array.isArray(msg.content))
+    return msg.content.some((p) => p.type === "image" || p.type === "document");
+  return !!(msg.mediaType || msg.mediaData);
+}
 
-  session.history = [
-    { role: "user",      content: `[RESUMO ANTERIOR] Cliente mencionou: ${summary}...` },
-    { role: "assistant", content: "Entendido, continuando o atendimento." },
-    ...recent,
-  ];
+function trimHistory(session) {
+  const recent     = session.history.slice(-10);
+  const older      = session.history.slice(0, -10);
+
+  // Preserva no histórico todas as mensagens antigas com mídia (imagem/PDF)
+  const olderMedia = older.filter(hasMedia);
+
+  // Resumo textual das mensagens antigas do cliente — sem tentar serializar base64
+  const newParts = older
+    .filter((m) => !hasMedia(m) && m.role === "user")
+    .map((m) => {
+      if (typeof m.content === "string") return m.content;
+      if (Array.isArray(m.content))
+        return m.content.filter((p) => p.type === "text").map((p) => p.text).join(" ");
+      return "";
+    })
+    .filter(Boolean);
+
+  if (newParts.length > 0) {
+    const newText  = newParts.join(" | ").substring(0, 600);
+    const prev     = session.historySummary || "";
+    const combined = prev ? `${prev} | ${newText}` : newText;
+    session.historySummary = combined.substring(0, 1000);
+  }
+
+  // Histórico final: mídias antigas preservadas + últimas 10 mensagens reais
+  session.history = [...olderMedia, ...recent];
 }
 
 function getMessages(session) {
-  return session.history
+  const msgs = session.history
     .filter((m) => m.role !== "system")
     .map((m) => ({ role: m.role, content: m.content }));
+
+  if (!session.historySummary) return msgs;
+
+  // Injeta resumo apenas no contexto enviado ao Claude — não entra em session.history
+  return [
+    { role: "user",      content: `[CONTEXTO ANTERIOR] ${session.historySummary}` },
+    { role: "assistant", content: "Entendido, continuando o atendimento." },
+    ...msgs,
+  ];
 }
 
 function shouldRespond(session, text) {
