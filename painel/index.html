@@ -3984,7 +3984,7 @@ async function loadQueue() {
     updateDocTitle(allConvs);
     detectNewCards(allConvs);
     setRefreshState("ok");
-    if (!_obAutoStarted && getCurrentAttendant()) { _obAutoStarted = true; if (window.innerWidth > 768 && !localStorage.getItem("sartec_ob_done")) setTimeout(obStart, 1200); }
+    if (!_obAutoStarted && getCurrentAttendant()) { _obAutoStarted = true; if (window.innerWidth > 768 && !localStorage.getItem("sartec_ob_done")) setTimeout(() => { switchTab('pf'); obStart(); }, 1200); }
   } catch (e) {
     console.error("[loadQueue] ❌", e);
     setRefreshState("error");
@@ -6852,7 +6852,12 @@ function renderContactsList(contacts) {
     }</div>`;
     return;
   }
-  contacts.forEach(c => list.appendChild(buildContactItem(c)));
+  const sorted = [...contacts].sort((a, b) => {
+    const na = a.clientName || a.whatsappName || a.phone || '';
+    const nb = b.clientName || b.whatsappName || b.phone || '';
+    return na.localeCompare(nb, 'pt-BR', { sensitivity: 'base' });
+  });
+  sorted.forEach(c => list.appendChild(buildContactItem(c)));
 }
 
 function buildContactItem(c) {
@@ -7207,7 +7212,8 @@ if (window.innerWidth <= 768) { initMobileKanban(); }
 // ╚══════════════════════════════════════════════════════════════╝
 const OB_STEPS = [
   { sel: ".top-header",        title: "Visão geral do painel",          text: "Aqui você acompanha os atendimentos em tempo real. O contador mostra quem está aguardando atendimento, e o botão de ajuda permite rever este tutorial quando precisar." },
-  { sel: ".tab-bar",           title: "Pessoa Física e Pessoa Jurídica", text: "O atendimento é separado em duas filas: Pessoa Física e Pessoa Jurídica. Use essas abas para alternar entre os dois tipos de cliente, porque cada um tem etapas diferentes no Kanban." },
+  { sel: ".tab-bar",           title: "Pessoa Física e Pessoa Jurídica", text: "O Kanban tem filas separadas para Pessoa Física e Pessoa Jurídica. Use essas abas para alternar entre os dois tipos de atendimento, porque cada um tem etapas diferentes." },
+  { sel: "#tab-convs",         title: "Conversas e Contatos",            text: "A aba Conversas funciona como um histórico geral, parecido com o WhatsApp Web. Ali você busca atendimentos, abre conversas, acompanha a janela do WhatsApp e acessa Contatos para consultar ou editar dados dos clientes." },
   { sel: ".pipeline-wrap",     title: "Kanban de atendimento",           text: "Cada coluna representa uma etapa do atendimento. Arraste os cards entre as colunas para manter a fila atualizada e mostrar em que ponto cada pedido está." },
   { sel: ".card",              title: "Card do cliente",                 text: "Cada card representa um atendimento. Ele reúne o cliente, o resumo do pedido, a categoria, a janela do WhatsApp e os principais botões de ação." },
   { sel: ".card-status-dot",   title: "Prioridade do atendimento",       text: "Use o círculo colorido para marcar a prioridade manualmente: Alta, Média, Baixa ou Concluindo. Isso ajuda a equipe a organizar o que precisa de mais atenção." },
@@ -7324,6 +7330,7 @@ function obSkip() { obFinish(); }
 
 function restartOnboarding() {
   localStorage.removeItem("sartec_ob_done");
+  switchTab('pf');
   obStart();
 }
 
@@ -7496,7 +7503,7 @@ function setAttendant(id) {
   requestNotificationPermission();
   if (!_obAutoStarted && window.innerWidth > 768 && !localStorage.getItem("sartec_ob_done")) {
     _obAutoStarted = true;
-    setTimeout(obStart, 800);
+    setTimeout(() => { switchTab('pf'); obStart(); }, 800);
   }
 }
 
@@ -7729,7 +7736,7 @@ async function openContactResult(contact) {
   <div id="ob-right"  class="ob-strip"></div>
   <div id="ob-ring"   class="ob-ring"></div>
   <div id="ob-tooltip" class="ob-tooltip">
-    <div class="ob-badge" id="ob-badge">1 / 13</div>
+    <div class="ob-badge" id="ob-badge">1 / 14</div>
     <h3  id="ob-title" class="ob-title"></h3>
     <p   id="ob-text"  class="ob-text"></p>
     <div class="ob-footer">
