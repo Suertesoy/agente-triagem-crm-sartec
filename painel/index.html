@@ -3035,6 +3035,14 @@
       /* Modal de atendente: acima da bottom nav */
       #attendant-picker-modal { z-index: 600; align-items: center; }
       #attendant-picker-modal .attendant-picker-box { max-height: calc(100dvh - var(--mob-header-h) - var(--mob-nav-h) - 32px); overflow-y: auto; }
+      /* Guia rápido mobile */
+      #mob-help-overlay { position:fixed;inset:0;background:rgba(0,0,0,.45);z-index:549;display:none; }
+      #mob-help-overlay.open { display:block; }
+      #mob-help-modal { position:fixed;left:0;right:0;bottom:var(--mob-nav-h);z-index:550;background:#fff;border-radius:16px 16px 0 0;box-shadow:0 -4px 32px rgba(0,0,0,.2);max-height:calc(100dvh - var(--mob-header-h) - var(--mob-nav-h));overflow-y:auto;display:none; }
+      #mob-help-modal.open { display:block; }
+      .mob-help-card { background:var(--bg-sidebar,#f8f9fc);border-radius:10px;padding:13px 14px; }
+      .mob-help-card-title { font-size:.82rem;font-weight:700;color:var(--text-primary,#1a1a2e);margin-bottom:5px; }
+      .mob-help-card-text { font-size:.78rem;color:var(--text-secondary,#5a6380);line-height:1.45; }
     }
   </style>
 </head>
@@ -7343,7 +7351,17 @@ function obFinish() {
 
 function obSkip() { obFinish(); }
 
+function openMobileHelp() {
+  document.getElementById('mob-help-modal').classList.add('open');
+  document.getElementById('mob-help-overlay').classList.add('open');
+}
+function closeMobileHelp() {
+  document.getElementById('mob-help-modal').classList.remove('open');
+  document.getElementById('mob-help-overlay').classList.remove('open');
+}
+
 function restartOnboarding() {
+  if (window.innerWidth <= 768) { openMobileHelp(); return; }
   localStorage.removeItem("sartec_ob_done");
   switchTab('pf');
   obStart();
@@ -7770,5 +7788,36 @@ async function openContactResult(contact) {
   <button class="mob-nav-btn" data-tab="kanban" id="mob-btn-kanban" onclick="mobSwitchKanban()"><span class="mob-nav-icon">📋</span><span>Kanban</span></button>
 </nav>
 <button class="mob-new-fab" id="mob-new-fab" onclick="openNewConvoModal()" title="Nova conversa">✏️</button>
+
+<!-- ══════ MOBILE QUICK HELP GUIDE ══════ -->
+<div id="mob-help-overlay" onclick="closeMobileHelp()"></div>
+<div id="mob-help-modal" role="dialog" aria-modal="true" aria-label="Guia rápido">
+  <div style="padding:16px 16px 20px;display:flex;flex-direction:column;gap:12px;">
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:2px;">
+      <span style="font-size:.95rem;font-weight:700;color:var(--text-primary,#1a1a2e);">Guia rápido</span>
+      <button onclick="closeMobileHelp()" style="background:none;border:none;font-size:1.2rem;color:var(--text-secondary,#5a6380);cursor:pointer;padding:4px 6px;line-height:1;">✕</button>
+    </div>
+    <div class="mob-help-card">
+      <div class="mob-help-card-title">📋 Kanban — Pessoa Física e Pessoa Jurídica</div>
+      <div class="mob-help-card-text">O Kanban organiza os atendimentos em colunas por etapa. Use o botão Kanban na barra de baixo e alterne entre PF e PJ no topo da tela.</div>
+    </div>
+    <div class="mob-help-card">
+      <div class="mob-help-card-title">💬 Conversas</div>
+      <div class="mob-help-card-text">A aba Conversas mostra o histórico de todos os chats. Toque em um nome para abrir a conversa e usar o campo de texto para responder ao cliente.</div>
+    </div>
+    <div class="mob-help-card">
+      <div class="mob-help-card-title">👤 Contatos</div>
+      <div class="mob-help-card-text">Na aba Conversas, role até o final para ver a lista de Contatos. Toque em um contato para ver ou editar os dados do cliente.</div>
+    </div>
+    <div class="mob-help-card">
+      <div class="mob-help-card-title">🪟 Janela de 24h</div>
+      <div class="mob-help-card-text">O WhatsApp só permite enviar mensagens livres enquanto a janela de 24h estiver aberta. Se fechada, use o botão de template para reabrir o contato.</div>
+    </div>
+    <div class="mob-help-card">
+      <div class="mob-help-card-title">✏️ Nova conversa</div>
+      <div class="mob-help-card-text">Use o botão flutuante (✏️) para iniciar uma nova conversa. Informe o número com DDD e escolha o template de abertura.</div>
+    </div>
+  </div>
+</div>
 </body>
 </html>
