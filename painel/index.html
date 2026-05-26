@@ -2317,10 +2317,11 @@
       align-self: center;
       line-height: 1;
       opacity: 0;
+      pointer-events: none;
       transition: opacity .15s, background .12s;
     }
     .conv-item:hover .conv-menu-btn,
-    .conv-item.active .conv-menu-btn { opacity: 1; }
+    .conv-item.active .conv-menu-btn { opacity: 1; pointer-events: auto; }
     .conv-menu-btn:hover { background: rgba(0,0,0,.08); color: var(--text-primary); }
 
     /* Badge de arquivada */
