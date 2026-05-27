@@ -3995,7 +3995,14 @@ async function loadQueue() {
     updateDocTitle(allConvs);
     detectNewCards(allConvs);
     setRefreshState("ok");
-    if (!_obAutoStarted && getCurrentAttendant()) { _obAutoStarted = true; if (window.innerWidth > 768 && !localStorage.getItem("sartec_ob_done")) setTimeout(() => { switchTab('pf'); obStart(); }, 1200); }
+    if (checkAndShowOnboardingAfterLogin()) {
+      // Handled
+    } else if (!_obAutoStarted && getCurrentAttendant()) {
+      _obAutoStarted = true;
+      if (window.innerWidth > 768 && !localStorage.getItem("sartec_ob_done")) {
+        setTimeout(() => { switchTab('pf'); obStart(); }, 1200);
+      }
+    }
   } catch (e) {
     console.error("[loadQueue] ❌", e);
     setRefreshState("error");
@@ -7381,6 +7388,21 @@ function closeMobileHelp() {
   document.getElementById('mob-help-overlay').classList.remove('open');
 }
 
+function checkAndShowOnboardingAfterLogin() {
+  const shouldShow = sessionStorage.getItem("sartec_show_onboarding_after_login") === "1";
+  if (!shouldShow) return false;
+  const att = getCurrentAttendant();
+  if (!att) return false;
+  sessionStorage.removeItem("sartec_show_onboarding_after_login");
+  _obAutoStarted = true;
+  if (window.innerWidth <= 768) {
+    setTimeout(() => { openMobileHelp(); }, 800);
+  } else {
+    setTimeout(() => { switchTab('pf'); obStart(); }, 1000);
+  }
+  return true;
+}
+
 function restartOnboarding() {
   if (window.innerWidth <= 768) { openMobileHelp(); return; }
   localStorage.removeItem("sartec_ob_done");
@@ -7555,6 +7577,9 @@ function setAttendant(id) {
   renderAttendantBadge(profile);
   closeAttendantPicker();
   requestNotificationPermission();
+  if (checkAndShowOnboardingAfterLogin()) {
+    return;
+  }
   if (!_obAutoStarted && window.innerWidth > 768 && !localStorage.getItem("sartec_ob_done")) {
     _obAutoStarted = true;
     setTimeout(() => { switchTab('pf'); obStart(); }, 800);
