@@ -1269,6 +1269,56 @@ async function handleReset(req, res) {
   });
 }
 
+// ============================================================
+// STATUS DE ENTREGA — callbacks da Meta (sent/delivered/read/failed)
+// ============================================================
+
+// Ranking: nunca rebaixa status mais avançado (ex: read → delivered)
+const _STATUS_RANK = { sent: 1, delivered: 2, read: 3 };
+
+async function handleDeliveryStatus(s) {
+  const { id: msgId, status, recipient_id, timestamp, errors } = s;
+  if (!msgId || !status) return;
+  console.log(`[Status] ${status} — ${msgId}`);
+
+  const phone = recipient_id;
+  if (!phone) return;
+
+  try {
+    const redis = getRedis();
+    const raw   = await redis.get(`sartec:${phone}`);
+    if (!raw) { console.log(`[Status] ⚠️ Sessão não encontrada para +${phone}`); return; }
+
+    const session = JSON.parse(raw);
+    const history = session.history || [];
+    const idx     = history.findIndex(m => m.metaMessageId === msgId);
+    if (idx === -1) { console.log(`[Status] ⚠️ Mensagem não encontrada: ${msgId}`); return; }
+
+    const msg         = history[idx];
+    const currentRank = _STATUS_RANK[msg.deliveryStatus] || 0;
+    const newRank     = _STATUS_RANK[status]             || 0;
+
+    // Nunca rebaixa (read → delivered); failed sempre registra
+    if (status !== "failed" && newRank <= currentRank) return;
+
+    const statusAt = timestamp
+      ? new Date(parseInt(timestamp, 10) * 1000).toISOString()
+      : new Date().toISOString();
+
+    msg.deliveryStatus   = status;
+    msg.deliveryStatusAt = statusAt;
+    if (status === "failed" && errors?.length) {
+      msg.deliveryError = errors[0]?.title || "Falha na entrega";
+    }
+
+    session.history = history;
+    await redis.set(`sartec:${phone}`, JSON.stringify(session), "EX", SESSION_TTL);
+    console.log(`[Status] ✅ ${status} → ${msgId} (+${phone})`);
+  } catch (err) {
+    console.error("[Status] ❌ Erro ao salvar status:", err.message);
+  }
+}
+
 function handleVerification(req, res) {
   const {
     "hub.mode":         mode,
@@ -1295,7 +1345,7 @@ async function handleIncomingMessage(req, res) {
         const value = change.value;
 
         for (const s of value?.statuses ?? []) {
-          console.log(`[Status] ${s.status} — ${s.id}`);
+          await handleDeliveryStatus(s);
         }
 
         if (!value?.messages?.length) continue;

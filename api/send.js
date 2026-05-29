@@ -112,10 +112,12 @@ async function sendText(req, res, body, PHONE_NUMBER_ID, ACCESS_TOKEN) {
   const historyEntry = {
     role: "assistant",
     content: message,
-    sentByHuman:   true,
-    attendantId:   body.attendantId   || null,
-    attendantName: body.attendantName || null,
+    sentByHuman:     true,
+    attendantId:     body.attendantId   || null,
+    attendantName:   body.attendantName || null,
     metaMessageId,
+    deliveryStatus:  "sent",
+    deliveryStatusAt: new Date().toISOString(),
   };
   if (replyToMessageId) historyEntry.replyToMsgId = replyToMessageId;
 
@@ -204,13 +206,15 @@ async function sendImage(req, res, body, PHONE_NUMBER_ID, ACCESS_TOKEN) {
   const imgEntry = {
     role: "assistant",
     content: caption || "",
-    sentByHuman:   true,
-    mediaType:     "image",
-    mediaData:     mediaBase64,
-    mediaMimeType: mimeType,
-    attendantId:   body.attendantId   || null,
-    attendantName: body.attendantName || null,
+    sentByHuman:     true,
+    mediaType:       "image",
+    mediaData:       mediaBase64,
+    mediaMimeType:   mimeType,
+    attendantId:     body.attendantId   || null,
+    attendantName:   body.attendantName || null,
     metaMessageId,
+    deliveryStatus:  "sent",
+    deliveryStatusAt: new Date().toISOString(),
   };
   if (replyToMessageId) imgEntry.replyToMsgId = replyToMessageId;
   await saveToHistory(to, imgEntry);
@@ -296,16 +300,18 @@ async function sendDocument(req, res, body, PHONE_NUMBER_ID, ACCESS_TOKEN) {
 
   // 3. Salva no histórico com base64 para exibição no painel
   const docEntry = {
-    role:          "assistant",
-    content:       caption || "",
-    sentByHuman:   true,
-    mediaType:     "document",
-    mediaData:     mediaBase64,
-    mediaMimeType: mimeType,
-    mediaFilename: filename,
-    attendantId:   body.attendantId   || null,
-    attendantName: body.attendantName || null,
+    role:             "assistant",
+    content:          caption || "",
+    sentByHuman:      true,
+    mediaType:        "document",
+    mediaData:        mediaBase64,
+    mediaMimeType:    mimeType,
+    mediaFilename:    filename,
+    attendantId:      body.attendantId   || null,
+    attendantName:    body.attendantName || null,
     metaMessageId,
+    deliveryStatus:   "sent",
+    deliveryStatusAt: new Date().toISOString(),
   };
   if (replyToMessageId) docEntry.replyToMsgId = replyToMessageId;
   await saveToHistory(to, docEntry);

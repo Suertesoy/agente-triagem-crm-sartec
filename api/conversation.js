@@ -121,12 +121,15 @@ export default async function handler(req, res) {
       }
 
       const item = {
-        role:          m.role,
-        content:       content || "",
-        sentByHuman:   m.sentByHuman   || false,
-        attendantId:   m.attendantId   || null,
-        attendantName: m.attendantName || null,
-        createdAt:     m.createdAt     || null,
+        role:             m.role,
+        content:          content || "",
+        sentByHuman:      m.sentByHuman      || false,
+        attendantId:      m.attendantId      || null,
+        attendantName:    m.attendantName    || null,
+        createdAt:        m.createdAt        || null,
+        deliveryStatus:   m.deliveryStatus   || null,
+        deliveryStatusAt: m.deliveryStatusAt || null,
+        deliveryError:    m.deliveryError    || null,
       };
 
       if (m.metaMessageId) item.metaMessageId = m.metaMessageId;

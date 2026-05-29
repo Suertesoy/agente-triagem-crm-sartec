@@ -1567,6 +1567,13 @@
     .bubble-time  { display: block; font-size: .62rem; color: #7a809c; margin-top: 3px; padding: 0 3px; }
     .bubble-wrap.left  .bubble-time { align-self: flex-start; }
     .bubble-wrap.right .bubble-time { align-self: flex-end; }
+    /* ── Status de entrega das mensagens enviadas ── */
+    .msg-status          { display: block; font-size: .57rem; margin-top: 1px; padding: 0 3px; align-self: flex-end; }
+    .msg-status.st-send  { color: var(--text-muted); font-style: italic; }
+    .msg-status.st-sent  { color: #9aa0b4; }
+    .msg-status.st-ok    { color: #9aa0b4; }
+    .msg-status.st-read  { color: #3b82f6; }
+    .msg-status.st-fail  { color: #ef4444; }
     .new-msgs-divider {
       display: block; text-align: center; font-size: .62rem; font-weight: 600;
       color: #1d4ed8; padding: 3px 12px; margin: 6px auto;
@@ -5566,6 +5573,24 @@ function appendBubble(container, msg, optimistic = false, history = null) {
     }
   }
 
+  // Status de entrega (apenas para mensagens enviadas pela Sartec)
+  if (role !== "user" && !msg.sentByTemplate) {
+    let statusEl = null;
+    if (optimistic) {
+      statusEl = document.createElement("div");
+      statusEl.className   = "msg-status st-send";
+      statusEl.textContent = "Enviando...";
+    } else {
+      const si = formatDeliveryStatus(msg);
+      if (si) {
+        statusEl = document.createElement("div");
+        statusEl.className   = `msg-status ${si.cls}`;
+        statusEl.textContent = si.text;
+      }
+    }
+    if (statusEl) wrap.appendChild(statusEl);
+  }
+
   container.appendChild(wrap);
 }
 
@@ -8056,6 +8081,18 @@ document.addEventListener("DOMContentLoaded", function() {
   document.getElementById("sort-btn-recent")?.classList.toggle("active", convSort === "recent");
   document.getElementById("sort-btn-az")?.classList.toggle("active",     convSort === "az");
 });
+
+// ── Status de entrega das mensagens ──────────────────────────────────────────
+function formatDeliveryStatus(msg) {
+  if (msg.role === "user") return null;
+  const ds = msg.deliveryStatus;
+  if (ds === "failed")    return { text: "⚠️ Falhou",    cls: "st-fail" };
+  if (ds === "read")      return { text: "✓✓ Lida",      cls: "st-read" };
+  if (ds === "delivered") return { text: "✓✓ Entregue",  cls: "st-ok"   };
+  if (ds === "sent")      return { text: "✓ Enviado",    cls: "st-sent" };
+  if (msg.metaMessageId)  return { text: "✓ Enviado",    cls: "st-sent" };
+  return null;
+}
 
 // ── Horário das mensagens ─────────────────────────────────────────────────────
 function formatMsgTime(createdAt) {
