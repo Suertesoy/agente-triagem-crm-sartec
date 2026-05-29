@@ -1276,6 +1276,24 @@ async function handleReset(req, res) {
 // Ranking: nunca rebaixa status mais avançado (ex: read → delivered)
 const _STATUS_RANK = { sent: 1, delivered: 2, read: 3 };
 
+// Aplica o status de entrega a um objeto de mensagem, respeitando o ranking
+function applyStatusToMessage(msg, status, statusAt, errors) {
+  const currentRank = _STATUS_RANK[msg.deliveryStatus] || 0;
+  const newRank     = _STATUS_RANK[status]             || 0;
+
+  // Nunca rebaixa (read → delivered); failed sempre registra
+  if (status !== "failed" && newRank <= currentRank) return false;
+
+  msg.deliveryStatus   = status;
+  msg.deliveryStatusAt = statusAt;
+  if (status === "failed") {
+    msg.deliveryError = (errors?.length && errors[0]?.title) || "Falha na entrega";
+  } else {
+    msg.deliveryError = null;
+  }
+  return true;
+}
+
 async function handleDeliveryStatus(s) {
   const { id: msgId, status, recipient_id, timestamp, errors } = s;
   if (!msgId || !status) return;
@@ -1286,18 +1304,21 @@ async function handleDeliveryStatus(s) {
 
   try {
     const redis = getRedis();
-    const raw   = await redis.get(`sartec:${phone}`);
+    const sessionKey = `sartec:${phone}`;
+    const raw   = await redis.get(sessionKey);
     if (!raw) { console.log(`[Status] ⚠️ Sessão não encontrada para +${phone}`); return; }
 
     const session = JSON.parse(raw);
     const history = session.history || [];
     const idx     = history.findIndex(m => m.metaMessageId === msgId);
+
+    const statusAt = timestamp
+      ? new Date(parseInt(timestamp, 10) * 1000).toISOString()
+      : new Date().toISOString();
+
     if (idx === -1) {
       // Salva temporariamente em pendentes para resolver race condition (send.js aplicará ao salvar)
       const pendingKey = `sartec:pending_status:${msgId}`;
-      const statusAt = timestamp
-        ? new Date(parseInt(timestamp, 10) * 1000).toISOString()
-        : new Date().toISOString();
       const deliveryError = (status === "failed" && errors?.length)
         ? (errors[0]?.title || "Falha na entrega")
         : undefined;
@@ -1327,28 +1348,42 @@ async function handleDeliveryStatus(s) {
 
       await redis.set(pendingKey, JSON.stringify(pendingPayload), "EX", 300);
       console.log(`[Status] ⏳ Pendente salvo — ${status} → ${msgId} (+${phone})`);
+
+      // Recheck imediato: relê a sessão para verificar se o send.js gravou a mensagem nesse intervalo
+      const latestRaw = await redis.get(sessionKey);
+      if (latestRaw) {
+        try {
+          const latestSession = JSON.parse(latestRaw);
+          const latestHistory = latestSession.history || [];
+          const recheckIdx = latestHistory.findIndex(m => m.metaMessageId === msgId);
+
+          if (recheckIdx !== -1) {
+            const applied = applyStatusToMessage(latestHistory[recheckIdx], status, statusAt, errors);
+            if (applied) {
+              latestSession.history = latestHistory;
+              await redis.set(sessionKey, JSON.stringify(latestSession), "EX", SESSION_TTL);
+              console.log(`[Status] ✅ Pendente aplicado após recheck — ${status} → ${msgId} (+${phone})`);
+            } else {
+              console.log(`[Status] ⏳ Pendente ignorado no recheck por ranking inferior — ${status} → ${msgId} (+${phone})`);
+            }
+            await redis.del(pendingKey);
+            return;
+          }
+        } catch (err) {
+          console.warn(`[Status] ⚠️ Erro ao processar recheck para ${msgId}: ${err.message}`);
+        }
+      }
+
+      console.log(`[Status] ⏳ Pendente mantido — ${status} → ${msgId} (+${phone})`);
       return;
     }
 
-    const msg         = history[idx];
-    const currentRank = _STATUS_RANK[msg.deliveryStatus] || 0;
-    const newRank     = _STATUS_RANK[status]             || 0;
-
-    // Nunca rebaixa (read → delivered); failed sempre registra
-    if (status !== "failed" && newRank <= currentRank) return;
-
-    const statusAt = timestamp
-      ? new Date(parseInt(timestamp, 10) * 1000).toISOString()
-      : new Date().toISOString();
-
-    msg.deliveryStatus   = status;
-    msg.deliveryStatusAt = statusAt;
-    if (status === "failed" && errors?.length) {
-      msg.deliveryError = errors[0]?.title || "Falha na entrega";
-    }
+    const msg = history[idx];
+    const applied = applyStatusToMessage(msg, status, statusAt, errors);
+    if (!applied) return;
 
     session.history = history;
-    await redis.set(`sartec:${phone}`, JSON.stringify(session), "EX", SESSION_TTL);
+    await redis.set(sessionKey, JSON.stringify(session), "EX", SESSION_TTL);
     console.log(`[Status] ✅ ${status} → ${msgId} (+${phone})`);
   } catch (err) {
     console.error("[Status] ❌ Erro ao salvar status:", err.message);
