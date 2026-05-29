@@ -25,3 +25,4 @@ Thumbs.db
 _test_js.mjs
 fix_card.js
 .env.reset.tmp
+.env*.local
