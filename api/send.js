@@ -342,6 +342,19 @@ async function saveToHistory(phone, message) {
       session.lastDate       = now.slice(0, 10);
       session.lastActivityAt = now;
 
+      // Mensagem humana via CRM: marca tomada de controle para silenciar o bot.
+      // Não altera lastUserMessageAt/windowExpiresAt — janela de 24h é do cliente.
+      if (message.sentByHuman) {
+        session.handoffDone          = true;
+        session.postHandoffReplySent = true;
+        if (!session.handoffAt) session.handoffAt = now;
+        if (session.status !== "resolvido") session.status = "aguardando_humano";
+        if (!session.pipelineStatus) {
+          const isPJ = session.clientType === "pj" || session.demandType === "cotacao_pj";
+          session.pipelineStatus = isPJ ? "novo" : "em_atendimento";
+        }
+      }
+
       await redis.set(`sartec:${phone}`, JSON.stringify(session), "EX", SESSION_TTL);
     });
   } catch (err) {
