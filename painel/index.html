@@ -313,6 +313,32 @@
     }
     .tab-btn .tab-badge:empty { display: none; }
 
+    /* ── Toggle Almoço PJ (dentro da tab-bar) ── */
+    .tab-actions { margin-left: auto; display: flex; align-items: center; padding-right: 2px; }
+    .pj-lunch-toggle {
+      display: inline-flex; align-items: center; gap: 7px;
+      background: none; border: none; cursor: pointer;
+      padding: 5px 8px; border-radius: 6px;
+      font-size: .75rem; font-weight: 600; color: var(--text-secondary);
+      transition: color .15s, background .15s; white-space: nowrap; user-select: none;
+    }
+    .pj-lunch-toggle:hover { background: rgba(0,0,0,.05); color: var(--text-primary); }
+    .pj-lt-label { pointer-events: none; }
+    .pj-lt-track {
+      position: relative; width: 30px; height: 17px;
+      border-radius: 9px; background: #c7ccd8;
+      transition: background .2s; flex-shrink: 0; pointer-events: none;
+    }
+    .pj-lt-thumb {
+      position: absolute; top: 2px; left: 2px;
+      width: 13px; height: 13px; border-radius: 50%;
+      background: #fff; box-shadow: 0 1px 3px rgba(0,0,0,.25);
+      transition: left .18s;
+    }
+    .pj-lunch-toggle.lunch-active .pj-lt-track { background: #f59e0b; }
+    .pj-lunch-toggle.lunch-active .pj-lt-thumb { left: 15px; }
+    .pj-lunch-toggle.lunch-active { color: #92400e; }
+
     /* ══════════════════════════════════════════════════
        VIEWS
     ══════════════════════════════════════════════════ */
@@ -2920,16 +2946,6 @@
     }
     .btn-tutorial:hover { background: rgba(255,255,255,.14); color: #fff; }
 
-    /* ── Botão Almoço PJ ── */
-    .btn-lunch-pj {
-      background: rgba(255,255,255,.08); border: 1px solid rgba(255,255,255,.18);
-      color: rgba(255,255,255,.8); font-size: .72rem; font-weight: 600;
-      padding: 4px 10px; border-radius: 20px; cursor: pointer;
-      transition: background .15s, border-color .15s, color .15s; white-space: nowrap;
-    }
-    .btn-lunch-pj:hover { background: rgba(255,255,255,.16); }
-    .btn-lunch-pj.lunch-active { background: #f59e0b; border-color: #d97706; color: #1a1a2e; }
-    .btn-lunch-pj.lunch-active:hover { background: #d97706; }
 
     .mob-nav { display: none; }
     .mob-back-btn { display: none; }
@@ -3088,7 +3104,6 @@
       <span class="attendant-avatar" id="attendant-avatar">?</span>
       <span class="attendant-name" id="attendant-name">Perfil</span>
     </button>
-    <button class="btn-lunch-pj" id="btn-lunch-pj" onclick="togglePjLunchMode()" title="Ativar/desativar modo almoço PJ">Almoço PJ</button>
     <button class="btn-tutorial" onclick="restartOnboarding()" title="Ver tutorial">?</button>
     <button class="btn-logout" onclick="logout()">Sair</button>
   </div>
@@ -3114,6 +3129,12 @@
   <button class="tab-btn"        id="tab-convs" onclick="switchTab('convs')">
     Conversas
   </button>
+  <div class="tab-actions">
+    <button id="btn-lunch-pj" class="pj-lunch-toggle" onclick="togglePjLunchMode()" title="Ativar/desativar modo almoço PJ">
+      <span class="pj-lt-label">Almoço PJ</span>
+      <span class="pj-lt-track"><span class="pj-lt-thumb"></span></span>
+    </button>
+  </div>
 </div>
 
 <!-- ══════ VIEW PF ══════ -->
@@ -7698,10 +7719,8 @@ function renderPjLunchBtn() {
   if (!btn) return;
   if (_pjLunchState.enabled) {
     btn.classList.add("lunch-active");
-    btn.textContent = "Almoço PJ ativo";
   } else {
     btn.classList.remove("lunch-active");
-    btn.textContent = "Almoço PJ";
   }
 }
 
