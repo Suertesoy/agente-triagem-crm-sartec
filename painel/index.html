@@ -1635,39 +1635,67 @@
     }
     .bubble-img:hover { opacity: .88; }
 
-    .media-card {
+    /* ── Cards de PDF / Planilhas e Documentos Compactos ── */
+    .media-doc-card {
+      background: rgba(0,0,0,.04);
+      border: 1px solid rgba(0,0,0,.06);
+      border-radius: 8px;
+      padding: 6px 8px;
+      margin-top: 4px;
+      min-width: 160px;
+      max-width: min(280px, 72vw);
+      display: flex;
+      flex-direction: column;
+      gap: 4px;
+    }
+    .bubble.human .media-doc-card {
+      background: rgba(255,255,255,.1);
+      border-color: rgba(255,255,255,.12);
+    }
+    .media-doc-main {
       display: flex;
       align-items: center;
-      gap: 8px;
-      background: rgba(0,0,0,.06);
-      border-radius: 9px;
-      padding: 6px 10px;
-      margin-top: 4px;
-      min-width: 180px;
-      max-width: min(300px, 72vw);
+      gap: 6px;
     }
-    .media-card .media-icon { font-size: 1.25rem; flex-shrink: 0; }
-    .media-card .media-info { flex: 1; min-width: 0; }
-    .media-card .media-name {
-      font-size: .75rem;
-      font-weight: 700;
+    .media-doc-icon {
+      font-size: 1.1rem;
+      flex-shrink: 0;
+    }
+    .media-doc-name {
+      font-size: .72rem;
+      font-weight: 600;
       white-space: nowrap;
       overflow: hidden;
       text-overflow: ellipsis;
+      color: inherit;
       line-height: 1.2;
     }
-    .media-card .media-actions { display: flex; gap: 4px; margin-top: 3px; flex-wrap: wrap; }
+    .media-doc-actions {
+      display: flex;
+      gap: 4px;
+      margin-top: 1px;
+    }
     .btn-media {
-      font-size: .62rem;
-      padding: 2px 7px;
+      font-size: .58rem;
+      padding: 2px 6px;
       border: none;
-      border-radius: 5px;
+      border-radius: 4px;
       cursor: pointer;
-      background: rgba(0,0,0,.1);
+      background: rgba(0,0,0,.05);
       color: inherit;
       font-weight: 600;
+      line-height: 1.2;
     }
-    .btn-media:hover { background: rgba(0,0,0,.18); }
+    .btn-media:hover {
+      background: rgba(0,0,0,.1);
+    }
+    .bubble.human .btn-media {
+      background: rgba(255,255,255,.12);
+      color: #fff;
+    }
+    .bubble.human .btn-media:hover {
+      background: rgba(255,255,255,.2);
+    }
 
     /* ── Compositor ── */
     .composer {
@@ -5678,7 +5706,7 @@ function storeMedia(base64, mimeType) {
 function buildMediaCard(icon, name, base64, mimeType, canView) {
   const key  = storeMedia(base64, mimeType);
   const card = document.createElement("div");
-  card.className = "media-card";
+  card.className = "media-doc-card";
 
   const actionsHtml = canView
     ? `<button class="btn-media" onclick="viewMedia('${key}')">Visualizar</button>
@@ -5686,11 +5714,11 @@ function buildMediaCard(icon, name, base64, mimeType, canView) {
     : `<button class="btn-media" onclick="dlMedia('${key}','${esc(name)}')">Baixar</button>`;
 
   card.innerHTML = `
-    <span class="media-icon">${icon}</span>
-    <div class="media-info">
-      <div class="media-name">${esc(name)}</div>
-      <div class="media-actions">${actionsHtml}</div>
+    <div class="media-doc-main">
+      <span class="media-doc-icon">${icon}</span>
+      <div class="media-doc-name" title="${esc(name)}">${esc(name)}</div>
     </div>
+    <div class="media-doc-actions">${actionsHtml}</div>
   `;
   return card;
 }
