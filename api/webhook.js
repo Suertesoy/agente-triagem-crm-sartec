@@ -297,6 +297,19 @@ Use a saudação inicial.
 
 ---
 
+## CONTATO CONHECIDO (orientação interna — nunca mencionar ao cliente)
+
+Se no início da conversa aparecer uma anotação como **[CONTATO CONHECIDO — tipo anterior: PF]** ou **[CONTATO CONHECIDO — tipo anterior: PJ]**, use como pista inicial:
+
+- Tipo **PF**: se a mensagem não trouxer sinais de empresa, CNPJ, cotação formal ou faturamento, **não faça a pergunta inicial de PF/PJ** — pergunte diretamente em que pode ajudar.
+- Tipo **PJ**: **não faça a pergunta inicial de PF/PJ** — inicie o Fluxo PJ diretamente.
+- Se a mensagem atual trouxer sinais contrários ao histórico (ex: contato era PF mas menciona CNPJ, empresa, cotação formal, nota fiscal ou faturamento), reclassifique conforme os sinais presentes.
+- Se houver ambiguidade real, pergunte uma vez de forma leve: "Só para eu te direcionar melhor: esse pedido é para você ou para uma empresa?"
+
+Nunca diga ao cliente que existe um cadastro, histórico ou que você "já o conhece". Nunca mencione o tipo registrado.
+
+---
+
 ## ESTRUTURA INTERNA (não mostre ao cliente)
 tipo: PF | PJ | Fornecedor | Indefinido
 intencao: lista | cotacao | xerox | duvida | cadastro | outro
@@ -764,6 +777,55 @@ function shouldRespond(session, text) {
 }
 
 // ============================================================
+// RETORNO PÓS-RESOLUÇÃO
+// ============================================================
+
+/**
+ * "continuation" — resolvido há < 6h no mesmo dia → reabrir sem triagem
+ * "new_cycle"    — resolvido há ≥ 6h ou outro dia → novo ciclo de atendimento
+ * null           — sessão não está resolvida
+ */
+function getResolvedReturnMode(session) {
+  if (session.status !== "resolvido") return null;
+  if (!session.resolvedAt) return "new_cycle";
+
+  const resolvedMs = new Date(session.resolvedAt).getTime();
+  const diffMs     = Date.now() - resolvedMs;
+  const sameDay    = session.resolvedAt.slice(0, 10) === new Date().toISOString().slice(0, 10);
+
+  if (diffMs < 6 * 60 * 60 * 1000 && sameDay) return "continuation";
+  return "new_cycle";
+}
+
+/**
+ * Reseta campos operacionais para novo ciclo de atendimento.
+ * Preserva history (visível para o atendente), clientName, clientType e clientPhone.
+ */
+function resetToNewCycle(session) {
+  // Campos operacionais limpos — history é preservado intencionalmente
+  session.previousResolvedAt    = session.resolvedAt || null;
+  session.currentCycleStartedAt = new Date().toISOString();
+  session.handoffDone           = false;
+  session.postHandoffReplySent  = false;
+  session.handoffAt             = null;
+  session.resolvedAt            = null;
+  session.status                = "ativo";
+  session.pipelineStatus        = "novo";
+  session.cardTitle             = "";
+  session.demandType            = "outro";
+  session.priorityManual        = null;
+  session.dataLimite            = null;
+  session.formaEntrega          = null;
+  session.endereco              = null;
+  session.observacoes           = null;
+  session.escola                = null;
+  session.serie                 = null;
+  session.templateWaitingReply  = false;
+  session.lastTemplateType      = null;
+  session.audioCount            = 0;
+}
+
+// ============================================================
 // DOWNLOAD DE MÍDIA DA META
 // ============================================================
 
@@ -840,6 +902,35 @@ async function chatWithAgent(phone, userText, mediaPayload = null, name = "", me
   const _now = new Date();
   session.lastUserMessageAt = _now.toISOString();
   session.windowExpiresAt   = new Date(_now.getTime() + 24 * 60 * 60 * 1000).toISOString();
+
+  // ── Retorno pós-resolução ──────────────────────────────────────────────────
+  const _resolvedMode = getResolvedReturnMode(session);
+  if (_resolvedMode === "continuation") {
+    const _contContent = mediaPayload
+      ? [
+          { type: mediaPayload.mimeType === "application/pdf" ? "document" : "image",
+            source: { type: "base64", media_type: mediaPayload.mimeType, data: mediaPayload.base64 } },
+          { type: "text", text: userText || "O cliente enviou este arquivo." },
+        ]
+      : userText;
+    addMessage(session, "user", _contContent, meta);
+    session.status               = "aguardando_humano";
+    session.pipelineStatus       = "novo";
+    session.resolvedAt           = null;
+    session.handoffDone          = true;
+    session.postHandoffReplySent = true;
+    if (!session.handoffAt) session.handoffAt = _now.toISOString();
+    await saveSession(phone, session);
+    console.log(`[Agente] 🔄 Continuação pós-resolução — reaberto sem bot +${phone}`);
+    return null;
+  }
+  if (_resolvedMode === "new_cycle") {
+    console.log(`[Agente] 🆕 Novo ciclo pós-resolução — triagem reiniciada +${phone}`);
+    resetToNewCycle(session);
+    session.lastUserMessageAt = _now.toISOString();
+    session.windowExpiresAt   = new Date(_now.getTime() + 24 * 60 * 60 * 1000).toISOString();
+  }
+  // ──────────────────────────────────────────────────────────────────────────
 
   // Detecta se é resposta a template de retomada
   const isResumeReply = session.templateWaitingReply && session.lastTemplateType === "attendance_resume";
@@ -953,13 +1044,39 @@ async function chatWithAgent(phone, userText, mediaPayload = null, name = "", me
 
   addMessage(session, "user", userContent, meta);
 
-  console.log(`[Agente] 🤖 +${phone} | ${getMessages(session).length} msgs`);
+  // ── Contexto de contato conhecido ─────────────────────────────────────────
+  let _contactNote = null;
+  try {
+    const _rawContact = await getRedis().get(`sartec:contact:${phone}`);
+    const _contact = _rawContact ? JSON.parse(_rawContact) : null;
+    if (_contact?.clientType && !session.clientType) {
+      session.clientType = _contact.clientType;
+      console.log(`[Agente] 👤 clientType herdado do contato: ${_contact.clientType} +${phone}`);
+    }
+    const _noteParts = [];
+    if (_contact?.clientType) _noteParts.push(`tipo anterior: ${_contact.clientType.toUpperCase()}`);
+    if (_resolvedMode === "new_cycle") _noteParts.push(
+      "este contato possui histórico anterior, mas a mensagem mais recente inicia uma nova demanda" +
+      " — use o histórico apenas como contexto leve e priorize a solicitação atual"
+    );
+    if (_noteParts.length > 0) {
+      _contactNote = `[CONTATO CONHECIDO — ${_noteParts.join("; ")}]`;
+    }
+  } catch (_ce) { /* falha silenciosa — não bloqueia o atendimento */ }
+
+  const _baseMsgs = getMessages(session);
+  const _finalMsgs = _contactNote
+    ? [{ role: "user", content: _contactNote }, { role: "assistant", content: "Entendido." }, ..._baseMsgs]
+    : _baseMsgs;
+  // ──────────────────────────────────────────────────────────────────────────
+
+  console.log(`[Agente] 🤖 +${phone} | ${_baseMsgs.length} msgs`);
 
   const aiResponse = await anthropic.messages.create({
     model:      "claude-haiku-4-5-20251001",
     max_tokens: 500,
     system:     SYSTEM_PROMPT,
-    messages:   getMessages(session),
+    messages:   _finalMsgs,
   });
 
   const reply = aiResponse.content[0]?.type === "text" ? aiResponse.content[0].text : "";
@@ -1171,6 +1288,28 @@ async function handleIncomingMessage(req, res) {
               session.lastUserMessageAt = _audioNow.toISOString();
               session.windowExpiresAt   = new Date(_audioNow.getTime() + 24 * 60 * 60 * 1000).toISOString();
 
+              // ── Retorno pós-resolução (áudio) ──────────────────────────────────────
+              const _audioResolved = getResolvedReturnMode(session);
+              if (_audioResolved === "continuation") {
+                addMessage(session, "user", "[áudio]", _audioMeta);
+                session.status               = "aguardando_humano";
+                session.pipelineStatus       = "novo";
+                session.resolvedAt           = null;
+                session.handoffDone          = true;
+                session.postHandoffReplySent = true;
+                if (!session.handoffAt) session.handoffAt = _audioNow.toISOString();
+                await saveSession(from, session);
+                console.log(`[Audio] 🔄 Continuação pós-resolução — reaberto sem bot +${from}`);
+                return null;
+              }
+              if (_audioResolved === "new_cycle") {
+                console.log(`[Audio] 🆕 Novo ciclo pós-resolução +${from}`);
+                resetToNewCycle(session);
+                session.lastUserMessageAt = _audioNow.toISOString();
+                session.windowExpiresAt   = new Date(_audioNow.getTime() + 24 * 60 * 60 * 1000).toISOString();
+              }
+              // ──────────────────────────────────────────────────────────────────────
+
               // Template de retomada → humano assume
               if (session.templateWaitingReply) {
                 const isResume = session.lastTemplateType === "attendance_resume";
@@ -1306,6 +1445,26 @@ async function handleIncomingMessage(req, res) {
                 const _docNow = new Date();
                 _docSession.lastUserMessageAt = _docNow.toISOString();
                 _docSession.windowExpiresAt   = new Date(_docNow.getTime() + 24 * 60 * 60 * 1000).toISOString();
+
+                // ── Retorno pós-resolução (documento não-PDF) ──────────────────────────
+                const _docResolved = getResolvedReturnMode(_docSession);
+                if (_docResolved === "continuation") {
+                  _docSession.status               = "aguardando_humano";
+                  _docSession.pipelineStatus       = "novo";
+                  _docSession.resolvedAt           = null;
+                  _docSession.handoffDone          = true;
+                  _docSession.postHandoffReplySent = true;
+                  if (!_docSession.handoffAt) _docSession.handoffAt = _docNow.toISOString();
+                  _docSession._stopFlow = true;
+                  console.log(`[Doc] 🔄 Continuação pós-resolução — reaberto sem bot +${from}`);
+                } else if (_docResolved === "new_cycle") {
+                  console.log(`[Doc] 🆕 Novo ciclo pós-resolução +${from}`);
+                  resetToNewCycle(_docSession);
+                  _docSession.lastUserMessageAt = _docNow.toISOString();
+                  _docSession.windowExpiresAt   = new Date(_docNow.getTime() + 24 * 60 * 60 * 1000).toISOString();
+                }
+                // ──────────────────────────────────────────────────────────────────────
+
                 if (_docSession.templateWaitingReply) {
                   const isResume = _docSession.lastTemplateType === "attendance_resume";
                   _docSession.templateWaitingReply = false;
