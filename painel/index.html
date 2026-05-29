@@ -7530,8 +7530,9 @@ const ATTENDANT_PROFILES = [
   { id: "ana_flores", name: "Ana Flores", initials: "AF", color: "#8b5cf6" },
   { id: "pedro",      name: "Pedro",      initials: "PE", color: "#10b981" },
   { id: "eli",        name: "Eli",        initials: "EL", color: "#f59e0b" },
-  { id: "ilza",       name: "Ilza",       initials: "IL", color: "#ec4899" },
+  { id: "ilsa",       name: "Ilsa",       initials: "IL", color: "#ec4899" },
   { id: "denise",     name: "Denise",     initials: "DE", color: "#06b6d4" },
+  { id: "lucas",      name: "Lucas",      initials: "LU", color: "#f97316" },
 ];
 
 function getCurrentAttendant() {
@@ -7548,6 +7549,7 @@ function getAttendantFabColors(color) {
     "#f59e0b": { bg:"#fef3c7", hover:"#fde68a", text:"#78350f" }, // âmbar
     "#ec4899": { bg:"#fce7f3", hover:"#fbcfe8", text:"#831843" }, // rosa
     "#06b6d4": { bg:"#cffafe", hover:"#a5f3fc", text:"#0c4a6e" }, // ciano
+    "#f97316": { bg:"#ffedd5", hover:"#fed7aa", text:"#7c2d12" }, // laranja
   };
   return map[color] || { bg:"#dbeafe", hover:"#bfdbfe", text:"#1e3a5f" };
 }
@@ -7607,6 +7609,18 @@ function closeAttendantPicker() {
 }
 
 function initAttendant() {
+  // migração: corrige "Ilza" → "Ilsa" em registros antigos no localStorage
+  const raw = localStorage.getItem("sartec_current_attendant");
+  if (raw) {
+    try {
+      const stored = JSON.parse(raw);
+      if (stored.id === "ilza" || stored.name === "Ilza") {
+        const migrated = { ...stored, id: "ilsa", name: "Ilsa" };
+        localStorage.setItem("sartec_current_attendant", JSON.stringify(migrated));
+      }
+    } catch { /* ignora JSON inválido */ }
+  }
+
   const saved = getCurrentAttendant();
   if (saved) {
     renderAttendantBadge(saved);
