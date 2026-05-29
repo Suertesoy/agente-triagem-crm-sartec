@@ -959,6 +959,44 @@
     .contact-reopen-btn:hover { background:var(--brand-navy); color:#fff; }
     .contact-item-active { background: #e8edf9 !important; }
 
+    /* ── Agrupamento alfabético de contatos ── */
+    .contacts-list-wrap { flex: 1; min-height: 0; overflow: hidden; display: flex; flex-direction: row; }
+    .contacts-letter-section { }
+    .contacts-letter-title {
+      font-size: .65rem; font-weight: 700; color: var(--brand-navy);
+      padding: 5px 10px 3px; text-transform: uppercase; letter-spacing: .06em;
+      background: #eef0f7; border-bottom: 1px solid var(--border);
+      position: sticky; top: 0; z-index: 1;
+    }
+    .contacts-alpha-index {
+      width: 18px; flex-shrink: 0; display: flex; flex-direction: column;
+      align-items: center; overflow: hidden; padding: 4px 0;
+      background: #f4f5fa; border-left: 1px solid var(--border);
+    }
+    .contacts-alpha-index a {
+      font-size: .52rem; font-weight: 700; color: var(--text-secondary);
+      padding: 2px 0; line-height: 1.25; cursor: pointer;
+      display: block; width: 100%; text-align: center; text-decoration: none;
+      transition: color .1s, background .1s;
+    }
+    .contacts-alpha-index a:hover { color: var(--brand-navy); background: rgba(26,42,94,.1); }
+    @media (max-width: 768px) { .contacts-alpha-index { display: none !important; } }
+
+    /* ── Ordenação de conversas ── */
+    .conv-sort-tabs {
+      display: flex; gap: 4px; padding: 4px 8px 0;
+      border-bottom: 1px solid var(--border);
+      background: #fff;
+    }
+    .conv-sort-btn {
+      font-size: .68rem; font-weight: 600; padding: 3px 10px;
+      border: 1px solid var(--border); border-radius: 12px;
+      background: transparent; color: var(--text-secondary);
+      cursor: pointer; transition: background .12s, color .12s, border-color .12s;
+    }
+    .conv-sort-btn:hover { background: #f0f2fa; color: var(--text-primary); }
+    .conv-sort-btn.active { background: var(--brand-navy); color: #fff; border-color: var(--brand-navy); }
+
     /* ── Detalhe do contato (painel direito) ──────────────────── */
     .cd-wrap { flex:1; min-height:0; overflow-y:auto; padding:20px 24px; box-sizing:border-box; }
     .cd-header { display:flex; align-items:center; gap:14px; margin-bottom:20px; padding-bottom:16px; border-bottom:1px solid var(--border); }
@@ -3180,7 +3218,14 @@
         Pessoa Jurídica <span class="filter-pill-count" id="pill-count-pj">0</span>
       </button>
     </div>
-    <div class="convs-list" id="convs-list"></div>
+    <div class="conv-sort-tabs" id="conv-sort-tabs">
+      <button class="conv-sort-btn active" id="sort-btn-recent" onclick="setConvSort('recent')">Recentes</button>
+      <button class="conv-sort-btn" id="sort-btn-az" onclick="setConvSort('az')">A-Z</button>
+    </div>
+    <div class="contacts-list-wrap" id="contacts-list-wrap">
+      <div class="convs-list" id="convs-list"></div>
+      <div class="contacts-alpha-index" id="contacts-alpha-index" style="display:none"></div>
+    </div>
   </div>
   <div class="convs-main" id="convs-main">
     <div class="convs-empty" id="convs-empty">
@@ -3593,6 +3638,7 @@ let audioCtx    = null;
 
 // aba Conversas — filtro, pin, não lida, menu contextual
 let convFilter       = sessionStorage.getItem("sartec_conv_filter") || "all";
+let convSort         = sessionStorage.getItem("sartec_conv_sort")   || "recent";
 let convsSectionMode = 'convs';
 let _contactDetailPhone = null;
 let pinnedConvs  = [];
@@ -3912,7 +3958,7 @@ function showBrowserNotification(clientName) {
 function convsListSignature(convs) {
   const f = convFilter === "pf" ? convs.filter(c => (c.clientType||"pf") === "pf")
           : convFilter === "pj" ? convs.filter(c => c.clientType === "pj") : convs;
-  return convFilter + "|" + f.map(c =>
+  return convSort + "|" + convFilter + "|" + f.map(c =>
     [c.phone, c.lastMessage || "", c.status || "", c.lastActivity || "",
      c.pipelineStatus || "", c.activeAttendant?.id || "",
      unreadConvs.includes(c.phone) ? 1 : 0,
@@ -4972,6 +5018,15 @@ function renderConvsList(convs) {
   let filtered = convs;
   if (convFilter === "pf") filtered = convs.filter(c => (c.clientType||"pf") === "pf");
   else if (convFilter === "pj") filtered = convs.filter(c => c.clientType === "pj");
+
+  // Aplica ordenação A-Z se selecionada (Recentes usa a ordem do servidor)
+  if (convSort === "az") {
+    filtered = [...filtered].sort((a, b) => {
+      const na = normalizeSortText(a.clientName || a.phone || "");
+      const nb = normalizeSortText(b.clientName || b.phone || "");
+      return na < nb ? -1 : na > nb ? 1 : 0;
+    });
+  }
 
   if (!filtered.length) {
     list.innerHTML = `<div style="padding:24px;text-align:center;color:var(--text-muted);font-size:.82rem">Nenhuma conversa encontrada</div>`;
@@ -6907,10 +6962,14 @@ function setConvsMode(mode) {
   const btnContacts = document.getElementById('mode-btn-contacts');
   if (btnConvs)    btnConvs.classList.toggle('active', mode === 'convs');
   if (btnContacts) btnContacts.classList.toggle('active', mode === 'contacts');
-  const filterEl = document.querySelector('.convs-filter');
-  const newBtnEl = document.querySelector('.convs-new-btn');
-  if (filterEl) filterEl.style.display = mode === 'convs' ? '' : 'none';
-  if (newBtnEl) newBtnEl.style.display = mode === 'convs' ? '' : 'none';
+  const filterEl   = document.querySelector('.convs-filter');
+  const newBtnEl   = document.querySelector('.convs-new-btn');
+  const sortTabsEl = document.getElementById('conv-sort-tabs');
+  const alphaEl    = document.getElementById('contacts-alpha-index');
+  if (filterEl)   filterEl.style.display   = mode === 'convs'     ? '' : 'none';
+  if (newBtnEl)   newBtnEl.style.display   = mode === 'convs'     ? '' : 'none';
+  if (sortTabsEl) sortTabsEl.style.display = mode === 'convs'     ? '' : 'none';
+  if (alphaEl && mode !== 'contacts') alphaEl.style.display = 'none';
   const searchInput = document.getElementById('convs-search-input');
   if (searchInput) {
     searchInput.value = '';
@@ -6939,11 +6998,32 @@ function setConvsMode(mode) {
   }
 }
 
+// ── Helpers de ordenação ─────────────────────────────────────────────────────
+function normalizeSortText(value) {
+  return String(value || "").trim()
+    .normalize("NFD").replace(/[̀-ͯ]/g, "")
+    .toLowerCase();
+}
+function getInitialLetter(name) {
+  const ch = normalizeSortText(name)[0] || "";
+  return /[a-z]/.test(ch) ? ch.toUpperCase() : "#";
+}
+function setConvSort(sort) {
+  convSort = sort;
+  sessionStorage.setItem("sartec_conv_sort", sort);
+  document.querySelectorAll(".conv-sort-btn").forEach(b => {
+    b.classList.toggle("active", b.id === `sort-btn-${sort}`);
+  });
+  const list = document.getElementById("convs-list");
+  if (list) list._lastSig = null; // força re-render
+  renderConvsList(allConversationsList);
+}
+
 async function loadContacts() {
   const search = document.getElementById('convs-search-input')?.value || '';
   const list   = document.getElementById('convs-list');
   try {
-    const url = `/api/contacts?limit=30${search ? `&search=${encodeURIComponent(search)}` : ''}`;
+    const url = `/api/contacts?limit=50${search ? `&search=${encodeURIComponent(search)}` : ''}`;
     const res  = await fetch(url);
     if (!res.ok) throw new Error('HTTP ' + res.status);
     const data = await res.json();
@@ -6962,9 +7042,12 @@ async function loadContacts() {
 }
 
 function renderContactsList(contacts) {
-  const list = document.getElementById('convs-list');
+  const list      = document.getElementById('convs-list');
+  const alphaIdx  = document.getElementById('contacts-alpha-index');
   if (!list) return;
   list.innerHTML = '';
+  if (alphaIdx) { alphaIdx.innerHTML = ''; alphaIdx.style.display = 'none'; }
+
   if (!contacts.length) {
     const search = document.getElementById('convs-search-input')?.value || '';
     list.innerHTML = `<div style="padding:24px;text-align:center;color:var(--text-muted);font-size:.82rem">${
@@ -6972,12 +7055,56 @@ function renderContactsList(contacts) {
     }</div>`;
     return;
   }
+
+  // Ordena ignorando acentos e caixa
   const sorted = [...contacts].sort((a, b) => {
-    const na = a.clientName || a.whatsappName || a.phone || '';
-    const nb = b.clientName || b.whatsappName || b.phone || '';
-    return na.localeCompare(nb, 'pt-BR', { sensitivity: 'base' });
+    const na = normalizeSortText(a.clientName || a.whatsappName || a.phone || '');
+    const nb = normalizeSortText(b.clientName || b.whatsappName || b.phone || '');
+    return na < nb ? -1 : na > nb ? 1 : 0;
   });
-  sorted.forEach(c => list.appendChild(buildContactItem(c)));
+
+  // Agrupa por letra inicial
+  const groups = {};
+  sorted.forEach(c => {
+    const name   = c.clientName || c.whatsappName || c.phone || 'Sem nome';
+    const letter = getInitialLetter(name);
+    if (!groups[letter]) groups[letter] = [];
+    groups[letter].push(c);
+  });
+  const letters = Object.keys(groups).sort((a, b) => {
+    if (a === "#") return 1;
+    if (b === "#") return -1;
+    return a < b ? -1 : 1;
+  });
+
+  // Renderiza seções por letra
+  letters.forEach(letter => {
+    const section = document.createElement('div');
+    section.className = 'contacts-letter-section';
+    section.id = `contacts-letter-${letter}`;
+    const title = document.createElement('div');
+    title.className = 'contacts-letter-title';
+    title.textContent = letter;
+    section.appendChild(title);
+    groups[letter].forEach(c => section.appendChild(buildContactItem(c)));
+    list.appendChild(section);
+  });
+
+  // Régua lateral de letras (apenas quando há mais de 2 letras e não mobile)
+  if (alphaIdx && letters.length > 2) {
+    alphaIdx.style.display = '';
+    letters.forEach(letter => {
+      const a = document.createElement('a');
+      a.textContent = letter;
+      a.title = letter;
+      a.addEventListener('click', e => {
+        e.preventDefault();
+        document.getElementById(`contacts-letter-${letter}`)
+          ?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      });
+      alphaIdx.appendChild(a);
+    });
+  }
 }
 
 function buildContactItem(c) {
@@ -7712,6 +7839,11 @@ function introduceAttendant(prefix) {
 // DOMContentLoaded garante que o FAB já existe no DOM quando initAttendant roda
 document.addEventListener("DOMContentLoaded", initAttendant);
 document.addEventListener("DOMContentLoaded", initPjLunchMode);
+document.addEventListener("DOMContentLoaded", function() {
+  // Reflete escolha salva de ordenação de conversas
+  document.getElementById("sort-btn-recent")?.classList.toggle("active", convSort === "recent");
+  document.getElementById("sort-btn-az")?.classList.toggle("active",     convSort === "az");
+});
 
 // ── Horário das mensagens ─────────────────────────────────────────────────────
 function formatMsgTime(createdAt) {
