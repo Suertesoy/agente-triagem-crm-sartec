@@ -310,6 +310,20 @@ Nunca diga ao cliente que existe um cadastro, histórico ou que você "já o con
 
 ---
 
+## MODO ALMOÇO PJ (orientação interna — nunca mencionar diretamente ao cliente)
+
+Se uma anotação interna indicar que o setor de Pessoa Jurídica está em horário de almoço:
+
+- Continue a triagem normalmente para clientes PJ.
+- **Somente no momento do handoff PJ**, use a seguinte mensagem exata (não adapte, não resuma):
+  > "Perfeito, registrei as informações. Vou passar para nossa equipe responsável por empresas. No momento esse setor está em horário de almoço, mas sua solicitação será respondida assim que o setor retornar."
+- Nunca use essa mensagem para PF.
+- Nunca diga que a loja está fechada — apenas o setor PJ está em pausa.
+- Não interrompa a triagem; mencione o almoço somente no handoff.
+- Se o contexto interno não indicar almoço PJ, use a mensagem de handoff padrão.
+
+---
+
 ## ESTRUTURA INTERNA (não mostre ao cliente)
 tipo: PF | PJ | Fornecedor | Indefinido
 intencao: lista | cotacao | xerox | duvida | cadastro | outro
@@ -657,7 +671,7 @@ function generateCardTitle(session) {
 }
 
 function addMessage(session, role, content, meta = {}) {
-  const item = { role, content };
+  const item = { role, content, createdAt: new Date().toISOString() };
   if (meta.metaMessageId)      item.metaMessageId      = meta.metaMessageId;
   if (meta.replyToMsgId)       item.replyToMsgId       = meta.replyToMsgId;
   if (meta.replyToFrom)        item.replyToFrom        = meta.replyToFrom;
@@ -665,6 +679,7 @@ function addMessage(session, role, content, meta = {}) {
   if (meta.mediaMimeType)      item.mediaMimeType      = meta.mediaMimeType;
   if (meta.transcription)      item.transcription      = meta.transcription;
   if (meta.transcriptionError) item.transcriptionError = meta.transcriptionError;
+  if (meta.pjLunchAutoReply)   item.pjLunchAutoReply   = true;
   session.history.push(item);
 
   if (role === "assistant" && isHandoff(content)) {
@@ -823,6 +838,20 @@ function resetToNewCycle(session) {
   session.templateWaitingReply  = false;
   session.lastTemplateType      = null;
   session.audioCount            = 0;
+}
+
+// ============================================================
+// MODO ALMOÇO PJ
+// ============================================================
+
+async function getPjLunchMode() {
+  try {
+    const raw = await getRedis().get("sartec:settings:pjLunchMode");
+    if (!raw) return { enabled: false };
+    return JSON.parse(raw);
+  } catch {
+    return { enabled: false };
+  }
 }
 
 // ============================================================
@@ -1000,6 +1029,23 @@ async function chatWithAgent(phone, userText, mediaPayload = null, name = "", me
 
   if (decision === false) {
     addMessage(session, "user", textToCheck || "[mensagem]", meta);
+
+    // PJ Almoço — auto-resposta única para PJ já triado em silêncio pós-handoff
+    if (session.clientType === "pj" && session.status !== "resolvido") {
+      try {
+        const _lunchSt = await getPjLunchMode();
+        if (_lunchSt.enabled && session.pjLunchAutoReplySentFor !== _lunchSt.updatedAt) {
+          const _lunchMsg = "Olá! Estou em horário de almoço agora, assim que retornar atendo a sua solicitação.";
+          addMessage(session, "assistant", _lunchMsg, { pjLunchAutoReply: true });
+          session.pjLunchAutoReplySentFor = _lunchSt.updatedAt;
+          session.pjLunchAutoReplySentAt  = new Date().toISOString();
+          await saveSession(phone, session);
+          await sendTextMessage(phone, _lunchMsg);
+          return _lunchMsg;
+        }
+      } catch { /* falha silenciosa */ }
+    }
+
     await saveSession(phone, session);
     return null;
   }
@@ -1044,7 +1090,7 @@ async function chatWithAgent(phone, userText, mediaPayload = null, name = "", me
 
   addMessage(session, "user", userContent, meta);
 
-  // ── Contexto de contato conhecido ─────────────────────────────────────────
+  // ── Contexto de contato conhecido + Modo Almoço PJ ───────────────────────
   let _contactNote = null;
   try {
     const _rawContact = await getRedis().get(`sartec:contact:${phone}`);
@@ -1064,10 +1110,23 @@ async function chatWithAgent(phone, userText, mediaPayload = null, name = "", me
     }
   } catch (_ce) { /* falha silenciosa — não bloqueia o atendimento */ }
 
+  let _lunchNote = null;
+  try {
+    const _lunchState = await getPjLunchMode();
+    if (_lunchState.enabled) {
+      _lunchNote = `[CONTEXTO INTERNO: o setor de Pessoa Jurídica está em horário de almoço. ` +
+        `Se este atendimento for PJ e você for encaminhar para a equipe, use exatamente: ` +
+        `"Perfeito, registrei as informações. Vou passar para nossa equipe responsável por empresas. ` +
+        `No momento esse setor está em horário de almoço, mas sua solicitação será respondida assim que o setor retornar." ` +
+        `Não mencione isso para PF.]`;
+    }
+  } catch { /* falha silenciosa */ }
+
   const _baseMsgs = getMessages(session);
-  const _finalMsgs = _contactNote
-    ? [{ role: "user", content: _contactNote }, { role: "assistant", content: "Entendido." }, ..._baseMsgs]
-    : _baseMsgs;
+  const _prefixPairs = [];
+  if (_contactNote) _prefixPairs.push({ role: "user", content: _contactNote }, { role: "assistant", content: "Entendido." });
+  if (_lunchNote)   _prefixPairs.push({ role: "user", content: _lunchNote   }, { role: "assistant", content: "Entendido." });
+  const _finalMsgs = _prefixPairs.length > 0 ? [..._prefixPairs, ..._baseMsgs] : _baseMsgs;
   // ──────────────────────────────────────────────────────────────────────────
 
   console.log(`[Agente] 🤖 +${phone} | ${_baseMsgs.length} msgs`);
@@ -1333,6 +1392,23 @@ async function handleIncomingMessage(req, res) {
               // Pós-handoff: registra transcrição e fica em silêncio
               if (session.handoffDone) {
                 addMessage(session, "user", "[áudio]", _audioMeta);
+
+                // PJ Almoço — auto-resposta única para PJ já triado
+                if (session.clientType === "pj" && session.status !== "resolvido") {
+                  try {
+                    const _audioLunch = await getPjLunchMode();
+                    if (_audioLunch.enabled && session.pjLunchAutoReplySentFor !== _audioLunch.updatedAt) {
+                      const _lunchMsg = "Olá! Estou em horário de almoço agora, assim que retornar atendo a sua solicitação.";
+                      addMessage(session, "assistant", _lunchMsg, { pjLunchAutoReply: true });
+                      session.pjLunchAutoReplySentFor = _audioLunch.updatedAt;
+                      session.pjLunchAutoReplySentAt  = new Date().toISOString();
+                      await saveSession(from, session);
+                      await sendTextMessage(from, _lunchMsg);
+                      return _lunchMsg;
+                    }
+                  } catch { /* falha silenciosa */ }
+                }
+
                 await saveSession(from, session);
                 return null;
               }

@@ -2920,6 +2920,17 @@
     }
     .btn-tutorial:hover { background: rgba(255,255,255,.14); color: #fff; }
 
+    /* ── Botão Almoço PJ ── */
+    .btn-lunch-pj {
+      background: rgba(255,255,255,.08); border: 1px solid rgba(255,255,255,.18);
+      color: rgba(255,255,255,.8); font-size: .72rem; font-weight: 600;
+      padding: 4px 10px; border-radius: 20px; cursor: pointer;
+      transition: background .15s, border-color .15s, color .15s; white-space: nowrap;
+    }
+    .btn-lunch-pj:hover { background: rgba(255,255,255,.16); }
+    .btn-lunch-pj.lunch-active { background: #f59e0b; border-color: #d97706; color: #1a1a2e; }
+    .btn-lunch-pj.lunch-active:hover { background: #d97706; }
+
     .mob-nav { display: none; }
     .mob-back-btn { display: none; }
     .mob-only { display: none; }
@@ -3077,6 +3088,7 @@
       <span class="attendant-avatar" id="attendant-avatar">?</span>
       <span class="attendant-name" id="attendant-name">Perfil</span>
     </button>
+    <button class="btn-lunch-pj" id="btn-lunch-pj" onclick="togglePjLunchMode()" title="Ativar/desativar modo almoço PJ">Almoço PJ</button>
     <button class="btn-tutorial" onclick="restartOnboarding()" title="Ver tutorial">?</button>
     <button class="btn-logout" onclick="logout()">Sair</button>
   </div>
@@ -5415,6 +5427,17 @@ function appendBubble(container, msg, optimistic = false, history = null) {
     wrap.appendChild(replyBtn);
   }
 
+  // Horário da mensagem (America/Sao_Paulo)
+  if (!optimistic) {
+    const _t = formatMsgTime(msg.createdAt);
+    if (_t) {
+      const timeEl = document.createElement("div");
+      timeEl.className   = "bubble-time";
+      timeEl.textContent = _t;
+      wrap.appendChild(timeEl);
+    }
+  }
+
   container.appendChild(wrap);
 }
 
@@ -7642,6 +7665,65 @@ function introduceAttendant(prefix) {
 
 // DOMContentLoaded garante que o FAB já existe no DOM quando initAttendant roda
 document.addEventListener("DOMContentLoaded", initAttendant);
+document.addEventListener("DOMContentLoaded", initPjLunchMode);
+
+// ── Horário das mensagens ─────────────────────────────────────────────────────
+function formatMsgTime(createdAt) {
+  if (!createdAt) return null;
+  try {
+    const d     = new Date(createdAt);
+    const now   = new Date();
+    const tz    = "America/Sao_Paulo";
+    const isToday = d.toLocaleDateString("pt-BR", { timeZone: tz }) ===
+                    now.toLocaleDateString("pt-BR", { timeZone: tz });
+    const timePart = d.toLocaleTimeString("pt-BR", { timeZone: tz, hour: "2-digit", minute: "2-digit", hour12: false });
+    if (isToday) return timePart;
+    const datePart = d.toLocaleDateString("pt-BR", { timeZone: tz, day: "2-digit", month: "2-digit" });
+    return `${datePart} ${timePart}`;
+  } catch { return null; }
+}
+
+// ── Almoço PJ ─────────────────────────────────────────────────────────────────
+let _pjLunchState = { enabled: false, updatedAt: null, updatedBy: null };
+
+async function initPjLunchMode() {
+  try {
+    const res = await fetch("/api/active-attendant?action=getPjLunchMode");
+    if (res.ok) { _pjLunchState = await res.json(); renderPjLunchBtn(); }
+  } catch {}
+}
+
+function renderPjLunchBtn() {
+  const btn = document.getElementById("btn-lunch-pj");
+  if (!btn) return;
+  if (_pjLunchState.enabled) {
+    btn.classList.add("lunch-active");
+    btn.textContent = "Almoço PJ ativo";
+  } else {
+    btn.classList.remove("lunch-active");
+    btn.textContent = "Almoço PJ";
+  }
+}
+
+async function togglePjLunchMode() {
+  const newEnabled = !_pjLunchState.enabled;
+  const att        = getCurrentAttendant();
+  try {
+    const res = await fetch("/api/active-attendant", {
+      method:  "POST",
+      headers: { "Content-Type": "application/json" },
+      body:    JSON.stringify({ action: "setPjLunchMode", enabled: newEnabled, updatedBy: att?.name || null }),
+    });
+    if (res.ok) {
+      const data = await res.json();
+      _pjLunchState = { enabled: data.enabled, updatedAt: data.updatedAt, updatedBy: data.updatedBy };
+      renderPjLunchBtn();
+      showToast(newEnabled ? "🍽️ Almoço PJ ativado" : "✅ Almoço PJ desativado", "t-ok");
+    } else {
+      showToast("Erro ao alterar modo almoço PJ", "t-err");
+    }
+  } catch { showToast("Erro ao alterar modo almoço PJ", "t-err"); }
+}
 
 // iOS Safari: touchend no container bypassa o defer de click em scroll containers
 document.addEventListener("DOMContentLoaded", function() {

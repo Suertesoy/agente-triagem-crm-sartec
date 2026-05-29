@@ -126,6 +126,7 @@ export default async function handler(req, res) {
         sentByHuman:   m.sentByHuman   || false,
         attendantId:   m.attendantId   || null,
         attendantName: m.attendantName || null,
+        createdAt:     m.createdAt     || null,
       };
 
       if (m.metaMessageId) item.metaMessageId = m.metaMessageId;
@@ -141,6 +142,7 @@ export default async function handler(req, res) {
 
       if (m.transcription)      item.transcription      = m.transcription;
       if (m.transcriptionError) item.transcriptionError = m.transcriptionError;
+      if (m.pjLunchAutoReply)   item.pjLunchAutoReply   = true;
 
       return item;
     });

@@ -336,6 +336,7 @@ async function saveToHistory(phone, message) {
       if (!raw) return;
 
       const session = JSON.parse(raw);
+      if (!message.createdAt) message.createdAt = new Date().toISOString();
       session.history.push(message);
       const now = new Date().toISOString();
       session.lastHumanReply = now;
