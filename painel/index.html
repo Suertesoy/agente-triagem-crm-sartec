@@ -1564,16 +1564,31 @@
     .bubble.optimistic { opacity: .62; }
 
     .bubble-label { font-size: .62rem; color: var(--text-secondary); margin-top: 2px; padding: 0 3px; }
-    .bubble-time  { display: block; font-size: .62rem; color: #7a809c; margin-top: 3px; padding: 0 3px; }
-    .bubble-wrap.left  .bubble-time { align-self: flex-start; }
-    .bubble-wrap.right .bubble-time { align-self: flex-end; }
+    .bubble-time  { font-size: .62rem; color: #7a809c; }
     /* ── Status de entrega das mensagens enviadas ── */
-    .msg-status          { display: block; font-size: .57rem; margin-top: 1px; padding: 0 3px; align-self: flex-end; }
+    .msg-status          { font-size: .57rem; }
     .msg-status.st-send  { color: var(--text-muted); font-style: italic; }
     .msg-status.st-sent  { color: #9aa0b4; }
     .msg-status.st-ok    { color: #9aa0b4; }
     .msg-status.st-read  { color: #3b82f6; }
     .msg-status.st-fail  { color: #ef4444; }
+
+    /* ── Linha de metadados compacta abaixo da bolha ── */
+    .bubble-meta-line {
+      display: flex;
+      gap: 4px;
+      align-items: center;
+      margin-top: 3px;
+      padding: 0 3px;
+      font-size: .62rem;
+      color: #7a809c;
+      line-height: 1.2;
+    }
+    .bubble-wrap.right .bubble-meta-line { justify-content: flex-end; text-align: right; }
+    .bubble-wrap.left  .bubble-meta-line { justify-content: flex-start; text-align: left; }
+    .bubble-meta-line .bubble-time { display: inline; padding: 0; }
+    .bubble-meta-line .msg-status { display: inline; font-size: .62rem; padding: 0; }
+    .bubble-meta-line .meta-dot { color: #7a809c; opacity: 0.6; }
     .new-msgs-divider {
       display: block; text-align: center; font-size: .62rem; font-weight: 600;
       color: #1d4ed8; padding: 3px 12px; margin: 6px auto;
@@ -1623,15 +1638,15 @@
     .media-card {
       display: flex;
       align-items: center;
-      gap: 10px;
+      gap: 8px;
       background: rgba(0,0,0,.06);
       border-radius: 9px;
-      padding: 9px 12px;
+      padding: 6px 10px;
       margin-top: 4px;
-      min-width: 190px;
+      min-width: 180px;
       max-width: min(300px, 72vw);
     }
-    .media-card .media-icon { font-size: 1.5rem; flex-shrink: 0; }
+    .media-card .media-icon { font-size: 1.25rem; flex-shrink: 0; }
     .media-card .media-info { flex: 1; min-width: 0; }
     .media-card .media-name {
       font-size: .75rem;
@@ -1639,11 +1654,12 @@
       white-space: nowrap;
       overflow: hidden;
       text-overflow: ellipsis;
+      line-height: 1.2;
     }
-    .media-card .media-actions { display: flex; gap: 6px; margin-top: 5px; flex-wrap: wrap; }
+    .media-card .media-actions { display: flex; gap: 4px; margin-top: 3px; flex-wrap: wrap; }
     .btn-media {
-      font-size: .68rem;
-      padding: 3px 9px;
+      font-size: .62rem;
+      padding: 2px 7px;
       border: none;
       border-radius: 5px;
       cursor: pointer;
@@ -5536,23 +5552,6 @@ function appendBubble(container, msg, optimistic = false, history = null) {
 
   wrap.appendChild(bubble);
 
-  if (label) {
-    const lbl = document.createElement("div");
-    lbl.className = "bubble-label";
-    if (sentByHuman && attendantId) {
-      const _ap = ATTENDANT_PROFILES.find(p => p.id === attendantId);
-      if (_ap) {
-        const av = document.createElement("span");
-        av.className = "att-initial";
-        av.style.background = _ap.color;
-        av.textContent = _ap.initials;
-        lbl.appendChild(av);
-      }
-    }
-    lbl.appendChild(document.createTextNode(label));
-    wrap.appendChild(lbl);
-  }
-
   // Botão Responder: apenas em mensagens do cliente com metaMessageId
   if (role === "user" && msg.metaMessageId && !optimistic) {
     const replyBtn = document.createElement("button");
@@ -5571,14 +5570,44 @@ function appendBubble(container, msg, optimistic = false, history = null) {
     wrap.dataset.metaMsgId = msg.metaMessageId;
   }
 
+  // Meta-line: nome, horário e status de entrega em uma única linha discreta abaixo da bolha
+  const metaLine = document.createElement("div");
+  metaLine.className = "bubble-meta-line";
+  let hasMetaContent = false;
+
+  if (label) {
+    const authorSpan = document.createElement("span");
+    authorSpan.className = "msg-author";
+    if (sentByHuman && attendantId) {
+      const _ap = ATTENDANT_PROFILES.find(p => p.id === attendantId);
+      if (_ap) {
+        const av = document.createElement("span");
+        av.className = "att-initial";
+        av.style.background = _ap.color;
+        av.textContent = _ap.initials;
+        authorSpan.appendChild(av);
+      }
+    }
+    authorSpan.appendChild(document.createTextNode(label));
+    metaLine.appendChild(authorSpan);
+    hasMetaContent = true;
+  }
+
   // Horário da mensagem (America/Sao_Paulo)
   if (!optimistic) {
     const _t = formatMsgTime(msg.createdAt);
     if (_t) {
-      const timeEl = document.createElement("div");
-      timeEl.className   = "bubble-time";
-      timeEl.textContent = _t;
-      wrap.appendChild(timeEl);
+      if (hasMetaContent) {
+        const dot = document.createElement("span");
+        dot.className = "meta-dot";
+        dot.textContent = " · ";
+        metaLine.appendChild(dot);
+      }
+      const timeSpan = document.createElement("span");
+      timeSpan.className = "bubble-time";
+      timeSpan.textContent = _t;
+      metaLine.appendChild(timeSpan);
+      hasMetaContent = true;
     }
   }
 
@@ -5586,21 +5615,32 @@ function appendBubble(container, msg, optimistic = false, history = null) {
   if (role !== "user" && !msg.sentByTemplate) {
     let statusEl = null;
     if (optimistic) {
-      statusEl = document.createElement("div");
-      statusEl.className   = "msg-status st-send";
+      statusEl = document.createElement("span");
+      statusEl.className = "msg-status st-send";
       statusEl.textContent = "Enviando...";
     } else {
       const si = formatDeliveryStatus(msg);
       if (si) {
-        statusEl = document.createElement("div");
-        statusEl.className   = `msg-status ${si.cls}`;
+        statusEl = document.createElement("span");
+        statusEl.className = `msg-status ${si.cls}`;
         statusEl.textContent = si.text;
       }
     }
     if (statusEl) {
       if (msg.metaMessageId) statusEl.dataset.statusFor = msg.metaMessageId;
-      wrap.appendChild(statusEl);
+      if (hasMetaContent) {
+        const dot = document.createElement("span");
+        dot.className = "meta-dot";
+        dot.textContent = " · ";
+        metaLine.appendChild(dot);
+      }
+      metaLine.appendChild(statusEl);
+      hasMetaContent = true;
     }
+  }
+
+  if (hasMetaContent) {
+    wrap.appendChild(metaLine);
   }
 
   container.appendChild(wrap);
@@ -8103,12 +8143,35 @@ function updateInPlaceDeliveryStatuses(container, history) {
     if (!wrap) continue;
     const si = formatDeliveryStatus(msg);
     let statusEl = wrap.querySelector(".msg-status");
-    if (!si) { if (statusEl) statusEl.remove(); continue; }
+    if (!si) {
+      if (statusEl) {
+        const prev = statusEl.previousElementSibling;
+        if (prev && prev.classList.contains("meta-dot")) {
+          prev.remove();
+        }
+        statusEl.remove();
+      }
+      continue;
+    }
     if (!statusEl) {
       // Cria o elemento se ainda não existir (mensagem que ganhou status após render)
-      statusEl = document.createElement("div");
+      let metaLine = wrap.querySelector(".bubble-meta-line");
+      if (!metaLine) {
+        metaLine = document.createElement("div");
+        metaLine.className = "bubble-meta-line";
+        wrap.appendChild(metaLine);
+      }
+      if (metaLine.children.length > 0) {
+        const dot = document.createElement("span");
+        dot.className = "meta-dot";
+        dot.textContent = " · ";
+        metaLine.appendChild(dot);
+      }
+      statusEl = document.createElement("span");
+      statusEl.className = `msg-status ${si.cls}`;
+      statusEl.textContent = si.text;
       statusEl.dataset.statusFor = msg.metaMessageId;
-      wrap.appendChild(statusEl);
+      metaLine.appendChild(statusEl);
     }
     // Só atualiza se mudou (evita repaint desnecessário)
     if (statusEl.textContent !== si.text || !statusEl.classList.contains(si.cls)) {
