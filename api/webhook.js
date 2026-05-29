@@ -1292,7 +1292,43 @@ async function handleDeliveryStatus(s) {
     const session = JSON.parse(raw);
     const history = session.history || [];
     const idx     = history.findIndex(m => m.metaMessageId === msgId);
-    if (idx === -1) { console.log(`[Status] ⚠️ Mensagem não encontrada: ${msgId}`); return; }
+    if (idx === -1) {
+      // Salva temporariamente em pendentes para resolver race condition (send.js aplicará ao salvar)
+      const pendingKey = `sartec:pending_status:${msgId}`;
+      const statusAt = timestamp
+        ? new Date(parseInt(timestamp, 10) * 1000).toISOString()
+        : new Date().toISOString();
+      const deliveryError = (status === "failed" && errors?.length)
+        ? (errors[0]?.title || "Falha na entrega")
+        : undefined;
+
+      // Se já houver status pendente anterior, aplica lógica de ranking para não rebaixar
+      const existingRaw = await redis.get(pendingKey);
+      if (existingRaw) {
+        try {
+          const existing = JSON.parse(existingRaw);
+          const currentRank = _STATUS_RANK[existing.status] || 0;
+          const newRank     = _STATUS_RANK[status]          || 0;
+          
+          if (status !== "failed" && newRank <= currentRank) {
+            // Mantém o melhor status já existente
+            return;
+          }
+        } catch (e) {
+          console.warn(`[Status] ⚠️ Erro ao decodificar status pendente existente: ${e.message}`);
+        }
+      }
+
+      const pendingPayload = {
+        status,
+        deliveryStatusAt: statusAt,
+        deliveryError,
+      };
+
+      await redis.set(pendingKey, JSON.stringify(pendingPayload), "EX", 300);
+      console.log(`[Status] ⏳ Pendente salvo — ${status} → ${msgId} (+${phone})`);
+      return;
+    }
 
     const msg         = history[idx];
     const currentRank = _STATUS_RANK[msg.deliveryStatus] || 0;

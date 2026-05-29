@@ -333,6 +333,27 @@ async function withSessionLock(redis, phone, fn) {
   return fn();
 }
 
+// ── Aplica status pendente de entrega se houver (race condition fix) ─────
+async function applyPendingStatusIfExists(redis, metaMessageId, historyEntry) {
+  if (!metaMessageId) return;
+  const pendingKey = `sartec:pending_status:${metaMessageId}`;
+  try {
+    const raw = await redis.get(pendingKey);
+    if (raw) {
+      const pending = JSON.parse(raw);
+      historyEntry.deliveryStatus   = pending.status;
+      historyEntry.deliveryStatusAt = pending.deliveryStatusAt || new Date().toISOString();
+      if (pending.status === "failed" && pending.deliveryError) {
+        historyEntry.deliveryError = pending.deliveryError;
+      }
+      await redis.del(pendingKey);
+      console.log(`[send] ✅ Status pendente aplicado: ${pending.status} → ${metaMessageId}`);
+    }
+  } catch (err) {
+    console.warn(`[send] ⚠️ Erro ao aplicar status pendente para ${metaMessageId}: ${err.message}`);
+  }
+}
+
 // ── Salvar no Redis ───────────────────────────────────────
 async function saveToHistory(phone, message) {
   try {
@@ -343,6 +364,10 @@ async function saveToHistory(phone, message) {
 
       const session = JSON.parse(raw);
       if (!message.createdAt) message.createdAt = new Date().toISOString();
+      
+      // Verifica e aplica status pendente (concorrência com webhook)
+      await applyPendingStatusIfExists(redis, message.metaMessageId, message);
+
       session.history.push(message);
       const now = new Date().toISOString();
       session.lastHumanReply = now;
