@@ -4830,6 +4830,8 @@ async function refreshModal() {
     if (openModalPhone in _lastMsgCountByPhone && _lastMsgCountByPhone[openModalPhone] === newCount) {
       updateWindowUI("modal", data);
       renderActiveAttendantNotice("modal", data);
+      // Atualiza status de entrega nas bolhas existentes sem re-renderizar
+      updateInPlaceDeliveryStatuses(document.getElementById("modal-messages"), data.history);
       return;
     }
     // Nova(s) mensagem(ns) detectada(s) — mostrar toast só se for do cliente
@@ -5302,8 +5304,10 @@ function renderConvsChat(data) {
     for (let i = prevCount; i < newCount; i++) {
       appendBubble(container, history[i], false, history);
     }
+  } else {
+    // Count igual — atualiza apenas status de entrega nas bolhas existentes
+    updateInPlaceDeliveryStatuses(container, history);
   }
-  // newCount === prevCount: nada mudou, sem re-render
 
   _lastMsgCountByPhone[data.phone] = newCount;
   if (wasAtBottom && newCount !== prevCount) scrollToBottom(container);
@@ -5562,6 +5566,11 @@ function appendBubble(container, msg, optimistic = false, history = null) {
     wrap.appendChild(replyBtn);
   }
 
+  // Marca a bolha com o ID da mensagem para permitir atualização cirúrgica de status
+  if (msg.metaMessageId) {
+    wrap.dataset.metaMsgId = msg.metaMessageId;
+  }
+
   // Horário da mensagem (America/Sao_Paulo)
   if (!optimistic) {
     const _t = formatMsgTime(msg.createdAt);
@@ -5588,7 +5597,10 @@ function appendBubble(container, msg, optimistic = false, history = null) {
         statusEl.textContent = si.text;
       }
     }
-    if (statusEl) wrap.appendChild(statusEl);
+    if (statusEl) {
+      if (msg.metaMessageId) statusEl.dataset.statusFor = msg.metaMessageId;
+      wrap.appendChild(statusEl);
+    }
   }
 
   container.appendChild(wrap);
@@ -8081,6 +8093,30 @@ document.addEventListener("DOMContentLoaded", function() {
   document.getElementById("sort-btn-recent")?.classList.toggle("active", convSort === "recent");
   document.getElementById("sort-btn-az")?.classList.toggle("active",     convSort === "az");
 });
+
+// ── Atualização cirúrgica de status de entrega (sem re-render de bolhas) ─────
+function updateInPlaceDeliveryStatuses(container, history) {
+  if (!container || !history) return;
+  for (const msg of history) {
+    if (!msg.metaMessageId || msg.role === "user" || msg.sentByTemplate) continue;
+    const wrap = container.querySelector(`[data-meta-msg-id="${msg.metaMessageId}"]`);
+    if (!wrap) continue;
+    const si = formatDeliveryStatus(msg);
+    let statusEl = wrap.querySelector(".msg-status");
+    if (!si) { if (statusEl) statusEl.remove(); continue; }
+    if (!statusEl) {
+      // Cria o elemento se ainda não existir (mensagem que ganhou status após render)
+      statusEl = document.createElement("div");
+      statusEl.dataset.statusFor = msg.metaMessageId;
+      wrap.appendChild(statusEl);
+    }
+    // Só atualiza se mudou (evita repaint desnecessário)
+    if (statusEl.textContent !== si.text || !statusEl.classList.contains(si.cls)) {
+      statusEl.className   = `msg-status ${si.cls}`;
+      statusEl.textContent = si.text;
+    }
+  }
+}
 
 // ── Status de entrega das mensagens ──────────────────────────────────────────
 function formatDeliveryStatus(msg) {
