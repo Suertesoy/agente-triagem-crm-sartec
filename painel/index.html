@@ -1733,6 +1733,12 @@
     }
     .btn-camera:hover { border-color: var(--brand-navy); color: var(--brand-navy); }
 
+    /* Botão bloqueado ao atingir limite de 10 imagens na fila */
+    .btn-attach.media-limit, .btn-camera.media-limit {
+      opacity: .35; cursor: not-allowed;
+      border-color: var(--border) !important; color: var(--text-muted) !important;
+    }
+
     .composer-row textarea {
       flex: 1;
       border: 1px solid var(--border);
@@ -3347,10 +3353,10 @@
       </div>
       <div class="img-queue-bar" id="modal-img-queue-bar"></div>
       <div class="composer-row">
-        <button class="btn-attach" onclick="document.getElementById('modal-file-input').click()" title="Imagem">📎</button>
+        <button class="btn-attach" onclick="handleAttachClick('modal')" title="Imagem">📎</button>
         <input type="file" id="modal-file-input" accept="image/jpeg,image/png,image/gif,image/webp,application/pdf" multiple style="display:none" onchange="handleImageSelect(event,'modal')">
         <input type="file" id="modal-camera-input" accept="image/*" capture="environment" style="display:none" onchange="handleImageSelect(event,'modal')">
-        <button class="btn-camera" onclick="document.getElementById('modal-camera-input').click()" title="Câmera">📷</button>
+        <button class="btn-camera" onclick="handleCameraClick('modal')" title="Câmera">📷</button>
         <textarea id="modal-msg-input" placeholder="Digite sua mensagem..." rows="1"
           onkeydown="handleEnter(event,'modal')" oninput="autoResize(this)"></textarea>
         <button class="btn-introduce" onclick="introduceAttendant('modal')" title="Me apresentar">Me apresentar</button>
@@ -3624,6 +3630,7 @@ let openConvsRedisKey   = null;   // chave Redis da conversa aberta (para buscar
 let _convsChatRequestSeq = 0;    // guard anti-corrida: incrementado a cada abertura/refresh
 let pendingMedia    = {};     // { modal: {type,base64,mimeType,filename}, convs: {...} }
 const pendingImages = { modal: [], convs: [] }; // fila de até 10 imagens por prefix
+const _isSending    = { modal: false, convs: false }; // trava contra envio concorrente
 const _replyTarget  = { modal: null, convs: null };
 const _cardLastUserMsgAt   = {};       // phone → ISO do último lastUserMessageAt registrado
 const _cardUnreadCount     = {};       // phone → contador de msgs novas não lidas
@@ -5191,10 +5198,10 @@ async function openConvsChat(phone, redisKey, isArchive) {
       <div class="composer-lock-bar" id="convs-composer-lock" style="display:none"></div>
       <div class="reply-bar" id="convs-reply-bar" style="display:none"><span class="reply-bar-label">Respondendo:</span><span class="reply-bar-text" id="convs-reply-text"></span><button class="reply-bar-cancel" onclick="clearReplyTarget('convs')" title="Cancelar resposta">✕</button></div>
       <div class="composer-row">
-        <button class="btn-attach" onclick="document.getElementById('convs-file-input').click()" title="Imagem">📎</button>
+        <button class="btn-attach" onclick="handleAttachClick('convs')" title="Imagem">📎</button>
         <input type="file" id="convs-file-input" accept="image/jpeg,image/png,image/gif,image/webp,application/pdf" multiple style="display:none" onchange="handleImageSelect(event,'convs')">
         <input type="file" id="convs-camera-input" accept="image/*" capture="environment" style="display:none" onchange="handleImageSelect(event,'convs')">
-        <button class="btn-camera" onclick="document.getElementById('convs-camera-input').click()" title="Câmera">📷</button>
+        <button class="btn-camera" onclick="handleCameraClick('convs')" title="Câmera">📷</button>
         <textarea id="convs-msg-input" placeholder="Digite sua mensagem..." rows="1"
           onkeydown="handleEnter(event,'convs')" oninput="autoResize(this)"></textarea>
         <button class="btn-introduce" onclick="introduceAttendant('convs')" title="Me apresentar">Me apresentar</button>
@@ -5742,13 +5749,41 @@ async function compressImage(file) {
   });
 }
 
+// ── Estado dos botões de mídia (bloqueia ao atingir limite de 10) ────────────
+function updateMediaButtonsState(prefix) {
+  const limited = (pendingImages[prefix] || []).length >= 10;
+  const root = prefix === "modal"
+    ? document.getElementById("chat-modal")
+    : document.getElementById("convs-main");
+  if (!root) return;
+  [root.querySelector(".btn-attach"), root.querySelector(".btn-camera")].forEach(btn => {
+    if (!btn) return;
+    btn.classList.toggle("media-limit", limited);
+    btn.setAttribute("aria-disabled", limited ? "true" : "false");
+  });
+}
+function handleAttachClick(prefix) {
+  if ((pendingImages[prefix] || []).length >= 10) {
+    showToast("Limite atingido: você pode enviar até 10 fotos por vez.", "t-warn");
+    return;
+  }
+  document.getElementById(`${prefix}-file-input`)?.click();
+}
+function handleCameraClick(prefix) {
+  if ((pendingImages[prefix] || []).length >= 10) {
+    showToast("Limite atingido: você pode enviar até 10 fotos por vez.", "t-warn");
+    return;
+  }
+  document.getElementById(`${prefix}-camera-input`)?.click();
+}
+
 // ── Renderiza fila de thumbnails ──────────────────────────────────────────────
 function renderImageQueue(prefix) {
   const bar  = document.getElementById(`${prefix}-img-queue-bar`);
   if (!bar) return;
   const imgs = pendingImages[prefix] || [];
   bar.innerHTML = "";
-  if (!imgs.length) { bar.classList.remove("visible"); return; }
+  if (!imgs.length) { bar.classList.remove("visible"); updateMediaButtonsState(prefix); return; }
   bar.classList.add("visible");
   imgs.forEach((item) => {
     const wrap = document.createElement("div");
@@ -5772,6 +5807,7 @@ function renderImageQueue(prefix) {
   cnt.className = "iq-count";
   cnt.textContent = imgs.length === 1 ? "1 foto selecionada" : `${imgs.length} fotos selecionadas`;
   bar.appendChild(cnt);
+  updateMediaButtonsState(prefix);
 }
 
 // ── Seleção de imagem/arquivo ─────────────────────────────────────────────────
@@ -5803,7 +5839,7 @@ async function handleImageSelect(event, prefix) {
   if (!imageFiles.length) return;
   const queue     = pendingImages[prefix] || [];
   const remaining = 10 - queue.length;
-  if (remaining <= 0) { showToast("Você pode enviar até 10 fotos por vez.", "t-warn"); return; }
+  if (remaining <= 0) { showToast("Limite atingido: você pode enviar até 10 fotos por vez.", "t-warn"); return; }
   const toProcess = imageFiles.slice(0, remaining);
   if (imageFiles.length > remaining) {
     showToast(`Apenas ${toProcess.length} foto(s) adicionada(s). Limite de 10 por vez.`, "t-warn");
@@ -5814,7 +5850,10 @@ async function handleImageSelect(event, prefix) {
       pendingImages[prefix] = [...(pendingImages[prefix] || []), compressed];
     } catch { /* pula arquivo com erro */ }
   }
-  renderImageQueue(prefix);
+  renderImageQueue(prefix); // também chama updateMediaButtonsState
+  if ((pendingImages[prefix] || []).length >= 10 && toProcess.length > 0) {
+    showToast("Limite atingido: você pode enviar até 10 fotos por vez.", "t-warn");
+  }
 }
 
 function clearImage(prefix) {
@@ -5864,6 +5903,9 @@ async function sendMessage(prefix) {
     return;
   }
 
+  if (_isSending[prefix]) { showToast("Aguarde — envio em andamento.", "t-warn"); return; }
+
+  _isSending[prefix] = true;
   const btn = document.getElementById(`${prefix}-send-btn`);
   if (btn) btn.disabled = true;
   if (input) { input.value = ""; autoResize(input); }
@@ -5871,21 +5913,25 @@ async function sendMessage(prefix) {
   const messagesId = prefix === "modal" ? "modal-messages" : "convs-messages";
   const container  = document.getElementById(messagesId);
 
-  if (hasPendingImages) {
-    await sendImagesSequential(prefix, container, text);
-  } else if (hasPending) {
-    const mtype = pendingMedia[prefix].type;
-    if (mtype === "document") {
-      await sendDocumentMessage(prefix, container, text);
+  try {
+    if (hasPendingImages) {
+      await sendImagesSequential(prefix, container, text);
+    } else if (hasPending) {
+      const mtype = pendingMedia[prefix].type;
+      if (mtype === "document") {
+        await sendDocumentMessage(prefix, container, text);
+      } else {
+        await sendImageMessage(prefix, container, text);
+      }
     } else {
-      await sendImageMessage(prefix, container, text);
+      await sendTextMessage(prefix, container, text);
     }
-  } else {
-    await sendTextMessage(prefix, container, text);
+  } finally {
+    _isSending[prefix] = false;
+    if (btn) btn.disabled = false;
+    if (input) input.focus();
+    updateMediaButtonsState(prefix);
   }
-
-  if (btn) btn.disabled = false;
-  if (input) input.focus();
 }
 
 // Avança pipeline de "novo" para próxima etapa quando humano envia mensagem com sucesso
@@ -6038,10 +6084,11 @@ async function sendImageMessage(prefix, container, caption) {
 }
 
 async function sendDocumentMessage(prefix, container, caption) {
-  const phone  = getPhoneForPrefix(prefix);
-  const att    = getCurrentAttendant();
-  const reply  = _replyTarget[prefix];
-  const { base64, mimeType, filename } = pendingMedia[prefix];
+  const phone      = getPhoneForPrefix(prefix);
+  const att        = getCurrentAttendant();
+  const reply      = _replyTarget[prefix];
+  const savedMedia = { ...pendingMedia[prefix] }; // preserva para retry em caso de erro
+  const { base64, mimeType, filename } = savedMedia;
 
   // Bolha otimista com ícone de documento
   appendBubble(container, {
@@ -6051,7 +6098,10 @@ async function sendDocumentMessage(prefix, container, caption) {
     ...(reply?.metaMessageId ? { replyToMsgId: reply.metaMessageId } : {}),
   }, true);
   scrollToBottom(container);
-  clearImage(prefix);
+
+  // Oculta preview durante o envio, mas NÃO apaga os dados (preserva para retry)
+  const previewBar = document.getElementById(`${prefix}-img-preview-bar`);
+  if (previewBar) previewBar.classList.remove("visible");
 
   try {
     const payload = {
@@ -6067,16 +6117,28 @@ async function sendDocumentMessage(prefix, container, caption) {
       body:    JSON.stringify(payload),
     });
     if (!res.ok) {
-      const err = await res.json();
-      alert(`Erro ao enviar documento: ${err.detail || err.error || "Falha de envio"}`);
+      const err = await res.json().catch(() => ({}));
+      console.error("[sendDocument] ❌", err.detail || err.error);
       removeLastOptimistic(container);
+      // Restaura o documento para que o atendente possa tentar novamente
+      pendingMedia[prefix] = savedMedia;
+      if (previewBar) previewBar.classList.add("visible");
+      showToast("Não consegui enviar o documento. Tente novamente. Se o arquivo for muito pesado, envie um arquivo menor.", "t-err");
     } else {
+      clearImage(prefix); // limpa apenas após sucesso confirmado
       clearReplyTarget(prefix);
       prefix === "modal" ? await refreshModal() : await refreshConvsChat(phone);
       showToast("Documento enviado");
       autoAdvanceAfterHumanReply(phone);
     }
-  } catch (e) { alert("Falha de rede."); removeLastOptimistic(container); }
+  } catch (e) {
+    console.error("[sendDocument] ❌ rede:", e?.message);
+    removeLastOptimistic(container);
+    // Restaura o documento para retry
+    pendingMedia[prefix] = savedMedia;
+    if (previewBar) previewBar.classList.add("visible");
+    showToast("Não consegui enviar o documento. Verifique a conexão e tente novamente.", "t-err");
+  }
 }
 
 function removeLastOptimistic(container) {
