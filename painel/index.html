@@ -4805,15 +4805,11 @@ async function refreshModal() {
     const res      = await fetch(`/api/conversation?phone=${openModalPhone}`);
     const data     = await res.json();
 
-    // Registrar como atendente ativo apenas se ninguém (ou o próprio usuário) já estiver ativo
+    // Abrir conversa não assume atendimento — apenas marca como observador.
+    // Assumir ocorre somente via botão "Assumir atendimento" ou ao enviar mensagem.
     if (!_aaRegistered) {
       _aaRegistered = true;
-      if (canTouchActiveAttendant(data, openModalPhone)) {
-        touchActiveAttendant(openModalPhone);
-        startActiveAttendantRenewal(openModalPhone);
-      } else if (openModalPhone) {
-        observerOnlyPhones.add(openModalPhone);  // marcar como observador nesta sessão
-      }
+      if (openModalPhone) observerOnlyPhones.add(openModalPhone);
     }
 
     const newCount = (data.history || []).length;
@@ -5239,14 +5235,10 @@ async function refreshConvsChat(phone, redisKey) {
     if (reqSeq !== _convsChatRequestSeq) return;
     if (targetPhone !== openConvsPhone)  return;
 
-    // Registrar como atendente ativo na aba Conversas — mesma lógica segura do modal
+    // Abrir conversa não assume atendimento — apenas marca como observador.
     if (!_aaRegisteredConvs && !rk?.includes(":archive:")) {
       _aaRegisteredConvs = true;
-      if (canTouchActiveAttendant(data, phone)) {
-        touchActiveAttendant(phone);
-      } else if (phone) {
-        observerOnlyPhones.add(phone);
-      }
+      if (phone) observerOnlyPhones.add(phone);
     }
 
     renderConvsChat(data);

@@ -354,6 +354,17 @@ async function saveToHistory(phone, message) {
           const isPJ = session.clientType === "pj" || session.demandType === "cotacao_pj";
           session.pipelineStatus = isPJ ? "novo" : "em_atendimento";
         }
+        // Enviar mensagem = assumir atendimento; atualiza atendente ativo no Redis.
+        if (message.attendantId) {
+          const attName = message.attendantName || message.attendantId;
+          session.activeAttendant = {
+            id:       message.attendantId,
+            name:     attName,
+            initials: attName.slice(0, 2).toUpperCase(),
+            color:    "#3b82f6",
+          };
+          session.activeAttendantAt = now;
+        }
       }
 
       await redis.set(`sartec:${phone}`, JSON.stringify(session), "EX", SESSION_TTL);
