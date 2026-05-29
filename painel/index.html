@@ -474,7 +474,14 @@
     .card-new-msg-flash { animation:card-new-flash 0.45s ease-out; box-shadow:0 0 0 2px rgba(59,130,246,.35),0 4px 16px rgba(15,23,42,.1) !important; }
 
     /* ── Semântica: fundo do card = temperatura operacional ── */
-    .card.resolvido      { opacity: .72; background: #e8f3ee; border-color: rgba(22,163,74,.22); }
+    .card.resolvido      { opacity: .80; background: #f1f2f4; border-color: rgba(107,114,128,.20); cursor: default; }
+    .card.resolvido:hover { transform: none; box-shadow: 0 1px 3px rgba(15,23,42,.05), 0 2px 8px rgba(15,23,42,.06); }
+    /* Neutraliza cores de prioridade em cards resolvidos */
+    .card.resolvido.pri-alta, .card.resolvido.pri-media, .card.resolvido.card-critica,
+    .card.resolvido.card-finalizado, .card.resolvido.urgent, .card.resolvido.forgotten,
+    .card.resolvido.warn-10 { background: #f1f2f4; border-color: rgba(107,114,128,.20); }
+    /* Neutraliza hover de campos editáveis em resolvidos */
+    .card.resolvido .card-name:hover, .card.resolvido .card-title:hover { background: transparent; cursor: default; }
     .card.card-finalizado { background: #e8f3ee; border-color: rgba(22,163,74,.55); }
     .card.card-critica   { background: #fff4f4; border-color: rgba(220,38,38,.44); }
     .card.pri-alta       { background: #fff4f4; border-color: rgba(220,38,38,.44); }
@@ -738,6 +745,7 @@
       font-size: .7rem;
       background: #f0fdf4;
       color: #15803d;
+      cursor: pointer;
       border: 1px solid #86efac;
       border-radius: 7px;
       padding: 5px 10px;
