@@ -1682,6 +1682,23 @@
       line-height: 1;
     }
 
+    /* ── Fila de imagens para envio múltiplo ── */
+    .img-queue-bar {
+      display: none; flex-wrap: wrap; gap: 6px;
+      padding: 8px 10px; background: #f8f9fc;
+      border-top: 1px solid var(--border); flex-shrink: 0;
+    }
+    .img-queue-bar.visible { display: flex; }
+    .iq-thumb { position: relative; width: 52px; height: 52px; flex-shrink: 0; }
+    .iq-thumb img { width: 100%; height: 100%; object-fit: cover; border-radius: 7px; border: 1px solid var(--border); display: block; }
+    .iq-rm {
+      position: absolute; top: -5px; right: -5px;
+      width: 17px; height: 17px; background: #ef4444; color: #fff;
+      border: none; border-radius: 50%; font-size: .58rem; cursor: pointer;
+      display: flex; align-items: center; justify-content: center; padding: 0; line-height: 1;
+    }
+    .iq-count { flex-basis: 100%; font-size: .68rem; color: var(--text-secondary); padding: 0 2px; }
+
     .composer-row { display: flex; gap: 7px; align-items: flex-end; }
     .btn-attach {
       background: none;
@@ -3328,9 +3345,10 @@
         <input class="caption-input" id="modal-img-caption" placeholder="Legenda (opcional)">
         <button class="btn-clear-img" onclick="clearImage('modal')" title="Remover">✕</button>
       </div>
+      <div class="img-queue-bar" id="modal-img-queue-bar"></div>
       <div class="composer-row">
         <button class="btn-attach" onclick="document.getElementById('modal-file-input').click()" title="Imagem">📎</button>
-        <input type="file" id="modal-file-input" accept="image/jpeg,image/png,image/gif,image/webp,application/pdf" style="display:none" onchange="handleImageSelect(event,'modal')">
+        <input type="file" id="modal-file-input" accept="image/jpeg,image/png,image/gif,image/webp,application/pdf" multiple style="display:none" onchange="handleImageSelect(event,'modal')">
         <input type="file" id="modal-camera-input" accept="image/*" capture="environment" style="display:none" onchange="handleImageSelect(event,'modal')">
         <button class="btn-camera" onclick="document.getElementById('modal-camera-input').click()" title="Câmera">📷</button>
         <textarea id="modal-msg-input" placeholder="Digite sua mensagem..." rows="1"
@@ -3605,6 +3623,7 @@ let openConvsPhone      = null;   // conversa aberta na aba Conversas
 let openConvsRedisKey   = null;   // chave Redis da conversa aberta (para buscar archives corretamente)
 let _convsChatRequestSeq = 0;    // guard anti-corrida: incrementado a cada abertura/refresh
 let pendingMedia    = {};     // { modal: {type,base64,mimeType,filename}, convs: {...} }
+const pendingImages = { modal: [], convs: [] }; // fila de até 10 imagens por prefix
 const _replyTarget  = { modal: null, convs: null };
 const _cardLastUserMsgAt   = {};       // phone → ISO do último lastUserMessageAt registrado
 const _cardUnreadCount     = {};       // phone → contador de msgs novas não lidas
@@ -5172,11 +5191,12 @@ async function openConvsChat(phone, redisKey, isArchive) {
         <input class="caption-input" id="convs-img-caption" placeholder="Legenda (opcional)">
         <button class="btn-clear-img" onclick="clearImage('convs')" title="Remover">✕</button>
       </div>
+      <div class="img-queue-bar" id="convs-img-queue-bar"></div>
       <div class="composer-lock-bar" id="convs-composer-lock" style="display:none"></div>
       <div class="reply-bar" id="convs-reply-bar" style="display:none"><span class="reply-bar-label">Respondendo:</span><span class="reply-bar-text" id="convs-reply-text"></span><button class="reply-bar-cancel" onclick="clearReplyTarget('convs')" title="Cancelar resposta">✕</button></div>
       <div class="composer-row">
         <button class="btn-attach" onclick="document.getElementById('convs-file-input').click()" title="Imagem">📎</button>
-        <input type="file" id="convs-file-input" accept="image/jpeg,image/png,image/gif,image/webp,application/pdf" style="display:none" onchange="handleImageSelect(event,'convs')">
+        <input type="file" id="convs-file-input" accept="image/jpeg,image/png,image/gif,image/webp,application/pdf" multiple style="display:none" onchange="handleImageSelect(event,'convs')">
         <input type="file" id="convs-camera-input" accept="image/*" capture="environment" style="display:none" onchange="handleImageSelect(event,'convs')">
         <button class="btn-camera" onclick="document.getElementById('convs-camera-input').click()" title="Câmera">📷</button>
         <textarea id="convs-msg-input" placeholder="Digite sua mensagem..." rows="1"
@@ -5697,48 +5717,124 @@ document.getElementById("media-modal").addEventListener("click", (e) => {
 // ╔══════════════════════════════════════════════════════════════╗
 // ║  IMAGEM — seleção e preview                                  ║
 // ╚══════════════════════════════════════════════════════════════╝
-function handleImageSelect(event, prefix) {
-  const file = event.target.files[0];
-  if (!file) return;
-  const isPdf = file.type === "application/pdf";
-  const reader = new FileReader();
-  reader.onload = (e) => {
-    const dataUrl = e.target.result;
-    const base64  = dataUrl.split(",")[1];
-
-    pendingMedia[prefix] = {
-      type:     isPdf ? "document" : "image",
-      base64,
-      mimeType: file.type,
-      filename: file.name,
+// ── Compressão de imagem no cliente (canvas) ─────────────────────────────────
+async function compressImage(file) {
+  return new Promise((resolve) => {
+    const objUrl = URL.createObjectURL(file);
+    const img = new Image();
+    img.onload = () => {
+      URL.revokeObjectURL(objUrl);
+      const MAX = 1600;
+      let w = img.naturalWidth, h = img.naturalHeight;
+      if (w > MAX || h > MAX) {
+        if (w >= h) { h = Math.round(h * MAX / w); w = MAX; }
+        else        { w = Math.round(w * MAX / h); h = MAX; }
+      }
+      const canvas = document.createElement("canvas");
+      canvas.width = w; canvas.height = h;
+      canvas.getContext("2d").drawImage(img, 0, 0, w, h);
+      const quality = file.size > 800_000 ? 0.85 : 0.92;
+      const dataUrl = canvas.toDataURL("image/jpeg", quality);
+      resolve({ base64: dataUrl.split(",")[1], mimeType: "image/jpeg", previewUrl: dataUrl, id: Date.now() + Math.random() });
     };
+    img.onerror = () => {
+      URL.revokeObjectURL(objUrl);
+      const reader = new FileReader();
+      reader.onload = e => {
+        const dataUrl = e.target.result;
+        resolve({ base64: dataUrl.split(",")[1], mimeType: file.type, previewUrl: dataUrl, id: Date.now() + Math.random() });
+      };
+      reader.readAsDataURL(file);
+    };
+    img.src = objUrl;
+  });
+}
 
-    const thumb = document.getElementById(`${prefix}-img-thumb`);
-    if (isPdf) {
-      // Mostra ícone PDF no preview
-      thumb.src = "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='50' height='50'%3E%3Crect width='50' height='50' fill='%23fee2e2' rx='6'/%3E%3Ctext x='25' y='33' text-anchor='middle' font-size='22'%3E%F0%9F%93%84%3C/text%3E%3C/svg%3E";
-      const cap = document.getElementById(`${prefix}-img-caption`);
-      if (cap) { cap.value = ""; cap.placeholder = file.name; }
-    } else {
-      thumb.src = dataUrl;
-      const cap = document.getElementById(`${prefix}-img-caption`);
-      if (cap) cap.placeholder = "Legenda (opcional)";
-    }
+// ── Renderiza fila de thumbnails ──────────────────────────────────────────────
+function renderImageQueue(prefix) {
+  const bar  = document.getElementById(`${prefix}-img-queue-bar`);
+  if (!bar) return;
+  const imgs = pendingImages[prefix] || [];
+  bar.innerHTML = "";
+  if (!imgs.length) { bar.classList.remove("visible"); return; }
+  bar.classList.add("visible");
+  imgs.forEach((item) => {
+    const wrap = document.createElement("div");
+    wrap.className = "iq-thumb";
+    const imgEl = document.createElement("img");
+    imgEl.src = item.previewUrl;
+    const rm = document.createElement("button");
+    rm.className = "iq-rm";
+    rm.textContent = "✕";
+    rm.title = "Remover";
+    rm.onclick = (e) => {
+      e.preventDefault();
+      pendingImages[prefix] = pendingImages[prefix].filter(i => i.id !== item.id);
+      renderImageQueue(prefix);
+    };
+    wrap.appendChild(imgEl);
+    wrap.appendChild(rm);
+    bar.appendChild(wrap);
+  });
+  const cnt = document.createElement("span");
+  cnt.className = "iq-count";
+  cnt.textContent = imgs.length === 1 ? "1 foto selecionada" : `${imgs.length} fotos selecionadas`;
+  bar.appendChild(cnt);
+}
 
-    document.getElementById(`${prefix}-img-preview-bar`).classList.add("visible");
-  };
-  reader.readAsDataURL(file);
+// ── Seleção de imagem/arquivo ─────────────────────────────────────────────────
+async function handleImageSelect(event, prefix) {
+  const files = Array.from(event.target.files || []);
   event.target.value = "";
+  if (!files.length) return;
+
+  // PDF: fluxo original inalterado
+  const pdfFile = files.find(f => f.type === "application/pdf");
+  if (pdfFile) {
+    const reader = new FileReader();
+    reader.onload = (e) => {
+      const dataUrl = e.target.result;
+      pendingMedia[prefix] = { type: "document", base64: dataUrl.split(",")[1], mimeType: pdfFile.type, filename: pdfFile.name };
+      const thumb = document.getElementById(`${prefix}-img-thumb`);
+      if (thumb) thumb.src = "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='50' height='50'%3E%3Crect width='50' height='50' fill='%23fee2e2' rx='6'/%3E%3Ctext x='25' y='33' text-anchor='middle' font-size='22'%3E%F0%9F%93%84%3C/text%3E%3C/svg%3E";
+      const bar = document.getElementById(`${prefix}-img-preview-bar`);
+      if (bar) bar.classList.add("visible");
+      const cap = document.getElementById(`${prefix}-img-caption`);
+      if (cap) { cap.value = ""; cap.placeholder = pdfFile.name; }
+    };
+    reader.readAsDataURL(pdfFile);
+    return;
+  }
+
+  // Imagens: fila de até 10
+  const imageFiles = files.filter(f => f.type.startsWith("image/"));
+  if (!imageFiles.length) return;
+  const queue     = pendingImages[prefix] || [];
+  const remaining = 10 - queue.length;
+  if (remaining <= 0) { showToast("Você pode enviar até 10 fotos por vez.", "t-warn"); return; }
+  const toProcess = imageFiles.slice(0, remaining);
+  if (imageFiles.length > remaining) {
+    showToast(`Apenas ${toProcess.length} foto(s) adicionada(s). Limite de 10 por vez.`, "t-warn");
+  }
+  for (const file of toProcess) {
+    try {
+      const compressed = await compressImage(file);
+      pendingImages[prefix] = [...(pendingImages[prefix] || []), compressed];
+    } catch { /* pula arquivo com erro */ }
+  }
+  renderImageQueue(prefix);
 }
 
 function clearImage(prefix) {
-  pendingMedia[prefix] = null;
+  pendingMedia[prefix]  = null;
+  pendingImages[prefix] = [];
   const bar = document.getElementById(`${prefix}-img-preview-bar`);
   if (bar) bar.classList.remove("visible");
   const thumb = document.getElementById(`${prefix}-img-thumb`);
   if (thumb) thumb.src = "";
   const cap = document.getElementById(`${prefix}-img-caption`);
   if (cap) cap.value = "";
+  renderImageQueue(prefix);
 }
 
 // ╔══════════════════════════════════════════════════════════════╗
@@ -5765,12 +5861,13 @@ async function sendMessage(prefix) {
 
   const input  = document.getElementById(`${prefix}-msg-input`);
   const text   = input?.value.trim() || "";
-  const hasPending = !!pendingMedia[prefix];
+  const hasPending      = !!pendingMedia[prefix];
+  const hasPendingImages = (pendingImages[prefix]?.length || 0) > 0;
 
-  if (!text && !hasPending) return;
+  if (!text && !hasPending && !hasPendingImages) return;
 
   // Bloquear: reply ativo + mídia + texto/legenda no mesmo envio
-  if (hasPending && _replyTarget[prefix] && text) {
+  if ((hasPending || hasPendingImages) && _replyTarget[prefix] && text) {
     openReplyWarnModal();
     return;
   }
@@ -5782,7 +5879,9 @@ async function sendMessage(prefix) {
   const messagesId = prefix === "modal" ? "modal-messages" : "convs-messages";
   const container  = document.getElementById(messagesId);
 
-  if (hasPending) {
+  if (hasPendingImages) {
+    await sendImagesSequential(prefix, container, text);
+  } else if (hasPending) {
     const mtype = pendingMedia[prefix].type;
     if (mtype === "document") {
       await sendDocumentMessage(prefix, container, text);
@@ -5814,6 +5913,57 @@ async function autoAdvanceAfterHumanReply(phone) {
     conv.pipelineStatus = targetStatus;
     await loadQueue();
   } catch (err) { console.warn("[autoAdvance] Erro:", err.message); }
+}
+
+// ── Envio sequencial de imagens (uma por requisição) ─────────────────────────
+async function sendImagesSequential(prefix, container, caption) {
+  const phone = getPhoneForPrefix(prefix);
+  const att   = getCurrentAttendant();
+  const imgs  = [...(pendingImages[prefix] || [])];
+  clearImage(prefix); // limpa preview antes de enviar
+
+  for (let i = 0; i < imgs.length; i++) {
+    const { base64, mimeType } = imgs[i];
+    const imgCaption = i === 0 ? caption : ""; // legenda só na primeira foto
+
+    appendBubble(container, {
+      role: "assistant", content: imgCaption, sentByHuman: true,
+      mediaType: "image", mediaData: base64, mediaMimeType: mimeType,
+      attendantId: att?.id, attendantName: att?.name,
+    }, true);
+    scrollToBottom(container);
+
+    try {
+      const payload = {
+        to: phone, type: "image", mediaBase64: base64, mimeType,
+        caption: imgCaption || undefined,
+        attendantId:   att?.id   || null,
+        attendantName: att?.name || null,
+      };
+      const res = await fetch("/api/send", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload),
+      });
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}));
+        console.error("[sendImages] ❌", err.detail || err.error);
+        removeLastOptimistic(container);
+        const prevSent = i > 0 ? ` As ${i} anteriores foram enviadas.` : "";
+        showToast(`Foto ${i + 1} não foi enviada.${prevSent} Verifique a conexão ou o tamanho da imagem.`, "t-err");
+        return;
+      }
+    } catch {
+      removeLastOptimistic(container);
+      showToast(`Não foi possível enviar a foto ${i + 1}. Verifique o sinal e tente novamente.`, "t-err");
+      return;
+    }
+  }
+
+  clearReplyTarget(prefix);
+  prefix === "modal" ? await refreshModal() : await refreshConvsChat(phone);
+  showToast(imgs.length === 1 ? "Foto enviada" : `${imgs.length} fotos enviadas`);
+  autoAdvanceAfterHumanReply(phone);
 }
 
 async function sendTextMessage(prefix, container, text) {
@@ -5851,7 +6001,7 @@ async function sendTextMessage(prefix, container, text) {
       showToast("Mensagem enviada");
       autoAdvanceAfterHumanReply(phone);
     }
-  } catch (e) { alert("Falha de rede."); removeLastOptimistic(container); }
+  } catch (e) { showToast("Não foi possível enviar a mensagem. Verifique a conexão e tente novamente.", "t-err"); removeLastOptimistic(container); }
 }
 
 async function sendImageMessage(prefix, container, caption) {
@@ -5884,7 +6034,7 @@ async function sendImageMessage(prefix, container, caption) {
     });
     if (!res.ok) {
       const err = await res.json();
-      alert(`Erro ao enviar imagem: ${err.detail || err.error || "Falha de envio"}`);
+      showToast(`Não foi possível enviar a imagem. ${err.detail || err.error || "Verifique a conexão e tente novamente."}`, "t-err");
       removeLastOptimistic(container);
     } else {
       clearReplyTarget(prefix);
@@ -5892,7 +6042,7 @@ async function sendImageMessage(prefix, container, caption) {
       showToast("Imagem enviada");
       autoAdvanceAfterHumanReply(phone);
     }
-  } catch (e) { alert("Falha de rede."); removeLastOptimistic(container); }
+  } catch (e) { showToast("Não foi possível enviar a imagem. Verifique a conexão e tente novamente.", "t-err"); removeLastOptimistic(container); }
 }
 
 async function sendDocumentMessage(prefix, container, caption) {
