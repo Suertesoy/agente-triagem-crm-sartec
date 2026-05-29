@@ -16,8 +16,12 @@
     /* ══════════════════════════════════════════════════
        RESET + VARIÁVEIS
     ══════════════════════════════════════════════════ */
-    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
     html { overflow-x: hidden; }
+    html.modal-open,
+    body.modal-open {
+      overflow: hidden !important;
+      overscroll-behavior: none;
+    }
 
     :root {
       --brand-navy:       #1a2a5e;
@@ -1528,6 +1532,7 @@
     .messages {
       flex: 1;
       overflow-y: auto;
+      overscroll-behavior: contain;
       padding: 14px 5% 44px;
       display: flex;
       flex-direction: column;
@@ -4843,6 +4848,8 @@ async function openChat(phone) {
   document.getElementById("modal-chat-name").textContent = "Carregando...";
   document.getElementById("chat-modal").classList.remove("hidden");
   document.body.style.overflow = "hidden";
+  document.body.classList.add("modal-open");
+  document.documentElement.classList.add("modal-open");
 
   _aaRegistered = false;  // decisão será tomada após carregar dados da conversa
   clearInterval(_aaIntervalId);
@@ -5041,6 +5048,8 @@ function closeModal() {
   document.activeElement?.blur();
   document.getElementById("chat-modal").classList.add("hidden");
   document.body.style.overflow = "";
+  document.body.classList.remove("modal-open");
+  document.documentElement.classList.remove("modal-open");
   clearImage("modal");
   loadQueue();
 }
