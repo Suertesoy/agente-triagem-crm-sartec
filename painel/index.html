@@ -1216,7 +1216,8 @@
       overflow: hidden;
       box-shadow: 0 24px 64px rgba(0,0,0,.3);
     }
-    #modal-chat-body {
+    #modal-chat-body,
+    #convs-chat-body {
       display: flex;
       flex-direction: column;
       flex: 1;
@@ -5767,7 +5768,7 @@ async function openConvsChat(phone, redisKey, isArchive) {
       </button>` : `<span style="background:#555;color:#ccc;padding:5px 12px;border-radius:7px;font-size:.75rem;font-weight:700">📁 Arquivada</span>`}
     </div>
 
-    <div id="convs-chat-body" style="display:flex; flex-direction:column; flex:1; overflow:hidden;">
+    <div id="convs-chat-body">
       <!-- Barra de janela de 24h -->
       <div class="window-status-bar ws-unknown" id="convs-window-bar"></div>
       <div class="dupe-tab-warning hidden" id="convs-dupe-warning">
