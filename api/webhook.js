@@ -1437,15 +1437,33 @@ async function handleIncomingMessage(req, res) {
 
           // ── ÁUDIO — baixa, transcreve, salva e responde ──────
           if (type === "audio") {
-            // Fase 1: download + transcrição fora do lock (I/O lento)
-            let _audioTranscription = null;
-            let _audioMimeType      = null;
-            let _transcriptionFailed = false;
+            // Fase 0: leitura rápida sem lock — decide se transcrição é necessária
+            let _needsTranscription = true;
             try {
-              const _audioMedia     = await downloadMedia(message.audio.id);
-              _audioMimeType        = _audioMedia.mimeType;
-              _audioTranscription   = await transcribeAudio(_audioMedia.base64, _audioMedia.mimeType);
-              console.log(`[Audio] ✅ Transcrição +${from}: "${_audioTranscription.substring(0, 80)}"`);
+              const _snapRaw = await getRedis().get(`sartec:${from}`);
+              if (_snapRaw) {
+                const _snap = JSON.parse(_snapRaw);
+                if (_snap.handoffDone || _snap.status === "aguardando_humano") {
+                  _needsTranscription = false;
+                  console.log(`[Audio] ⏭ Pós-handoff — transcrição pulada +${from}`);
+                }
+              }
+            } catch { /* falha silenciosa — transcreve por segurança */ }
+
+            // Fase 1: download (sempre) + transcrição (só pré-handoff)
+            let _audioTranscription  = null;
+            let _audioMimeType       = null;
+            let _audioBase64         = null;
+            let _transcriptionFailed = false;
+            let _transcriptionSkipped = !_needsTranscription;
+            try {
+              const _audioMedia = await downloadMedia(message.audio.id);
+              _audioMimeType    = _audioMedia.mimeType;
+              _audioBase64      = _audioMedia.base64;
+              if (_needsTranscription) {
+                _audioTranscription = await transcribeAudio(_audioMedia.base64, _audioMedia.mimeType);
+                console.log(`[Audio] ✅ Transcrição +${from}: "${_audioTranscription.substring(0, 80)}"`);
+              }
             } catch (_audioErr) {
               console.error("[Audio] ❌ Falha ao baixar/transcrever:", _audioErr.message);
               _transcriptionFailed = true;
@@ -1456,8 +1474,9 @@ async function handleIncomingMessage(req, res) {
               ...msgMeta,
               mediaType:    "audio",
               mediaMimeType: _audioMimeType || undefined,
-              ...((_audioTranscription)  && { transcription:      _audioTranscription }),
-              ...(_transcriptionFailed   && { transcriptionError: true }),
+              ...(_audioBase64               && { mediaData:          _audioBase64 }),
+              ...((_audioTranscription)      && { transcription:      _audioTranscription }),
+              ...(_transcriptionFailed       && { transcriptionError: true }),
             };
 
             const audioReply = await withSessionLock(getRedis(), from, async () => {
@@ -1544,8 +1563,8 @@ async function handleIncomingMessage(req, res) {
                 console.log(`[Audio] 🏢 PJ detectado na transcrição +${from}`);
               }
 
-              // Fallback quando transcrição falhou
-              if (_transcriptionFailed || !_audioTranscription) {
+              // Fallback quando transcrição falhou (não aplica quando foi intencionalmente pulada)
+              if (!_transcriptionSkipped && (_transcriptionFailed || !_audioTranscription)) {
                 session.audioCount = (session.audioCount || 0) + 1;
                 let reply;
                 if (session.audioCount === 1) {

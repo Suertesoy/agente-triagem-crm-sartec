@@ -5562,21 +5562,10 @@ function appendBubble(container, msg, optimistic = false, history = null) {
       audio.src      = `data:${mediaMimeType || "audio/ogg"};base64,${mediaData}`;
       audio.style.maxWidth = "220px";
       bubble.appendChild(audio);
-    }
-    if (transcription) {
-      const _txDiv = document.createElement("div");
-      _txDiv.style.cssText = "margin-top:4px;font-size:.82rem;color:var(--text-secondary,#5a6380);font-style:italic;line-height:1.4";
-      _txDiv.textContent = `🎧 "${transcription}"`;
-      bubble.appendChild(_txDiv);
-    } else if (transcriptionError) {
-      const _errDiv = document.createElement("div");
-      _errDiv.style.cssText = "font-size:.82rem;color:var(--text-muted,#9aa0b4);font-style:italic";
-      _errDiv.textContent = "🎧 Não foi possível transcrever este áudio.";
-      bubble.appendChild(_errDiv);
-    } else if (!mediaData) {
+    } else {
       const _fbDiv = document.createElement("div");
       _fbDiv.style.cssText = "font-size:.82rem;font-style:italic;opacity:.82";
-      _fbDiv.textContent = "🎧 Áudio recebido — transcrição indisponível.";
+      _fbDiv.textContent = "🎙 Áudio";
       bubble.appendChild(_fbDiv);
     }
 
