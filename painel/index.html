@@ -1702,6 +1702,60 @@
       background: rgba(255,255,255,.2);
     }
 
+    /* ── Player de Áudio Compacto ── */
+    .audio-player {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      width: 240px;
+      max-width: min(240px, 68vw);
+      padding: 2px 0;
+      box-sizing: border-box;
+    }
+    .ap-btn {
+      width: 32px;
+      height: 32px;
+      border-radius: 50%;
+      border: none;
+      background: var(--brand-navy, #1a2a5e);
+      color: #fff;
+      cursor: pointer;
+      font-size: .7rem;
+      flex-shrink: 0;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      transition: background .12s;
+      line-height: 1;
+    }
+    .ap-btn:hover { background: var(--brand-navy-mid, #243880); }
+    .ap-track { flex: 1; min-width: 0; }
+    .ap-bar {
+      height: 3px;
+      background: rgba(0,0,0,.18);
+      border-radius: 2px;
+      cursor: pointer;
+      position: relative;
+    }
+    .ap-fill {
+      position: absolute;
+      top: 0; left: 0;
+      height: 100%;
+      width: 0%;
+      background: var(--brand-navy, #1a2a5e);
+      border-radius: 2px;
+      pointer-events: none;
+    }
+    .ap-time {
+      font-size: .65rem;
+      color: var(--text-secondary, #5a6380);
+      flex-shrink: 0;
+      min-width: 30px;
+      text-align: right;
+      font-variant-numeric: tabular-nums;
+      font-feature-settings: "tnum";
+    }
+
     /* ── Compositor ── */
     .composer {
       background: #fff;
@@ -5557,11 +5611,7 @@ function appendBubble(container, msg, optimistic = false, history = null) {
   // ── Áudio ──
   } else if (mediaType === "audio") {
     if (mediaData) {
-      const audio = document.createElement("audio");
-      audio.controls = true;
-      audio.src      = `data:${mediaMimeType || "audio/ogg"};base64,${mediaData}`;
-      audio.style.maxWidth = "220px";
-      bubble.appendChild(audio);
+      bubble.appendChild(createAudioPlayer(mediaData, mediaMimeType));
     } else {
       const _fbDiv = document.createElement("div");
       _fbDiv.style.cssText = "font-size:.82rem;font-style:italic;opacity:.82";
@@ -5719,6 +5769,76 @@ function buildMediaCard(icon, name, base64, mimeType, canView) {
     <div class="media-doc-actions">${actionsHtml}</div>
   `;
   return card;
+}
+
+function createAudioPlayer(base64, mimeType) {
+  const audio = new Audio(`data:${mimeType || "audio/ogg"};base64,${base64}`);
+
+  const wrap  = document.createElement("div");
+  wrap.className = "audio-player";
+
+  const btn = document.createElement("button");
+  btn.className = "ap-btn";
+  btn.setAttribute("aria-label", "Play");
+  btn.textContent = "▶";
+
+  const track = document.createElement("div");
+  track.className = "ap-track";
+  const bar  = document.createElement("div");
+  bar.className  = "ap-bar";
+  const fill = document.createElement("div");
+  fill.className = "ap-fill";
+  bar.appendChild(fill);
+  track.appendChild(bar);
+
+  const time = document.createElement("span");
+  time.className   = "ap-time";
+  time.textContent = "0:00";
+
+  wrap.appendChild(btn);
+  wrap.appendChild(track);
+  wrap.appendChild(time);
+
+  function fmt(s) {
+    if (!isFinite(s) || s < 0) return "0:00";
+    const m = Math.floor(s / 60);
+    return `${m}:${Math.floor(s % 60).toString().padStart(2, "0")}`;
+  }
+
+  audio.addEventListener("loadedmetadata", () => {
+    time.textContent = fmt(audio.duration);
+  });
+  audio.addEventListener("timeupdate", () => {
+    if (!audio.duration) return;
+    fill.style.width = `${(audio.currentTime / audio.duration) * 100}%`;
+    time.textContent = fmt(audio.currentTime);
+  });
+  audio.addEventListener("ended", () => {
+    btn.textContent = "▶";
+    btn.setAttribute("aria-label", "Play");
+    fill.style.width = "0%";
+    time.textContent = fmt(audio.duration);
+  });
+
+  btn.addEventListener("click", () => {
+    if (audio.paused) {
+      audio.play();
+      btn.textContent = "⏸";
+      btn.setAttribute("aria-label", "Pause");
+    } else {
+      audio.pause();
+      btn.textContent = "▶";
+      btn.setAttribute("aria-label", "Play");
+    }
+  });
+
+  bar.addEventListener("click", (e) => {
+    if (!audio.duration) return;
+    const r = bar.getBoundingClientRect();
+    audio.currentTime = Math.max(0, Math.min(1, (e.clientX - r.left) / r.width)) * audio.duration;
+  });
+
+  return wrap;
 }
 
 function viewMedia(key) {
