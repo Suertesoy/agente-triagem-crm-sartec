@@ -16,7 +16,7 @@
     /* ══════════════════════════════════════════════════
        RESET + VARIÁVEIS
     ══════════════════════════════════════════════════ */
-    html { overflow-x: hidden; }
+    html { overflow-x: hidden; margin: 0; padding: 0; }
     html.modal-open,
     body.modal-open {
       overflow: hidden !important;
@@ -53,6 +53,8 @@
       color: var(--text-primary);
       min-height: 100vh;
       overflow-x: hidden;
+      margin: 0;
+      padding: 0;
     }
 
     /* ══════════════════════════════════════════════════
@@ -385,8 +387,8 @@
     .pipeline-wrap {
       overflow-x: auto;
       padding: 20px 24px 110px;
-      max-width: 1900px;
-      margin: 0 auto;
+      width: 100%;
+      box-sizing: border-box;
     }
     .pipeline {
       display: flex;
