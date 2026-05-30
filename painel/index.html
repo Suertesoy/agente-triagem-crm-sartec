@@ -1707,8 +1707,8 @@
       display: flex;
       align-items: center;
       gap: 8px;
-      width: 240px;
-      max-width: min(240px, 68vw);
+      width: 260px;
+      max-width: min(260px, 72vw);
       padding: 2px 0;
       box-sizing: border-box;
     }
@@ -1729,7 +1729,13 @@
       line-height: 1;
     }
     .ap-btn:hover { background: var(--brand-navy-mid, #243880); }
-    .ap-track { flex: 1; min-width: 0; }
+    .ap-track {
+      flex: 1;
+      min-width: 0;
+      display: flex;
+      flex-direction: column;
+      gap: 3px;
+    }
     .ap-bar {
       height: 3px;
       background: rgba(0,0,0,.18);
@@ -1746,15 +1752,33 @@
       border-radius: 2px;
       pointer-events: none;
     }
-    .ap-time {
-      font-size: .65rem;
+    .ap-times {
+      display: flex;
+      justify-content: space-between;
+    }
+    .ap-tc, .ap-td {
+      font-size: .6rem;
       color: var(--text-secondary, #5a6380);
-      flex-shrink: 0;
-      min-width: 30px;
-      text-align: right;
       font-variant-numeric: tabular-nums;
       font-feature-settings: "tnum";
+      line-height: 1;
     }
+    .ap-speed {
+      flex-shrink: 0;
+      font-size: .6rem;
+      font-weight: 700;
+      color: var(--brand-navy, #1a2a5e);
+      background: rgba(26,42,94,.09);
+      border: none;
+      border-radius: 10px;
+      padding: 2px 5px;
+      cursor: pointer;
+      min-width: 26px;
+      text-align: center;
+      transition: background .12s;
+      line-height: 1.4;
+    }
+    .ap-speed:hover { background: rgba(26,42,94,.18); }
 
     /* ── Compositor ── */
     .composer {
@@ -5774,30 +5798,49 @@ function buildMediaCard(icon, name, base64, mimeType, canView) {
 function createAudioPlayer(base64, mimeType) {
   const audio = new Audio(`data:${mimeType || "audio/ogg"};base64,${base64}`);
 
-  const wrap  = document.createElement("div");
+  const wrap = document.createElement("div");
   wrap.className = "audio-player";
 
+  // ── Botão play/pause ──
   const btn = document.createElement("button");
   btn.className = "ap-btn";
   btn.setAttribute("aria-label", "Play");
   btn.textContent = "▶";
 
+  // ── Coluna central: barra + tempos ──
   const track = document.createElement("div");
   track.className = "ap-track";
-  const bar  = document.createElement("div");
-  bar.className  = "ap-bar";
+
+  const bar = document.createElement("div");
+  bar.className = "ap-bar";
   const fill = document.createElement("div");
   fill.className = "ap-fill";
   bar.appendChild(fill);
-  track.appendChild(bar);
 
-  const time = document.createElement("span");
-  time.className   = "ap-time";
-  time.textContent = "0:00";
+  const times = document.createElement("div");
+  times.className = "ap-times";
+  const tc = document.createElement("span");   // tempo atual
+  tc.className = "ap-tc";
+  tc.textContent = "0:00";
+  const td = document.createElement("span");   // duração total
+  td.className = "ap-td";
+  td.textContent = "0:00";
+  times.appendChild(tc);
+  times.appendChild(td);
+
+  track.appendChild(bar);
+  track.appendChild(times);
+
+  // ── Botão de velocidade ──
+  const speedSteps = [1, 1.5, 2];
+  let speedIdx = 0;
+  const speedBtn = document.createElement("button");
+  speedBtn.className = "ap-speed";
+  speedBtn.textContent = "1x";
 
   wrap.appendChild(btn);
   wrap.appendChild(track);
-  wrap.appendChild(time);
+  wrap.appendChild(speedBtn);
 
   function fmt(s) {
     if (!isFinite(s) || s < 0) return "0:00";
@@ -5806,18 +5849,19 @@ function createAudioPlayer(base64, mimeType) {
   }
 
   audio.addEventListener("loadedmetadata", () => {
-    time.textContent = fmt(audio.duration);
+    td.textContent = fmt(audio.duration);
   });
   audio.addEventListener("timeupdate", () => {
     if (!audio.duration) return;
     fill.style.width = `${(audio.currentTime / audio.duration) * 100}%`;
-    time.textContent = fmt(audio.currentTime);
+    tc.textContent = fmt(audio.currentTime);
   });
   audio.addEventListener("ended", () => {
     btn.textContent = "▶";
     btn.setAttribute("aria-label", "Play");
     fill.style.width = "0%";
-    time.textContent = fmt(audio.duration);
+    tc.textContent = "0:00";
+    td.textContent = fmt(audio.duration);
   });
 
   btn.addEventListener("click", () => {
@@ -5836,6 +5880,12 @@ function createAudioPlayer(base64, mimeType) {
     if (!audio.duration) return;
     const r = bar.getBoundingClientRect();
     audio.currentTime = Math.max(0, Math.min(1, (e.clientX - r.left) / r.width)) * audio.duration;
+  });
+
+  speedBtn.addEventListener("click", () => {
+    speedIdx = (speedIdx + 1) % speedSteps.length;
+    audio.playbackRate = speedSteps[speedIdx];
+    speedBtn.textContent = speedSteps[speedIdx] + "x";
   });
 
   return wrap;
