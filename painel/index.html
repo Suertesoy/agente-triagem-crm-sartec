@@ -2376,17 +2376,22 @@
       cursor: pointer;
     }
     .btn-cat-mgr {
-      background: none;
-      border: none;
+      background: #f1f5f9;
+      border: 1px solid #cbd5e1;
       cursor: pointer;
       font-size: .72rem;
-      padding: 2px 4px;
-      border-radius: 4px;
-      color: var(--text-muted);
+      padding: 3px 6px;
+      border-radius: 8px;
+      color: var(--text-primary);
       flex-shrink: 0;
-      opacity: .55;
+      opacity: .85;
+      transition: background-color .15s, border-color .15s, opacity .15s;
     }
-    .btn-cat-mgr:hover { background: var(--bg-main); color: var(--text-primary); opacity: 1; }
+    .btn-cat-mgr:hover { 
+      background: #e2e8f0; 
+      border-color: #94a3b8; 
+      opacity: 1; 
+    }
 
     /* ── Botão Nova conversa ── */
     .convs-new-btn {
@@ -3077,24 +3082,37 @@
       opacity: 1;
     }
 
-    /* ── Categoria como texto puro: remove seta nativa do select ── */
+    /* ── Categoria como botão/pill destacado ── */
     .card-cat-row .demand-select {
       flex: 1;
       min-width: 0;
       -webkit-appearance: none;
       -moz-appearance: none;
       appearance: none;
-      background: transparent;
-      border: none;
-      padding: 0 2px;
+      background: #f1f5f9;
+      border: 1px solid #cbd5e1;
+      border-radius: 12px;
+      padding: 3px 22px 3px 8px;
       cursor: pointer;
       font-family: inherit;
-      color: var(--text-secondary);
+      color: var(--text-primary);
       font-size: .67rem;
-      font-weight: 600;
+      font-weight: 700;
       outline: none;
+      background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' fill='none' viewBox='0 0 24 24' stroke='%2523475569' stroke-width='3'%3E%3Cpath stroke-linecap='round' stroke-linejoin='round' d='M19.5 8.25l-7.5 7.5-7.5-7.5'/%3E%3C/svg%3E");
+      background-repeat: no-repeat;
+      background-position: right 6px center;
+      background-size: 10px;
+      transition: background-color .15s, border-color .15s, box-shadow .15s;
     }
-    .card-cat-row .demand-select:focus { outline: 1px solid rgba(26,42,94,.4); border-radius: 3px; }
+    .card-cat-row .demand-select:hover {
+      background-color: #e2e8f0;
+      border-color: #94a3b8;
+    }
+    .card-cat-row .demand-select:focus {
+      border-color: var(--brand-navy);
+      box-shadow: 0 0 0 2px rgba(26,42,94,.15);
+    }
 
     /* ── Label "Cliente:" no topo do card ── */
     .client-label {
@@ -4695,10 +4713,11 @@ function buildCard(c, col, cols) {
         <span class="client-label">Cliente:</span>
         <span class="card-name" contenteditable="false" data-phone="${esc(c.phone)}"
           onmousedown="this.contentEditable='false'"
-          onclick="event.stopPropagation(); this.contentEditable='true'; this.focus()"
+          onclick="event.stopPropagation()"
+          ondblclick="event.stopPropagation(); this.contentEditable='true'; this.focus(); document.execCommand('selectAll', false, null);"
           onblur="saveCardField(this,'clientName'); this.contentEditable='false'"
           onkeydown="if(event.key==='Enter'){event.preventDefault();this.blur()}"
-          title="${esc(c.clientName)} — clique para editar">${esc(c.clientName)}</span>
+          title="${esc(c.clientName)} — duplo clique para editar">${esc(c.clientName)}</span>
         ${isIncomplete ? `<span class="badge-triagem">Triagem ⚠️</span>` : ""}
       </div>
       ${attendantChip}
@@ -4707,18 +4726,19 @@ function buildCard(c, col, cols) {
     <div class="card-zone-mid" onclick="event.stopPropagation()">
       <div class="card-title" contenteditable="false" data-phone="${esc(c.phone)}"
         onmousedown="this.contentEditable='false'"
-        onclick="event.stopPropagation(); this.contentEditable='true'; this.focus()"
+        onclick="event.stopPropagation()"
+        ondblclick="event.stopPropagation(); this.contentEditable='true'; this.focus(); document.execCommand('selectAll', false, null);"
         onblur="saveCardField(this,'cardTitle'); this.contentEditable='false'"
         onkeydown="if(event.key==='Enter'){event.preventDefault();this.blur()}"
         data-placeholder="${esc(!cardTitle ? (resumoOperacional(c) || 'Resumo do pedido...') : '')}"
-        title="${cardTitle ? esc(cardTitle) + ' — clique para editar' : 'Clique para adicionar resumo do pedido'}">${esc(cardTitle)}</div>
+        title="${cardTitle ? esc(cardTitle) + ' — duplo clique para editar' : 'Duplo clique para adicionar resumo do pedido'}">${esc(cardTitle)}</div>
     </div>
 
     <div class="card-cat-row" onclick="event.stopPropagation()">
       <span class="card-cat-label">CATEGORIA:</span>
       <select class="demand-select ${demandClass(c.demandType)}"
         data-phone="${esc(c.phone)}"
-        onchange="saveDemandType(this)" onclick="event.stopPropagation()" title="Tipo de demanda">
+        onchange="saveDemandType(this)" onclick="event.stopPropagation()" title="Clique para alterar categoria">
         ${Object.entries(getCategories()).map(([k,v]) =>
           `<option value="${k}"${k===c.demandType?" selected":""}>${v}</option>`
         ).join("")}
@@ -4772,12 +4792,23 @@ function buildCard(c, col, cols) {
     const _ctaRow = card.querySelector(".card-cta-row");
     if (_ctaRow) _ctaRow.onclick = e => e.stopPropagation();
 
-    // Bloqueia edição de campos de texto
+    // Bloqueia edição de campos de texto e remove duplo clique
     card.querySelectorAll("[contenteditable]").forEach(el => {
       el.contentEditable = "false";
+      el.removeAttribute("ondblclick");
       el.removeAttribute("onblur");
       el.removeAttribute("onkeydown");
       el.style.cursor = "default";
+      const currentTitle = el.getAttribute("title") || "";
+      const cleanTitle = currentTitle
+        .replace(" — duplo clique para editar", "")
+        .replace("Duplo clique para adicionar resumo do pedido", "")
+        .replace("Duplo clique para editar", "");
+      if (cleanTitle) {
+        el.setAttribute("title", cleanTitle);
+      } else {
+        el.removeAttribute("title");
+      }
     });
     // pointer-events:none em controles interativos — o click passa pelo elemento
     // e borbulha até o card (openChat), sem ser engolido por el.disabled
@@ -8544,6 +8575,14 @@ document.addEventListener("DOMContentLoaded", function() {
   // Reflete escolha salva de ordenação de conversas
   document.getElementById("sort-btn-recent")?.classList.toggle("active", convSort === "recent");
   document.getElementById("sort-btn-az")?.classList.toggle("active",     convSort === "az");
+
+  // Dica de onboarding sobre edição de cards
+  if (!localStorage.getItem("sartec_onboarding_dblclick_v2")) {
+    setTimeout(() => {
+      showToast("Dica: agora nome e resumo do card editam com duplo clique.", "t-ok");
+      localStorage.setItem("sartec_onboarding_dblclick_v2", "true");
+    }, 2000);
+  }
 });
 
 // ── Atualização cirúrgica de status de entrega (sem re-render de bolhas) ─────
