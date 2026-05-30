@@ -1216,25 +1216,36 @@
       overflow: hidden;
       box-shadow: 0 24px 64px rgba(0,0,0,.3);
     }
+    #modal-chat-body {
+      display: flex;
+      flex-direction: column;
+      flex: 1;
+      overflow: hidden;
+    }
     @media (min-width: 900px) {
       .modal-box {
         max-width: min(94vw, 1180px);
         max-height: 880px;
+        display: flex;
+        flex-direction: column;
+      }
+      #modal-chat-body {
         display: grid;
         grid-template-columns: minmax(320px, 340px) minmax(0, 1fr);
-        grid-template-rows: auto auto auto auto 1fr auto;
+        grid-template-rows: auto auto auto 1fr auto;
+        flex: 1;
+        min-height: 0;
+        overflow: hidden;
       }
-      .modal-header,
       .window-status-bar,
       .dupe-tab-warning {
         grid-column: 1 / -1;
       }
-      .modal-header      { grid-row: 1; }
-      .window-status-bar { grid-row: 2; }
-      .dupe-tab-warning  { grid-row: 3; }
+      .window-status-bar { grid-row: 1; }
+      .dupe-tab-warning  { grid-row: 2; }
       #modal-summary-block {
         grid-column: 1;
-        grid-row: 4;
+        grid-row: 3;
         overflow-y: auto;
         border-right: 1px solid var(--border);
         border-bottom: 1px solid var(--border);
@@ -1242,20 +1253,20 @@
       }
       #modal-dados-section {
         grid-column: 1;
-        grid-row: 5 / 7;
+        grid-row: 4 / 6;
         overflow-y: auto;
         border-right: 1px solid var(--border);
         border-bottom: none;
       }
-      .messages {
+      #modal-chat-body .messages {
         grid-column: 2;
-        grid-row: 4 / 6;
+        grid-row: 3 / 5;
         min-width: 0;
         overflow-y: auto;
       }
-      .composer {
+      #modal-chat-body .composer {
         grid-column: 2;
-        grid-row: 6;
+        grid-row: 5;
         min-width: 0;
       }
 
@@ -3507,7 +3518,7 @@
       <button class="modal-hdr-btn btn-resolve-modal" onclick="resolveConversation('modal')">Resolver</button>
     </div>
 
-    <div id="modal-chat-body" style="display:flex; flex-direction:column; flex:1; overflow:hidden;">
+    <div id="modal-chat-body">
       <!-- Barra de janela de 24h -->
       <div class="window-status-bar ws-unknown" id="modal-window-bar"></div>
       <div class="dupe-tab-warning hidden" id="modal-dupe-warning">
@@ -5175,7 +5186,7 @@ async function openChat(phone) {
   const chatBody = document.getElementById("modal-chat-body");
   const contactContainer = document.getElementById("modal-contact-container");
   if (chatBody && contactContainer) {
-    chatBody.style.display = "flex";
+    chatBody.style.display = "";
     contactContainer.style.display = "none";
   }
   document.body.style.overflow = "hidden";
@@ -5552,7 +5563,7 @@ function closeModal() {
   const chatBody = document.getElementById("modal-chat-body");
   const contactContainer = document.getElementById("modal-contact-container");
   if (chatBody && contactContainer) {
-    chatBody.style.display = "flex";
+    chatBody.style.display = "";
     contactContainer.style.display = "none";
   }
   document.body.style.overflow = "";
@@ -8305,7 +8316,7 @@ function showContactFromChat(phone) {
     chatBody.style.display = "none";
     contactContainer.style.display = "flex";
     openContactDetailContextual(phone, contactContainer, () => {
-      chatBody.style.display = "flex";
+      chatBody.style.display = "";
       contactContainer.style.display = "none";
     }, 'convs-cd');
   }
@@ -8319,7 +8330,7 @@ function showContactFromModal() {
     chatBody.style.display = "none";
     contactContainer.style.display = "flex";
     openContactDetailContextual(openModalPhone, contactContainer, () => {
-      chatBody.style.display = "flex";
+      chatBody.style.display = "";
       contactContainer.style.display = "none";
     }, 'modal-cd');
   }
@@ -8380,9 +8391,19 @@ function buildContextualContactFormHTML(c, prefix) {
 
   return `
     <div class="cd-wrap">
-      <div class="cd-header">
+      <div class="cd-header" style="display:flex; align-items:center; gap:12px;">
+        <button class="cd-back-arrow-btn" onclick="triggerBackCallback('${prefix}')" 
+          style="background:none; border:none; color:var(--text-secondary); cursor:pointer; padding:6px; margin-right:4px; display:inline-flex; align-items:center; justify-content:center; border-radius:50%; transition:background .12s, color .12s;" 
+          onmouseover="this.style.background='rgba(26,42,94,.08)'; this.style.color='var(--brand-navy)'" 
+          onmouseout="this.style.background='none'; this.style.color='var(--text-secondary)'" 
+          title="Voltar para conversa">
+          <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+            <line x1="19" y1="12" x2="5" y2="12"></line>
+            <polyline points="12 19 5 12 12 5"></polyline>
+          </svg>
+        </button>
         <div class="cd-avatar ${isPJ ? 'pj' : ''}">${esc(initials(name))}</div>
-        <div>
+        <div style="flex:1;">
           <div class="cd-title">${esc(name)}</div>
           <div class="cd-subtitle">${esc(phoneStr)}</div>
         </div>
@@ -8426,7 +8447,6 @@ function buildContextualContactFormHTML(c, prefix) {
 
       <div class="cd-actions">
         <button class="cd-save-btn ${prefix}-save-btn" onclick="saveContactEdit('${esc(c.phone)}', '${prefix}')">Salvar alterações</button>
-        <button class="cd-cancel-btn" style="background:#f1f5f9;border:1px solid #cbd5e1;color:var(--text-primary);padding:8px 18px;border-radius:8px;font-size:.82rem;font-weight:600;cursor:pointer;transition:background .12s" onclick="triggerBackCallback('${prefix}')">Voltar para conversa</button>
       </div>
     </div>
   `;
