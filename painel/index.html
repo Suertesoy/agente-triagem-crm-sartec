@@ -3038,6 +3038,9 @@
       padding: 2px 7px;
     }
 
+    /* ── Linha de etapa (mobile only) ── */
+    .card-stage-row { display: none; }
+
     /* ── Linha de ação principal (CTA) ── */
     .card-cta-row { margin: 8px 0 6px; }
 
@@ -3381,6 +3384,17 @@
       .mob-help-card { background:var(--bg-sidebar,#f8f9fc);border-radius:10px;padding:13px 14px; }
       .mob-help-card-title { font-size:.82rem;font-weight:700;color:var(--text-primary,#1a1a2e);margin-bottom:5px; }
       .mob-help-card-text { font-size:.78rem;color:var(--text-secondary,#5a6380);line-height:1.45; }
+      /* Etapa: visível apenas no mobile */
+      .card-stage-row { display:flex; align-items:center; gap:4px; margin:0 0 5px; }
+      .card-stage-row .stage-select {
+        flex:1; min-width:0; font-size:1rem; font-weight:700;
+        border:1px solid var(--border); border-radius:5px;
+        padding:3px 20px 3px 6px; background:#fff;
+        color:var(--text-primary); cursor:pointer;
+        -webkit-appearance:none; appearance:none;
+        background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='8' height='5'%3E%3Cpath d='M0 0l4 5 4-5z' fill='%23475569'/%3E%3C/svg%3E");
+        background-repeat:no-repeat; background-position:right 6px center; background-size:8px;
+      }
     }
   </style>
 </head>
@@ -4852,6 +4866,15 @@ function buildCard(c, col, cols) {
       <span class="card-win-time">${cardWindowTimeText(c)}</span>
     </div>
 
+    ${!isResolved ? `<div class="card-stage-row" onclick="event.stopPropagation()">
+      <span class="card-cat-label">ETAPA:</span>
+      <select class="stage-select" data-phone="${esc(c.phone)}"
+        onchange="changePipelineStage(this,'${esc(c.phone)}','${clientType}')"
+        onclick="event.stopPropagation()" title="Mover card para outra etapa">
+        ${statusOptions}
+      </select>
+    </div>` : ""}
+
     <div class="card-cta-row" onclick="event.stopPropagation()">
       ${isResolved
         ? `<button class="btn-reopen" onclick="reopenCard('${esc(c.phone)}','${clientType}')" style="width:100%">&#8635; Reabrir</button>`
@@ -4985,6 +5008,37 @@ async function saveDemandType(select) {
     if (conv) { conv.demandType = demandType; renderPipeline(allConvs); }
     showToast("Categoria atualizada");
   } catch (e) { console.error("[saveDemandType]", e); }
+}
+
+async function changePipelineStage(select, phone, clientType) {
+  const newStatus = select.value;
+  const conv = allConvs.find(c => c.phone === phone);
+  if (!conv || (conv.pipelineStatus || "novo") === newStatus) return;
+  const originalStatus = conv.pipelineStatus || "novo";
+
+  conv.pipelineStatus = newStatus;
+  const tabId = clientType === "pj" ? "pj" : "pf";
+  renderPipeline(allConvs);
+  if (window.innerWidth <= 768) {
+    renderMobStageCards(tabId, _mobActiveStage[tabId] || "novo");
+  }
+
+  try {
+    const res = await fetch("/api/update-status", {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ phone, pipelineStatus: newStatus, clientType }),
+    });
+    if (!res.ok) throw new Error("HTTP " + res.status);
+    showToast("Etapa atualizada");
+  } catch {
+    showToast("Não consegui alterar a etapa. O card voltou para a posição anterior.", "t-err");
+    conv.pipelineStatus = originalStatus;
+    renderPipeline(allConvs);
+    if (window.innerWidth <= 768) {
+      renderMobStageCards(tabId, _mobActiveStage[tabId] || "novo");
+    }
+  }
 }
 
 async function changeStatus(select, phone, clientType) {
