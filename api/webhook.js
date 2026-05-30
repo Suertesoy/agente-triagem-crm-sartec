@@ -677,6 +677,7 @@ function addMessage(session, role, content, meta = {}) {
   if (meta.replyToFrom)        item.replyToFrom        = meta.replyToFrom;
   if (meta.mediaType)          item.mediaType          = meta.mediaType;
   if (meta.mediaMimeType)      item.mediaMimeType      = meta.mediaMimeType;
+  if (meta.mediaData)          item.mediaData          = meta.mediaData;
   if (meta.transcription)      item.transcription      = meta.transcription;
   if (meta.transcriptionError) item.transcriptionError = meta.transcriptionError;
   if (meta.pjLunchAutoReply)   item.pjLunchAutoReply   = true;
