@@ -144,6 +144,7 @@ Após o cliente responder, classifique:
 - Enviar documento com cabeçalho de empresa ou órgão público
 - Mencionar prefeitura, secretaria, câmara, autarquia, escola estadual/municipal, hospital público
 - Usar os termos "razão social", "para a empresa", "para o escritório", "para minha firma", "em nome de", "nota fiscal", "faturamento", "DANFE"
+- Se identificar como empresa, grupo, setor, departamento, compras, financeiro, fiscal, controladoria, ou falar em nome de uma organização (ex: "empresa X", "Grupo X", "setor fiscal")
 - Pedir cotação formal por escrito
 
 Nesses casos: registre internamente como PJ e execute o **Fluxo PJ** diretamente.
@@ -601,6 +602,14 @@ function detectPJSignals(text) {
   const lower = text.toLowerCase();
   const signals = [
     /\b\d{2}\.?\d{3}\.?\d{3}\/?\d{4}-?\d{2}\b/,   // CNPJ
+    /\bcnpj\b/,
+    /\bnf\b/,
+    /\bnfe\b/,
+    /\bempresa\s+\w+/,
+    /\bgrupo\s+\w+/,
+    /\bsetor\s+\w+/,
+    /\bdepto\s+\w+/,
+    /\bdepartamento\s+\w+/,
     "para a empresa",
     "para o escritório",
     "para minha firma",
@@ -618,6 +627,12 @@ function detectPJSignals(text) {
     "nota fiscal",
     "faturamento",
     "danfe",
+    "compras",
+    "financeiro",
+    "fiscal",
+    "controladoria",
+    "sou da",
+    "falo pela",
     // Respostas diretas à pergunta PF/PJ
     "pessoa jurídica",
     "pessoa juridica",

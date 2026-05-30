@@ -5140,9 +5140,8 @@ async function refreshModal() {
 }
 
 // ── Gera resumo para o atendente (dados já carregados, sem chamada extra à IA) ──
+// ── Gera resumo para o atendente (dados já carregados, sem chamada extra à IA) ──
 function buildSummaryHTML(data) {
-  const resumo    = resumoOperacional(data);
-  const titleStr  = data.cardTitle ? esc(data.cardTitle) : esc(demandLabel(data.demandType));
   const waitStr   = data.handoffAt ? relTime(data.handoffAt) : "—";
   const statusStr = pipelineLabel(data.pipelineStatus, data.clientType);
 
@@ -5150,6 +5149,7 @@ function buildSummaryHTML(data) {
   const _modalUserMsgs = (data.history || [])
     .filter(m => m.role === "user" && typeof m.content === "string")
     .map(m => m.content.trim()).join(" ");
+  
   const _isNoCad  = data.clientType === "pj" &&
     /ainda\s+não|ainda\s+nao|não\s+(?:tenho|temos)\s+cadastro|nao\s+(?:tenho|temos)\s+cadastro|só\s+orçamento|so\s+orcamento|sem\s+cadastro/i.test(_modalUserMsgs);
   const _isUrgent = /urgent|urgência|urgencia|o\s+quanto\s+antes|para\s+hoje|preciso.*hoje/i.test(_modalUserMsgs);
@@ -5164,7 +5164,6 @@ function buildSummaryHTML(data) {
     `<div class="modal-summary-item"><span class="sum-text"><span class="sum-label">${label}</span>${text}</span></div>`;
 
   const contextRows = [
-    resumo    ? `<div class="modal-summary-item modal-summary-highlight"><span class="sum-text">${esc(resumo)}</span></div>` : "",
     _isNoCad  ? smRow("Empresa não cadastrada", "color:var(--text-secondary)") : "",
     _isUrgent ? smRow("Pedido urgente", "color:#b45309;font-weight:700") : "",
     _hasPrazo ? smRow("Cliente perguntou sobre prazo/entrega") : "",
@@ -5179,45 +5178,172 @@ function buildSummaryHTML(data) {
           : "")
     : "";
 
-  // Últimas mensagens substantivas do cliente (texto, transcrição de áudio ou marcador de mídia)
-  const _TRIVIAL = /^(oi+|ol[áa]|hey|hi|bom\s+dia|boa\s+tarde|boa\s+noite|ok|obrigad|valeu|sim|não|nao|pode|certo|entendi|por\s+favor)[\s!.,?]*$/i;
-  const _lastMsgs = (data.history || [])
+  // --- Heurística local de Resumo Interpretado ---
+  const userMessages = (data.history || [])
     .filter(m => m.role === "user")
     .map(m => {
       if (m.mediaType === "audio") {
-        if (m.transcription) return { txt: m.transcription.trim(), icon: "🎙" };
-        return { txt: "Cliente enviou áudio", icon: "🎙", muted: true };
+        return m.transcription ? m.transcription.trim() : "";
       }
-      if (m.mediaType === "image" || m.mediaType === "document") {
-        return { txt: "Cliente enviou documento/imagem", icon: "📎", muted: true };
-      }
-      const raw = typeof m.content === "string" ? m.content.trim() : "";
-      if (!raw || raw === "[áudio]" || raw === "[mídia]") return null;
-      if (raw.length < 8 || _TRIVIAL.test(raw)) return null;
-      return { txt: raw, icon: "›" };
+      return typeof m.content === "string" ? m.content.trim() : "";
     })
-    .filter(Boolean)
-    .slice(-3);
+    .filter(Boolean);
 
-  const lastMsgsHTML = _lastMsgs.length > 0
-    ? `<div class="modal-summary-item" style="margin-top:5px;border-top:1px solid rgba(0,0,0,.07);padding-top:5px;">
-        <span class="sum-text" style="font-size:.6rem;font-weight:700;letter-spacing:.05em;color:var(--text-muted);text-transform:uppercase">Últimas mensagens</span>
-       </div>` +
-      _lastMsgs.map(m => {
-        const txt = m.txt.length > 85 ? m.txt.substring(0, 85) + "…" : m.txt;
-        const st  = m.muted ? "font-style:italic;opacity:.72" : "";
-        return `<div class="modal-summary-item">
-          <span class="sum-text" style="font-size:.78rem;${st}">${m.icon} ${esc(txt)}</span>
-        </div>`;
-      }).join("")
-    : "";
+  const allUserText = userMessages.join(" ");
+  const allUserTextLower = allUserText.toLowerCase();
+
+  // 1. Extração de Nome
+  let detectedName = null;
+  const nameMatch = allUserText.match(/(?:aqui\s+é\s+a|aqui\s+é\s+o|sou\s+a|sou\s+o|meu\s+nome\s+é)\s+([A-Z\u00C0-\u00DCa-z\u00E0-\u00FC]+)/i);
+  if (nameMatch) {
+    detectedName = nameMatch[1].trim();
+  }
+  const clientNameDisp = (data.clientName && data.clientName !== "—" && !data.clientName.startsWith("+")) 
+    ? data.clientName 
+    : (detectedName || "Não identificado");
+
+  // 2. Extração de Empresa
+  let detectedCompany = null;
+  const companyMatch = allUserText.match(/(?:da\s+empresa|do\s+grupo|pela\s+empresa|empresa|grupo)\s+([A-Z\u00C0-\u00DCa-z0-9\u00E0-\u00FC\-\.\&]+(?:\s+[A-Z\u00C0-\u00DCa-z0-9\u00E0-\u00FC\-\.\&]+){0,2})/i);
+  if (companyMatch) {
+    const val = companyMatch[1].trim();
+    if (!/^(de|da|do|para|com|em|que|um|uma)$/i.test(val)) {
+      detectedCompany = val;
+    }
+  }
+
+  // 3. Extração de Setor
+  let detectedSector = null;
+  const sectorMatch = allUserText.match(/(?:setor|depto|departamento|área|area)\s+([A-Z\u00C0-\u00DCa-z0-9\u00E0-\u00FC]+(?:\s+[A-Z\u00C0-\u00DCa-z0-9\u00E0-\u00FC]+){0,1})/i);
+  if (sectorMatch) {
+    detectedSector = sectorMatch[1].trim();
+  } else {
+    const keywords = ["fiscal", "financeiro", "compras", "controladoria", "faturamento", "recepção", "recepcao", "ti", "diretoria", "setor pessoal", "recursos humanos", "rh"];
+    for (const kw of keywords) {
+      if (allUserTextLower.includes(kw)) {
+        detectedSector = kw.charAt(0).toUpperCase() + kw.slice(1);
+        break;
+      }
+    }
+  }
+
+  // 4. Extração de Nota Fiscal
+  let detectedNF = null;
+  const nfMatch = allUserText.match(/(?:nota\s+fiscal|nf-e|nfe|nf|nota)\s*(?:nº|n[ºo\.]|num|numero|no)?\s*(\d{3,10})/i);
+  if (nfMatch) detectedNF = nfMatch[1];
+
+  // 5. Extração de E-mail
+  let detectedEmail = null;
+  const emailMatch = allUserText.match(/[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}/);
+  if (emailMatch) detectedEmail = emailMatch[0];
+
+  // 6. Extração de Prazo/Data
+  let detectedPrazo = null;
+  const dateMatch = allUserText.match(/\b(\d{1,2}\/\d{1,2}(?:\/\d{2,4})?)\b/);
+  if (dateMatch) {
+    detectedPrazo = dateMatch[1];
+  } else if (allUserTextLower.includes("urgente") || allUserTextLower.includes("urgência") || allUserTextLower.includes("urgencia")) {
+    detectedPrazo = "Urgente";
+  } else if (allUserTextLower.includes("amanhã") || allUserTextLower.includes("amanha")) {
+    detectedPrazo = "Amanhã";
+  } else if (allUserTextLower.includes("hoje")) {
+    detectedPrazo = "Hoje";
+  } else if (allUserTextLower.includes("quanto antes") || allUserTextLower.includes("o mais rápido") || allUserTextLower.includes("o mais rapido")) {
+    detectedPrazo = "O quanto antes";
+  }
+
+  // 7. Determina Assunto/Intenção
+  let assunto = "";
+  if (detectedNF) {
+    assunto = `correção de Nota Fiscal (${detectedNF})`;
+  } else if (allUserTextLower.includes("orçamento") || allUserTextLower.includes("cotacao") || allUserTextLower.includes("cotação")) {
+    assunto = "solicitação de orçamento";
+  } else if (allUserTextLower.includes("lista escolar") || allUserTextLower.includes("material escolar")) {
+    assunto = "envio de lista escolar";
+  } else if (allUserTextLower.includes("comprar") || allUserTextLower.includes("pedido")) {
+    assunto = "pedido de produtos";
+  } else if (allUserTextLower.includes("xerox") || allUserTextLower.includes("impressão") || allUserTextLower.includes("copia")) {
+    assunto = "serviço de cópias/xerox";
+  } else if (allUserTextLower.includes("dúvida") || allUserTextLower.includes("horário") || allUserTextLower.includes("pagamento")) {
+    assunto = "dúvida operacional";
+  } else {
+    assunto = "atendimento";
+  }
+
+  // Mídias
+  const hasImage = (data.history || []).some(m => m.mediaType === "image");
+  const hasPDF   = (data.history || []).some(m => m.mediaType === "document");
+  const hasAudio = (data.history || []).some(m => m.mediaType === "audio");
+  
+  let midiaInfo = "";
+  if (hasImage && hasPDF)      midiaInfo = " (enviou imagem e PDF)";
+  else if (hasImage)           midiaInfo = " (enviou imagem)";
+  else if (hasPDF)             midiaInfo = " (enviou PDF)";
+  else if (hasAudio)           midiaInfo = " (enviou áudio)";
+
+  // Constrói a frase de resumo interpretado
+  const clienteIdent = clientNameDisp !== "Não identificado" ? clientNameDisp : "Cliente";
+  const empresaIdent = detectedCompany ? ` da ${detectedCompany}` : "";
+  const setorIdent   = detectedSector ? ` (${detectedSector})` : "";
+  
+  let summarySentence = `${clienteIdent}${empresaIdent}${setorIdent} solicita ${assunto}${midiaInfo}.`;
+  
+  if (detectedEmail) {
+    summarySentence += ` E-mail informado: ${detectedEmail}.`;
+  }
+  if (detectedPrazo) {
+    summarySentence += ` Prazo/vencimento citado: ${detectedPrazo}.`;
+  }
+  if (data.escola) {
+    const seriePart = data.serie ? `, série ${data.serie}` : "";
+    summarySentence += ` Escola: ${data.escola}${seriePart}.`;
+  }
+
+  // Fallbacks
+  const baseResumo = resumoOperacional(data) || "";
+  if (summarySentence.length < 35 && baseResumo.length > 5) {
+    summarySentence = baseResumo;
+  }
+  if (summarySentence.length < 15) {
+    summarySentence = "Resumo ainda não identificado. Leia as últimas mensagens do cliente.";
+  }
+
+  // Renderização da Situação Atual destacada
+  const resumoHTML = `
+    <div class="modal-summary-item modal-summary-highlight" style="margin-bottom:8px;padding:8px 10px;display:flex;flex-direction:column;gap:3px;">
+      <span class="sum-text" style="font-size:.65rem;font-weight:800;letter-spacing:.05em;color:var(--brand-navy);text-transform:uppercase;display:block;margin-bottom:1px;">Situação Atual</span>
+      <span class="sum-text" style="font-size:.8rem;font-weight:500;line-height:1.45;color:var(--text-primary);display:block;font-style:normal;">${esc(summarySentence)}</span>
+    </div>
+  `;
+
+  // Construção dos Metadados
+  const metadataRows = [];
+  if (detectedCompany) {
+    metadataRows.push(smLabelRow("Empresa:", esc(detectedCompany)));
+  }
+  if (detectedSector) {
+    metadataRows.push(smLabelRow("Setor:", esc(detectedSector)));
+  }
+  if (detectedNF) {
+    metadataRows.push(smLabelRow("Nota Fiscal:", esc(detectedNF)));
+  }
+  if (detectedEmail) {
+    metadataRows.push(smLabelRow("E-mail:", esc(detectedEmail)));
+  }
+  if (detectedPrazo) {
+    metadataRows.push(smLabelRow("Prazo:", esc(detectedPrazo)));
+  }
+  metadataRows.push(smLabelRow("Tipo de cliente:", data.clientType === "pj" ? "Pessoa Jurídica (PJ)" : "Pessoa Física (PF)"));
+  metadataRows.push(smLabelRow("Categoria:", esc(demandLabel(data.demandType))));
 
   const rows = [
-    contextRows,
-    triagemCtx,
-    lastMsgsHTML,
-    smLabelRow("Pedido:", titleStr),
+    resumoHTML,
+    contextRows ? `<div style="margin-bottom:8px;display:flex;flex-direction:column;gap:4px;">${contextRows}</div>` : "",
+    triagemCtx  ? `<div style="margin-bottom:8px;display:flex;flex-direction:column;gap:4px;">${triagemCtx}</div>` : "",
+    `<div style="margin-top:6px;border-top:1px solid rgba(0,0,0,.06);padding-top:6px;display:flex;flex-direction:column;gap:4px;">`,
+    ...metadataRows,
     smLabelRow("Aguardando:", `${waitStr} · ${statusStr}`),
+    `</div>`
   ].filter(Boolean).join("");
 
   return `<summary>Resumo para o atendente</summary><div class="modal-summary-body">${rows}</div>`;
