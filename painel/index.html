@@ -3848,6 +3848,8 @@ let currentTab      = sessionStorage.getItem("activeTab") || (window.innerWidth 
 let openModalPhone  = null;   // conversa aberta no modal do pipeline
 let openConvsPhone      = null;   // conversa aberta na aba Conversas
 let openConvsRedisKey   = null;   // chave Redis da conversa aberta (para buscar archives corretamente)
+let lastActiveChatPhone = null;
+let lastActiveChatRedisKey = null;
 let _convsChatRequestSeq = 0;    // guard anti-corrida: incrementado a cada abertura/refresh
 let pendingMedia    = {};     // { modal: {type,base64,mimeType,filename}, convs: {...} }
 const pendingImages = { modal: [], convs: [] }; // fila de até 10 imagens por prefix
@@ -3947,6 +3949,36 @@ function cardWindowTimeText(c) {
   }
   if (ws === "waiting_template_reply") return `⏳ Aguard.`;
   return `⏳ 00'00"`;
+}
+
+// ── Agrupamento por data de resolução ────────────────────────────────────
+function getResolvedGroupLabel(dateStr) {
+  if (!dateStr) return "Mais antigos";
+  try {
+    const d = new Date(dateStr);
+    if (isNaN(d.getTime())) return "Mais antigos";
+
+    const now = new Date();
+    const dZero = new Date(d.getFullYear(), d.getMonth(), d.getDate());
+    const nowZero = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+
+    const diffMs = nowZero - dZero;
+    const diffDays = Math.round(diffMs / (24 * 60 * 60 * 1000));
+
+    if (diffDays === 0) return "Hoje";
+    if (diffDays === 1) return "Ontem";
+
+    if (diffDays < 7) {
+      const weekdays = ["Domingo", "Segunda", "Terça", "Quarta", "Quinta", "Sexta", "Sábado"];
+      return weekdays[d.getDay()];
+    }
+
+    const day = String(d.getDate()).padStart(2, '0');
+    const month = String(d.getMonth() + 1).padStart(2, '0');
+    return `${day}/${month}`;
+  } catch {
+    return "Mais antigos";
+  }
 }
 
 // ── Resumo operacional por heurísticas ───────────────────────────────────
@@ -4481,22 +4513,31 @@ function renderPipelineTab(tabId, cols, convs) {
 
   for (const col of cols) {
     const cards = byCol[col.key] || [];
-    // Ordena por prioridade (crítica primeiro) e depois por tempo de espera
-    cards.sort((a, b) => {
-      if (_colOrder[tabId + ":" + col.key]?.length) {
-        const order = _colOrder[tabId + ":" + col.key];
-        const ia = order.indexOf(a.phone), ib = order.indexOf(b.phone);
-        if (ia !== -1 || ib !== -1) {
-          if (ia === -1) return 1; if (ib === -1) return -1; return ia - ib;
+    if (col.resolved) {
+      // Ordena do mais recente para o mais antigo por resolvedAt
+      cards.sort((a, b) => {
+        const da = a.resolvedAt ? new Date(a.resolvedAt).getTime() : 0;
+        const db = b.resolvedAt ? new Date(b.resolvedAt).getTime() : 0;
+        return db - da;
+      });
+    } else {
+      // Ordena por prioridade (crítica primeiro) e depois por tempo de espera
+      cards.sort((a, b) => {
+        if (_colOrder[tabId + ":" + col.key]?.length) {
+          const order = _colOrder[tabId + ":" + col.key];
+          const ia = order.indexOf(a.phone), ib = order.indexOf(b.phone);
+          if (ia !== -1 || ib !== -1) {
+            if (ia === -1) return 1; if (ib === -1) return -1; return ia - ib;
+          }
         }
-      }
-      const pa = PRIORITY_ORDER[computePriority(a).level] ?? 3;
-      const pb = PRIORITY_ORDER[computePriority(b).level] ?? 3;
-      if (pa !== pb) return pa - pb;
-      if (!a.handoffAt) return 1;
-      if (!b.handoffAt) return -1;
-      return new Date(a.handoffAt) - new Date(b.handoffAt);
-    });
+        const pa = PRIORITY_ORDER[computePriority(a).level] ?? 3;
+        const pb = PRIORITY_ORDER[computePriority(b).level] ?? 3;
+        if (pa !== pb) return pa - pb;
+        if (!a.handoffAt) return 1;
+        if (!b.handoffAt) return -1;
+        return new Date(a.handoffAt) - new Date(b.handoffAt);
+      });
+    }
     const hasUrgent = !col.resolved && cards.some(c =>
       c.status === "aguardando_humano" && isUrgent(c.handoffAt)
     );
@@ -4626,8 +4667,24 @@ function renderPipelineTab(tabId, cols, convs) {
       empty.textContent = "Nenhuma conversa";
       cardsEl.appendChild(empty);
     } else {
-      for (const c of cards) {
-        cardsEl.appendChild(buildCard(c, col, cols));
+      if (col.resolved) {
+        let lastGroup = null;
+        for (const c of cards) {
+          const group = getResolvedGroupLabel(c.resolvedAt);
+          if (group !== lastGroup) {
+            lastGroup = group;
+            const div = document.createElement("div");
+            div.className = "resolved-group-divider";
+            div.style.cssText = "font-size:.65rem;font-weight:800;color:var(--text-muted);text-transform:uppercase;letter-spacing:.05em;padding:8px 4px 4px;margin-top:8px;border-bottom:1px solid rgba(0,0,0,.08);grid-column: 1 / -1;display:flex;align-items:center;gap:6px;";
+            div.innerHTML = `<span>📅</span><span>${esc(group)}</span>`;
+            cardsEl.appendChild(div);
+          }
+          cardsEl.appendChild(buildCard(c, col, cols));
+        }
+      } else {
+        for (const c of cards) {
+          cardsEl.appendChild(buildCard(c, col, cols));
+        }
       }
     }
 
@@ -5644,6 +5701,10 @@ async function openConvsChat(phone, redisKey, isArchive) {
         <div id="convs-chat-name" style="font-size:.9rem;font-weight:700;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">Carregando...</div>
         <div id="convs-chat-sub" style="font-size:.7rem;opacity:.75;display:flex;gap:8px;margin-top:2px"></div>
       </div>
+      <button onclick="showContactFromChat('${esc(phone)}')"
+        style="background:rgba(255,255,255,.15);border:1px solid rgba(255,255,255,.2);color:#fff;padding:5px 12px;border-radius:7px;cursor:pointer;font-size:.75rem;font-weight:700;transition:background .15s">
+        Contato
+      </button>
       ${!isArchive ? `<button onclick="resolveConversation('convs')"
         style="background:var(--brand-red);border:none;color:#fff;padding:5px 12px;border-radius:7px;cursor:pointer;font-size:.75rem;font-weight:700">
         Resolver
@@ -7997,6 +8058,10 @@ function buildContactItem(c) {
 
 function openContactDetail(c) {
   _contactDetailPhone = c.phone;
+  if (lastActiveChatPhone !== c.phone) {
+    lastActiveChatPhone = null;
+    lastActiveChatRedisKey = null;
+  }
 
   // No mobile, torna convs-main visível (espelha o que openConvsChat faz)
   if (window.innerWidth <= 768) {
@@ -8080,6 +8145,7 @@ function openContactDetail(c) {
         <div class="cd-actions">
           <button class="cd-save-btn" onclick="saveContactEdit('${esc(c.phone)}')">Salvar alterações</button>
           <button class="cd-reopen-btn" onclick="reopenContactFromDetail('${esc(c.phone)}')">${c.lastConversationStatus === 'resolvido' ? 'Reabrir atendimento' : 'Abrir atendimento'}</button>
+          <button class="cd-cancel-btn" style="background:#f1f5f9;border:1px solid #cbd5e1;color:var(--text-primary);padding:8px 18px;border-radius:8px;font-size:.82rem;font-weight:600;cursor:pointer;transition:background .12s" onclick="goBackToChat()">Voltar</button>
         </div>
       </div>
     </div>
@@ -8151,6 +8217,51 @@ async function reopenContactFromDetail(phone) {
     // Erro de rede: permanece no detalhe para que o usuário possa tentar novamente
   } finally {
     if (btn) { btn.disabled = false; }
+  }
+}
+
+async function showContactFromChat(phone) {
+  if (!phone) return;
+  lastActiveChatPhone = phone;
+  lastActiveChatRedisKey = openConvsRedisKey || `sartec:${phone}`;
+  try {
+    const res = await fetch(`/api/contacts?search=${encodeURIComponent(phone)}`);
+    if (res.ok) {
+      const data = await res.json();
+      const contact = data.contacts?.find(c => c.phone === phone);
+      if (contact) {
+        setConvsMode('contacts');
+        openContactDetail(contact);
+        return;
+      }
+    }
+  } catch (e) {
+    console.error("[showContactFromChat]", e);
+  }
+
+  // Fallback se não encontrar o contato cadastrado no Redis
+  const nameEl = document.getElementById("convs-chat-name");
+  const fallbackName = nameEl ? nameEl.textContent : phone;
+
+  const fallbackContact = {
+    phone: phone,
+    clientName: fallbackName,
+    whatsappName: fallbackName,
+    clientType: 'pf',
+    demandType: 'outro',
+    lastSeenAt: new Date().toISOString(),
+    contactNotes: ''
+  };
+  setConvsMode('contacts');
+  openContactDetail(fallbackContact);
+}
+
+function goBackToChat() {
+  if (lastActiveChatPhone) {
+    setConvsMode('convs');
+    openConvsChat(lastActiveChatPhone, lastActiveChatRedisKey, lastActiveChatRedisKey?.includes(":archive:"));
+  } else {
+    setConvsMode('convs');
   }
 }
 
