@@ -3503,90 +3503,94 @@
           <span id="modal-pipeline-status" style="opacity:.8"></span>
         </div>
       </div>
+      <button class="modal-hdr-btn btn-contact-modal" style="background:rgba(255,255,255,.15);border:1px solid rgba(255,255,255,.2);color:#fff;padding:5px 12px;border-radius:7px;cursor:pointer;font-size:.75rem;font-weight:700;transition:background .15s;margin-right:8px;" onclick="showContactFromModal()">Contato</button>
       <button class="modal-hdr-btn btn-resolve-modal" onclick="resolveConversation('modal')">Resolver</button>
     </div>
 
-    <!-- Barra de janela de 24h -->
-    <div class="window-status-bar ws-unknown" id="modal-window-bar"></div>
-    <div class="dupe-tab-warning hidden" id="modal-dupe-warning">
-      ⚠️ Esta conversa está aberta em outra aba. Evite editar ao mesmo tempo para não perder informações.
-    </div>
+    <div id="modal-chat-body" style="display:flex; flex-direction:column; flex:1; overflow:hidden;">
+      <!-- Barra de janela de 24h -->
+      <div class="window-status-bar ws-unknown" id="modal-window-bar"></div>
+      <div class="dupe-tab-warning hidden" id="modal-dupe-warning">
+        ⚠️ Esta conversa está aberta em outra aba. Evite editar ao mesmo tempo para não perder informações.
+      </div>
 
-    <details class="dados-pedido" id="modal-dados-section">
-      <summary>Dados do pedido</summary>
-      <div class="dados-form">
-        <div class="form-row" id="modal-dataLimite-wrap">
-          <label class="toggle-label-row">
-            <label class="toggle-switch">
-              <input type="checkbox" id="modal-dataLimite-toggle" onchange="onToggleDataLimite('modal')">
-              <span class="toggle-slider"></span>
+      <details class="dados-pedido" id="modal-dados-section">
+        <summary>Dados do pedido</summary>
+        <div class="dados-form">
+          <div class="form-row" id="modal-dataLimite-wrap">
+            <label class="toggle-label-row">
+              <label class="toggle-switch">
+                <input type="checkbox" id="modal-dataLimite-toggle" onchange="onToggleDataLimite('modal')">
+                <span class="toggle-slider"></span>
+              </label>
+              Data limite
             </label>
-            Data limite
-          </label>
-          <div id="modal-dataLimite-row" style="display:none;margin-top:4px">
-            <input type="date" id="modal-dataLimite">
-          </div>
-        </div>
-        <div class="form-row">
-          <label>Forma de entrega</label>
-          <select id="modal-formaEntrega" onchange="toggleEndereco('modal')">
-            <option value="">—</option>
-            <option value="retirada">Retirada na loja</option>
-            <option value="entrega">Entrega em domicílio</option>
-          </select>
-        </div>
-        <div class="form-row full" id="modal-row-endereco" style="display:none">
-          <label>Endereço de entrega</label>
-          <input type="text" id="modal-endereco" placeholder="Rua, número, bairro">
-        </div>
-        <div class="form-row full">
-          <label>Observações internas</label>
-          <textarea id="modal-observacoes" placeholder="Não aparece para o cliente"></textarea>
-        </div>
-        <div id="modal-campos-lista" style="display:contents">
-          <div class="form-row">
-            <label>Escola</label>
-            <input type="text" id="modal-escola" placeholder="Nome da escola">
+            <div id="modal-dataLimite-row" style="display:none;margin-top:4px">
+              <input type="date" id="modal-dataLimite">
+            </div>
           </div>
           <div class="form-row">
-            <label>Série</label>
-            <input type="text" id="modal-serie" placeholder="Ex: 3º ano">
+            <label>Forma de entrega</label>
+            <select id="modal-formaEntrega" onchange="toggleEndereco('modal')">
+              <option value="">—</option>
+              <option value="retirada">Retirada na loja</option>
+              <option value="entrega">Entrega em domicílio</option>
+            </select>
+          </div>
+          <div class="form-row full" id="modal-row-endereco" style="display:none">
+            <label>Endereço de entrega</label>
+            <input type="text" id="modal-endereco" placeholder="Rua, número, bairro">
+          </div>
+          <div class="form-row full">
+            <label>Observações internas</label>
+            <textarea id="modal-observacoes" placeholder="Não aparece para o cliente"></textarea>
+          </div>
+          <div id="modal-campos-lista" style="display:contents">
+            <div class="form-row">
+              <label>Escola</label>
+              <input type="text" id="modal-escola" placeholder="Nome da escola">
+            </div>
+            <div class="form-row">
+              <label>Série</label>
+              <input type="text" id="modal-serie" placeholder="Ex: 3º ano">
+            </div>
+          </div>
+          <div class="dados-save-row">
+            <button class="btn-save" id="modal-btn-save" onclick="saveCardData('modal')">Salvar dados</button>
           </div>
         </div>
-        <div class="dados-save-row">
-          <button class="btn-save" id="modal-btn-save" onclick="saveCardData('modal')">Salvar dados</button>
+      </details>
+
+      <div class="messages" id="modal-messages"></div>
+
+      <div class="composer">
+        <div class="active-attendant-bar hidden" id="modal-aa-bar"></div>
+        <!-- Lock da janela de 24h — aparece quando janela está fechada/aguardando -->
+        <div class="composer-lock-bar" id="modal-composer-lock" style="display:none"></div>
+        <div class="reply-bar" id="modal-reply-bar" style="display:none">
+          <span class="reply-bar-label">Respondendo:</span>
+          <span class="reply-bar-text" id="modal-reply-text"></span>
+          <button class="reply-bar-cancel" onclick="clearReplyTarget('modal')" title="Cancelar resposta">✕</button>
         </div>
-      </div>
-    </details>
-
-    <div class="messages" id="modal-messages"></div>
-
-    <div class="composer">
-      <div class="active-attendant-bar hidden" id="modal-aa-bar"></div>
-      <!-- Lock da janela de 24h — aparece quando janela está fechada/aguardando -->
-      <div class="composer-lock-bar" id="modal-composer-lock" style="display:none"></div>
-      <div class="reply-bar" id="modal-reply-bar" style="display:none">
-        <span class="reply-bar-label">Respondendo:</span>
-        <span class="reply-bar-text" id="modal-reply-text"></span>
-        <button class="reply-bar-cancel" onclick="clearReplyTarget('modal')" title="Cancelar resposta">✕</button>
-      </div>
-      <div class="img-preview-bar" id="modal-img-preview-bar">
-        <img id="modal-img-thumb" src="" alt="preview">
-        <input class="caption-input" id="modal-img-caption" placeholder="Legenda (opcional)">
-        <button class="btn-clear-img" onclick="clearImage('modal')" title="Remover">✕</button>
-      </div>
-      <div class="img-queue-bar" id="modal-img-queue-bar"></div>
-      <div class="composer-row">
-        <button class="btn-attach" onclick="handleAttachClick('modal')" title="Imagem">📎</button>
-        <input type="file" id="modal-file-input" accept="image/jpeg,image/png,image/gif,image/webp,application/pdf" multiple style="display:none" onchange="handleImageSelect(event,'modal')">
-        <input type="file" id="modal-camera-input" accept="image/*" capture="environment" style="display:none" onchange="handleImageSelect(event,'modal')">
-        <button class="btn-camera" onclick="handleCameraClick('modal')" title="Câmera">📷</button>
-        <textarea id="modal-msg-input" placeholder="Digite sua mensagem..." rows="1"
-          onkeydown="handleEnter(event,'modal')" oninput="autoResize(this)"></textarea>
-        <button class="btn-introduce" onclick="introduceAttendant('modal')" title="Me apresentar">Me apresentar</button>
-        <button class="btn-send" id="modal-send-btn" onclick="sendMessage('modal')">Enviar</button>
+        <div class="img-preview-bar" id="modal-img-preview-bar">
+          <img id="modal-img-thumb" src="" alt="preview">
+          <input class="caption-input" id="modal-img-caption" placeholder="Legenda (opcional)">
+          <button class="btn-clear-img" onclick="clearImage('modal')" title="Remover">✕</button>
+        </div>
+        <div class="img-queue-bar" id="modal-img-queue-bar"></div>
+        <div class="composer-row">
+          <button class="btn-attach" onclick="handleAttachClick('modal')" title="Imagem">📎</button>
+          <input type="file" id="modal-file-input" accept="image/jpeg,image/png,image/gif,image/webp,application/pdf" multiple style="display:none" onchange="handleImageSelect(event,'modal')">
+          <input type="file" id="modal-camera-input" accept="image/*" capture="environment" style="display:none" onchange="handleImageSelect(event,'modal')">
+          <button class="btn-camera" onclick="handleCameraClick('modal')" title="Câmera">📷</button>
+          <textarea id="modal-msg-input" placeholder="Digite sua mensagem..." rows="1"
+            onkeydown="handleEnter(event,'modal')" oninput="autoResize(this)"></textarea>
+          <button class="btn-introduce" onclick="introduceAttendant('modal')" title="Me apresentar">Me apresentar</button>
+          <button class="btn-send" id="modal-send-btn" onclick="sendMessage('modal')">Enviar</button>
+        </div>
       </div>
     </div>
+    <div id="modal-contact-container" style="display:none; flex:1; overflow:hidden; flex-direction:column;"></div>
   </div>
 </div>
 
@@ -5168,6 +5172,12 @@ async function openChat(phone) {
   document.getElementById("modal-messages").innerHTML = "";
   document.getElementById("modal-chat-name").textContent = "Carregando...";
   document.getElementById("chat-modal").classList.remove("hidden");
+  const chatBody = document.getElementById("modal-chat-body");
+  const contactContainer = document.getElementById("modal-contact-container");
+  if (chatBody && contactContainer) {
+    chatBody.style.display = "flex";
+    contactContainer.style.display = "none";
+  }
   document.body.style.overflow = "hidden";
   document.body.classList.add("modal-open");
   document.documentElement.classList.add("modal-open");
@@ -5539,6 +5549,12 @@ function closeModal() {
   openModalPhone = null;
   document.activeElement?.blur();
   document.getElementById("chat-modal").classList.add("hidden");
+  const chatBody = document.getElementById("modal-chat-body");
+  const contactContainer = document.getElementById("modal-contact-container");
+  if (chatBody && contactContainer) {
+    chatBody.style.display = "flex";
+    contactContainer.style.display = "none";
+  }
   document.body.style.overflow = "";
   document.body.classList.remove("modal-open");
   document.documentElement.classList.remove("modal-open");
@@ -5739,35 +5755,39 @@ async function openConvsChat(phone, redisKey, isArchive) {
         Resolver
       </button>` : `<span style="background:#555;color:#ccc;padding:5px 12px;border-radius:7px;font-size:.75rem;font-weight:700">📁 Arquivada</span>`}
     </div>
-    <!-- Barra de janela de 24h -->
-    <div class="window-status-bar ws-unknown" id="convs-window-bar"></div>
-    <div class="dupe-tab-warning hidden" id="convs-dupe-warning">
-      ⚠️ Esta conversa está aberta em outra aba. Evite editar ao mesmo tempo para não perder informações.
+
+    <div id="convs-chat-body" style="display:flex; flex-direction:column; flex:1; overflow:hidden;">
+      <!-- Barra de janela de 24h -->
+      <div class="window-status-bar ws-unknown" id="convs-window-bar"></div>
+      <div class="dupe-tab-warning hidden" id="convs-dupe-warning">
+        ⚠️ Esta conversa está aberta em outra aba. Evite editar ao mesmo tempo para não perder informações.
+      </div>
+      <div class="messages" id="convs-messages" style="flex:1;overflow-y:auto;"></div>
+      ${!isArchive ? `<div class="composer">
+        <div class="active-attendant-bar hidden" id="convs-aa-bar"></div>
+        <div class="img-preview-bar" id="convs-img-preview-bar">
+          <img id="convs-img-thumb" src="" alt="preview">
+          <input class="caption-input" id="convs-img-caption" placeholder="Legenda (opcional)">
+          <button class="btn-clear-img" onclick="clearImage('convs')" title="Remover">✕</button>
+        </div>
+        <div class="img-queue-bar" id="convs-img-queue-bar"></div>
+        <div class="composer-lock-bar" id="convs-composer-lock" style="display:none"></div>
+        <div class="reply-bar" id="convs-reply-bar" style="display:none"><span class="reply-bar-label">Respondendo:</span><span class="reply-bar-text" id="convs-reply-text"></span><button class="reply-bar-cancel" onclick="clearReplyTarget('convs')" title="Cancelar resposta">✕</button></div>
+        <div class="composer-row">
+          <button class="btn-attach" onclick="handleAttachClick('convs')" title="Imagem">📎</button>
+          <input type="file" id="convs-file-input" accept="image/jpeg,image/png,image/gif,image/webp,application/pdf" multiple style="display:none" onchange="handleImageSelect(event,'convs')">
+          <input type="file" id="convs-camera-input" accept="image/*" capture="environment" style="display:none" onchange="handleImageSelect(event,'convs')">
+          <button class="btn-camera" onclick="handleCameraClick('convs')" title="Câmera">📷</button>
+          <textarea id="convs-msg-input" placeholder="Digite sua mensagem..." rows="1"
+            onkeydown="handleEnter(event,'convs')" oninput="autoResize(this)"></textarea>
+          <button class="btn-introduce" onclick="introduceAttendant('convs')" title="Me apresentar">Me apresentar</button>
+          <button class="btn-send" id="convs-send-btn" onclick="sendMessage('convs')">Enviar</button>
+        </div>
+      </div>` : `<div style="padding:10px 16px;text-align:center;font-size:.75rem;color:#888;background:#f5f5f5;border-top:1px solid #e5e5e5;flex-shrink:0">
+        📁 Conversa arquivada — somente leitura
+      </div>`}
     </div>
-    <div class="messages" id="convs-messages" style="flex:1;overflow-y:auto;"></div>
-    ${!isArchive ? `<div class="composer">
-      <div class="active-attendant-bar hidden" id="convs-aa-bar"></div>
-      <div class="img-preview-bar" id="convs-img-preview-bar">
-        <img id="convs-img-thumb" src="" alt="preview">
-        <input class="caption-input" id="convs-img-caption" placeholder="Legenda (opcional)">
-        <button class="btn-clear-img" onclick="clearImage('convs')" title="Remover">✕</button>
-      </div>
-      <div class="img-queue-bar" id="convs-img-queue-bar"></div>
-      <div class="composer-lock-bar" id="convs-composer-lock" style="display:none"></div>
-      <div class="reply-bar" id="convs-reply-bar" style="display:none"><span class="reply-bar-label">Respondendo:</span><span class="reply-bar-text" id="convs-reply-text"></span><button class="reply-bar-cancel" onclick="clearReplyTarget('convs')" title="Cancelar resposta">✕</button></div>
-      <div class="composer-row">
-        <button class="btn-attach" onclick="handleAttachClick('convs')" title="Imagem">📎</button>
-        <input type="file" id="convs-file-input" accept="image/jpeg,image/png,image/gif,image/webp,application/pdf" multiple style="display:none" onchange="handleImageSelect(event,'convs')">
-        <input type="file" id="convs-camera-input" accept="image/*" capture="environment" style="display:none" onchange="handleImageSelect(event,'convs')">
-        <button class="btn-camera" onclick="handleCameraClick('convs')" title="Câmera">📷</button>
-        <textarea id="convs-msg-input" placeholder="Digite sua mensagem..." rows="1"
-          onkeydown="handleEnter(event,'convs')" oninput="autoResize(this)"></textarea>
-        <button class="btn-introduce" onclick="introduceAttendant('convs')" title="Me apresentar">Me apresentar</button>
-        <button class="btn-send" id="convs-send-btn" onclick="sendMessage('convs')">Enviar</button>
-      </div>
-    </div>` : `<div style="padding:10px 16px;text-align:center;font-size:.75rem;color:#888;background:#f5f5f5;border-top:1px solid #e5e5e5;flex-shrink:0">
-      📁 Conversa arquivada — somente leitura
-    </div>`}
+    <div id="convs-contact-container" style="display:none; flex:1; overflow:hidden; flex-direction:column;"></div>
   `;
 
   main.appendChild(chatArea);
@@ -8181,13 +8201,13 @@ function openContactDetail(c) {
   `;
 }
 
-async function saveContactEdit(phone) {
-  const clientName   = document.getElementById('cd-clientName')?.value?.trim() ?? undefined;
-  const clientType   = document.getElementById('cd-clientType')?.value || undefined;
-  const demandType   = document.getElementById('cd-demandType')?.value || undefined;
-  const contactNotes = document.getElementById('cd-contactNotes')?.value ?? undefined;
+async function saveContactEdit(phone, prefix = 'cd') {
+  const clientName   = document.getElementById(`${prefix}-clientName`)?.value?.trim() ?? undefined;
+  const clientType   = document.getElementById(`${prefix}-clientType`)?.value || undefined;
+  const demandType   = document.getElementById(`${prefix}-demandType`)?.value || undefined;
+  const contactNotes = document.getElementById(`${prefix}-contactNotes`)?.value ?? undefined;
 
-  const saveBtn = document.querySelector('.cd-save-btn');
+  const saveBtn = document.querySelector(`.${prefix}-save-btn`);
   if (saveBtn) { saveBtn.disabled = true; saveBtn.textContent = 'Salvando…'; }
 
   try {
@@ -8211,6 +8231,34 @@ async function saveContactEdit(phone) {
 
     showToast('Contato atualizado.');
     loadContacts();
+
+    // Atualização visual imediata
+    const localConv = allConvs.find(c => c.phone === phone);
+    if (localConv) {
+      if (clientName !== undefined) localConv.clientName = clientName;
+      if (clientType !== undefined) localConv.clientType = clientType;
+      if (demandType !== undefined) localConv.demandType = demandType;
+    }
+    const localConvList = allConversationsList.find(c => c.phone === phone);
+    if (localConvList) {
+      if (clientName !== undefined) localConvList.clientName = clientName;
+      if (clientType !== undefined) localConvList.clientType = clientType;
+      if (demandType !== undefined) localConvList.demandType = demandType;
+      renderConvsList(allConversationsList);
+    }
+    if (openConvsPhone === phone) {
+      const el = document.getElementById("convs-chat-name");
+      if (el) el.textContent = clientName || phone;
+    }
+    if (openModalPhone === phone) {
+      const el = document.getElementById("modal-chat-name");
+      if (el) el.textContent = clientName || phone;
+      if (demandType !== undefined) {
+        const elBadge = document.getElementById("modal-chat-badge");
+        if (elBadge) elBadge.innerHTML = `<span class="demand-tag ${demandClass(demandType)}">${demandLabel(demandType)}</span>`;
+      }
+    }
+    loadQueue();
   } catch {
     showToast('Erro ao salvar contato.', 't-err');
   } finally {
@@ -8249,40 +8297,139 @@ async function reopenContactFromDetail(phone) {
   }
 }
 
-async function showContactFromChat(phone) {
+function showContactFromChat(phone) {
   if (!phone) return;
-  lastActiveChatPhone = phone;
-  lastActiveChatRedisKey = openConvsRedisKey || `sartec:${phone}`;
+  const chatBody = document.getElementById("convs-chat-body");
+  const contactContainer = document.getElementById("convs-contact-container");
+  if (chatBody && contactContainer) {
+    chatBody.style.display = "none";
+    contactContainer.style.display = "flex";
+    openContactDetailContextual(phone, contactContainer, () => {
+      chatBody.style.display = "flex";
+      contactContainer.style.display = "none";
+    }, 'convs-cd');
+  }
+}
+
+function showContactFromModal() {
+  if (!openModalPhone) return;
+  const chatBody = document.getElementById("modal-chat-body");
+  const contactContainer = document.getElementById("modal-contact-container");
+  if (chatBody && contactContainer) {
+    chatBody.style.display = "none";
+    contactContainer.style.display = "flex";
+    openContactDetailContextual(openModalPhone, contactContainer, () => {
+      chatBody.style.display = "flex";
+      contactContainer.style.display = "none";
+    }, 'modal-cd');
+  }
+}
+
+const _contactBackCallbacks = {};
+
+function triggerBackCallback(prefix) {
+  if (_contactBackCallbacks[prefix]) {
+    _contactBackCallbacks[prefix]();
+  }
+}
+
+async function openContactDetailContextual(phone, parentElement, onBackCallback, prefix) {
+  _contactBackCallbacks[prefix] = onBackCallback;
+  parentElement.innerHTML = '<div style="padding:20px;color:var(--text-muted);font-size:.85rem;">Carregando contato...</div>';
+  let contact = null;
   try {
     const res = await fetch(`/api/contacts?search=${encodeURIComponent(phone)}`);
     if (res.ok) {
       const data = await res.json();
-      const contact = data.contacts?.find(c => c.phone === phone);
-      if (contact) {
-        setConvsMode('contacts');
-        openContactDetail(contact);
-        return;
-      }
+      contact = data.contacts?.find(c => c.phone === phone);
     }
   } catch (e) {
-    console.error("[showContactFromChat]", e);
+    console.error("[openContactDetailContextual]", e);
   }
 
-  // Fallback se não encontrar o contato cadastrado no Redis
-  const nameEl = document.getElementById("convs-chat-name");
-  const fallbackName = nameEl ? nameEl.textContent : phone;
+  if (!contact) {
+    const nameEl = document.getElementById(prefix === "convs-cd" ? "convs-chat-name" : "modal-chat-name");
+    const fallbackName = nameEl ? nameEl.textContent : phone;
+    contact = {
+      phone: phone,
+      clientName: fallbackName,
+      whatsappName: fallbackName,
+      clientType: 'pf',
+      demandType: 'outro',
+      lastSeenAt: new Date().toISOString(),
+      contactNotes: ''
+    };
+  }
+  parentElement.innerHTML = buildContextualContactFormHTML(contact, prefix);
+}
 
-  const fallbackContact = {
-    phone: phone,
-    clientName: fallbackName,
-    whatsappName: fallbackName,
-    clientType: 'pf',
-    demandType: 'outro',
-    lastSeenAt: new Date().toISOString(),
-    contactNotes: ''
-  };
-  setConvsMode('contacts');
-  openContactDetail(fallbackContact);
+function buildContextualContactFormHTML(c, prefix) {
+  const name     = c.clientName || c.whatsappName || c.phone || '—';
+  const isPJ     = c.clientType === 'pj';
+  const phoneStr = c.phone ? `+${c.phone}` : '';
+
+  const demandOptions = [
+    { v: '',           l: '— Sem categoria' },
+    { v: 'outro',      l: 'Outro' },
+    { v: 'lista',      l: 'Lista Escolar' },
+    { v: 'cotacao_pj', l: 'Cotação PJ' },
+    { v: 'xerox',      l: 'Xerox/Impressão' },
+    { v: 'produto',    l: 'Produtos' },
+    { v: 'duvida',     l: 'Dúvida' },
+  ].map(o => `<option value="${o.v}"${(c.demandType || '') === o.v ? ' selected' : ''}>${o.l}</option>`).join('');
+
+  return `
+    <div class="cd-wrap">
+      <div class="cd-header">
+        <div class="cd-avatar ${isPJ ? 'pj' : ''}">${esc(initials(name))}</div>
+        <div>
+          <div class="cd-title">${esc(name)}</div>
+          <div class="cd-subtitle">${esc(phoneStr)}</div>
+        </div>
+      </div>
+
+      <div class="cd-section">
+        <div class="cd-section-title">Informações</div>
+        <div class="cd-grid">
+          <div class="cd-field">
+            <div class="cd-label">Nome</div>
+            <input id="${prefix}-clientName" class="cd-input" type="text" maxlength="120"
+              value="${esc(c.clientName || c.whatsappName || '')}"
+              placeholder="Nome do contato">
+          </div>
+          <div class="cd-field">
+            <div class="cd-label">Tipo</div>
+            <select id="${prefix}-clientType" class="cd-select">
+              <option value=""${!c.clientType ? ' selected' : ''}>—</option>
+              <option value="pf"${c.clientType === 'pf' ? ' selected' : ''}>Pessoa Física</option>
+              <option value="pj"${c.clientType === 'pj' ? ' selected' : ''}>Pessoa Jurídica</option>
+            </select>
+          </div>
+          <div class="cd-field">
+            <div class="cd-label">Categoria</div>
+            <select id="${prefix}-demandType" class="cd-select">
+              ${demandOptions}
+            </select>
+          </div>
+          <div class="cd-field">
+            <div class="cd-label">Último contato</div>
+            <div class="cd-value muted">${esc(relTimeCR(c.lastSeenAt || c.lastActivityAt) || '—')}</div>
+          </div>
+        </div>
+      </div>
+
+      <div class="cd-section">
+        <div class="cd-section-title">Anotações</div>
+        <textarea id="${prefix}-contactNotes" class="cd-textarea" maxlength="500"
+          placeholder="Anotações internas sobre este contato...">${esc(c.contactNotes || '')}</textarea>
+      </div>
+
+      <div class="cd-actions">
+        <button class="cd-save-btn ${prefix}-save-btn" onclick="saveContactEdit('${esc(c.phone)}', '${prefix}')">Salvar alterações</button>
+        <button class="cd-cancel-btn" style="background:#f1f5f9;border:1px solid #cbd5e1;color:var(--text-primary);padding:8px 18px;border-radius:8px;font-size:.82rem;font-weight:600;cursor:pointer;transition:background .12s" onclick="triggerBackCallback('${prefix}')">Voltar para conversa</button>
+      </div>
+    </div>
+  `;
 }
 
 function goBackToChat() {
