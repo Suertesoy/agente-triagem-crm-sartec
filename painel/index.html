@@ -3325,7 +3325,7 @@
       /* Header: fixo no topo */
       .top-header { position: fixed; top: 0; left: 0; right: 0; height: var(--mob-header-h); z-index: 500; overflow: hidden; box-sizing: border-box; }
       .header-nav-row { width: 100%; overflow: hidden; box-sizing: border-box; }
-      .waiting-counter { min-width: 0; max-width: 160px; overflow: hidden; flex-shrink: 1; }
+      .waiting-counter { min-width: 0; max-width: 240px; overflow: hidden; flex-shrink: 1; }
       #waiting-count { display: block; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
       /* Views: fixas entre header e nav, rolagem própria */
       .view.active { position: fixed; top: var(--mob-header-h); left: 0; right: 0; bottom: var(--mob-nav-h); width: 100%; max-width: 100vw; height: auto; overflow: hidden; box-sizing: border-box; }
@@ -3385,6 +3385,7 @@
     <div class="waiting-counter">
       <div class="waiting-dot" id="waiting-dot" style="display:none"></div>
       <span id="waiting-count">Carregando...</span>
+      <span id="closed-windows-count" style="display:none;margin-left:8px;padding-left:8px;border-left:1px solid rgba(255,255,255,.2);color:#fca5a5"></span>
     </div>
     <!-- Bloco central: título + busca (absoluto, não afeta o flex dos botões) -->
     <div class="header-center">
@@ -4386,19 +4387,42 @@ async function loadQueue() {
 }
 
 function updateHeader(convs) {
-  const tabType = currentTab === "pf" ? "pf" : currentTab === "pj" ? "pj" : null;
-  const scopedConvs = tabType ? convs.filter(c => c.clientType === tabType) : convs;
-  const waiting = scopedConvs.filter(c => c.status === "aguardando_humano").length;
+  const activeCount = convs.filter(c => 
+    c.status !== "resolvido" && 
+    (c.pipelineStatus || "novo") !== "resolvido" && 
+    !c.isArchive
+  ).length;
+
+  const closedCount = convs.filter(c => 
+    c.status !== "resolvido" && 
+    (c.pipelineStatus || "novo") !== "resolvido" && 
+    !c.isArchive &&
+    (c.conversationWindowStatus !== "open" || c.windowRemainingMs <= 0)
+  ).length;
+
+  const waiting = convs.filter(c => c.status === "aguardando_humano" && !c.isArchive).length;
+
   document.getElementById("waiting-count").textContent =
-    waiting === 0 ? "Nenhuma aguardando" :
-    waiting === 1 ? "1 aguardando atendimento" :
-    `${waiting} aguardando atendimento`;
+    activeCount === 0 ? "Nenhum atendimento ativo" :
+    activeCount === 1 ? "1 atendimento ativo" :
+    `${activeCount} atendimentos ativos`;
+
   document.getElementById("waiting-dot").style.display = waiting > 0 ? "block" : "none";
 
+  const closedEl = document.getElementById("closed-windows-count");
+  if (closedEl) {
+    if (closedCount > 0) {
+      closedEl.textContent = closedCount === 1 ? "1 janela fechada" : `${closedCount} janelas fechadas`;
+      closedEl.style.display = "";
+    } else {
+      closedEl.style.display = "none";
+    }
+  }
+
   // Stats strip — métricas discretas derivadas de allConvs
-  const ativas     = convs.filter(c => c.status !== "resolvido").length;
-  const wsAbertas  = convs.filter(c => c.status !== "resolvido" && c.conversationWindowStatus === "open").length;
-  const wsFechadas = convs.filter(c => c.status !== "resolvido" && c.conversationWindowStatus === "closed").length;
+  const ativas     = convs.filter(c => c.status !== "resolvido" && !c.isArchive).length;
+  const wsAbertas  = convs.filter(c => c.status !== "resolvido" && !c.isArchive && c.conversationWindowStatus === "open").length;
+  const wsFechadas = convs.filter(c => c.status !== "resolvido" && !c.isArchive && c.conversationWindowStatus === "closed").length;
   const ativEl = document.getElementById("stat-ativas");
   const aberEl = document.getElementById("stat-abertas");
   const fechEl = document.getElementById("stat-fechadas");
