@@ -864,13 +864,22 @@ async function downloadMedia(mediaId) {
   const metaRes = await fetch(`https://graph.facebook.com/v19.0/${mediaId}`, {
     headers: { Authorization: `Bearer ${token}` },
   });
+  if (!metaRes.ok) {
+    const errBody = await metaRes.text();
+    throw new Error(`Meta media lookup ${metaRes.status}: ${errBody.substring(0, 200)}`);
+  }
   const { url, mime_type } = await metaRes.json();
+  if (!url) throw new Error("Meta media lookup: URL ausente na resposta");
 
   const fileRes = await fetch(url, {
     headers: { Authorization: `Bearer ${token}` },
   });
+  if (!fileRes.ok) throw new Error(`Meta media download ${fileRes.status}`);
+
   const buffer = await fileRes.arrayBuffer();
   const base64 = Buffer.from(buffer).toString("base64");
+
+  console.log(`[Media] ✅ mimeType=${mime_type} size=${buffer.byteLength}B`);
 
   return { base64, mimeType: mime_type };
 }
@@ -1450,7 +1459,7 @@ async function handleIncomingMessage(req, res) {
               }
             } catch { /* falha silenciosa — transcreve por segurança */ }
 
-            // Fase 1: download (sempre) + transcrição (só pré-handoff)
+            // Fase 1a: download (sempre necessário para o player)
             let _audioTranscription  = null;
             let _audioMimeType       = null;
             let _audioBase64         = null;
@@ -1460,13 +1469,20 @@ async function handleIncomingMessage(req, res) {
               const _audioMedia = await downloadMedia(message.audio.id);
               _audioMimeType    = _audioMedia.mimeType;
               _audioBase64      = _audioMedia.base64;
-              if (_needsTranscription) {
-                _audioTranscription = await transcribeAudio(_audioMedia.base64, _audioMedia.mimeType);
+            } catch (_dlErr) {
+              console.error("[Audio] ❌ Download falhou:", _dlErr.message);
+              _transcriptionFailed = true; // download falhou → agente pede texto como antes
+            }
+
+            // Fase 1b: transcrição (só pré-handoff e se download foi bem-sucedido)
+            if (_needsTranscription && _audioBase64) {
+              try {
+                _audioTranscription = await transcribeAudio(_audioBase64, _audioMimeType);
                 console.log(`[Audio] ✅ Transcrição +${from}: "${_audioTranscription.substring(0, 80)}"`);
+              } catch (_txErr) {
+                console.error("[Audio] ❌ Transcrição falhou:", _txErr.message);
+                _transcriptionFailed = true;
               }
-            } catch (_audioErr) {
-              console.error("[Audio] ❌ Falha ao baixar/transcrever:", _audioErr.message);
-              _transcriptionFailed = true;
             }
 
             // Fase 2: atualiza sessão e responde (dentro do lock)
