@@ -4175,9 +4175,9 @@ function buildExpandBody(c, clientType) {
 
   const isExpanded = _expandedCards.has(c.phone);
 
-  // Seletor de Etapa no topo da área expandida — apenas cards ativos, visível somente no mobile via CSS
+  // Seletor de Etapa no topo da área expandida — apenas quando expandido (evita <select> no DOM colapsado)
   let stageHtml = "";
-  if (c.status !== "resolvido") {
+  if (c.status !== "resolvido" && isExpanded) {
     const stageCols = (clientType === "pj" ? PJ_COLS : PF_COLS).filter(col => !col.resolved);
     const stageOpts = stageCols.map(col =>
       `<option value="${col.key}"${col.key === (c.pipelineStatus||"novo") ? " selected" : ""}>${MOB_STAGE_SHORT[col.key] || col.label}</option>`
