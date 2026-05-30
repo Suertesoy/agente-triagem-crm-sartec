@@ -105,7 +105,15 @@
       50%     { transform: scale(1.4); opacity: .7; }
     }
 
-    .refresh-info { margin-left: auto; font-size: .7rem; opacity: .55; border-left: 1px solid rgba(255,255,255,.15); padding-left: 12px; }
+    .refresh-info {
+      font-size: .7rem;
+      opacity: .55;
+      border-left: 1px solid rgba(255,255,255,.15);
+      padding-left: 12px;
+      font-variant-numeric: tabular-nums;
+      min-width: 105px;
+      text-align: left;
+    }
     .refresh-state { margin-left: 6px; font-size: .68rem; font-weight: 600; display: inline-flex; align-items: center; transition: opacity .2s; }
     .refresh-state.rs-updating { color: rgba(255,255,255,.7); }
     .refresh-state.rs-ok       { color: #86efac; }
@@ -492,6 +500,12 @@
       flex-direction: column;
       min-height: 250px;
       cursor: pointer;
+      user-select: none;
+      -webkit-user-select: none;
+    }
+    .card [contenteditable]:focus {
+      user-select: text;
+      -webkit-user-select: text;
     }
     .card:hover { box-shadow: 0 2px 6px rgba(15,23,42,.07), 0 8px 20px rgba(15,23,42,.10); transform: translateY(-2px); }
     /* Badge de nova mensagem no botão Abrir */
@@ -4514,7 +4528,8 @@ function renderPipelineTab(tabId, cols, convs) {
         const rawSiblings = allConvs
           .filter(c => (c.pipelineStatus || "novo") === targetKey && c.status !== "resolvido" && c.phone !== phone);
         // Respeita a ordem visual/_colOrder atual antes de calcular o índice de inserção
-        const existingOrder = _colOrder[tabId + ":" + targetKey];
+        const existingOrder = _colOrder[tabId + ":" + targetKey] || [];
+        const originalOrder = [...existingOrder];
         if (existingOrder?.length) {
           rawSiblings.sort((a, b) => {
             const ia = existingOrder.indexOf(a.phone);
@@ -4537,22 +4552,38 @@ function renderPipelineTab(tabId, cols, convs) {
           method: "PUT",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ action: "updatePipelineOrder", clientType: tabId, columnKey: targetKey, order: newOrder }),
-        }).catch(() => {});
+        }).then(res => {
+          if (!res.ok) throw new Error("HTTP error");
+        }).catch(() => {
+          showToast("Erro ao reordenar card", "t-err");
+          _colOrder[tabId + ":" + targetKey] = originalOrder;
+          renderPipeline(allConvs);
+        });
         return;
       }
       if (isResolvedCol) {
         quickResolveCard(phone);
       } else {
+        const originalStatus = conv.pipelineStatus;
         conv.pipelineStatus = targetKey;
         renderPipeline(allConvs);
         try {
-          await fetch("/api/update-status", {
+          const res = await fetch("/api/update-status", {
             method: "PUT",
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({ phone, pipelineStatus: targetKey, clientType }),
           });
-          showToast("Status atualizado");
-        } catch { showToast("Erro ao mover card", "t-err"); loadQueue(); }
+          if (res.ok) {
+            showToast("Status atualizado");
+          } else {
+            throw new Error("HTTP error");
+          }
+        } catch {
+          showToast("Erro ao mover card", "t-err");
+          conv.pipelineStatus = originalStatus;
+          renderPipeline(allConvs);
+          loadQueue();
+        }
       }
     });
     // Header
@@ -4662,9 +4693,10 @@ function buildCard(c, col, cols) {
     <div class="card-zone-top">
       <div class="card-zone-top-row">
         <span class="client-label">Cliente:</span>
-        <span class="card-name" contenteditable="true" data-phone="${esc(c.phone)}"
-          onclick="event.stopPropagation()"
-          onblur="saveCardField(this,'clientName')"
+        <span class="card-name" contenteditable="false" data-phone="${esc(c.phone)}"
+          onmousedown="this.contentEditable='false'"
+          onclick="event.stopPropagation(); this.contentEditable='true'; this.focus()"
+          onblur="saveCardField(this,'clientName'); this.contentEditable='false'"
           onkeydown="if(event.key==='Enter'){event.preventDefault();this.blur()}"
           title="${esc(c.clientName)} — clique para editar">${esc(c.clientName)}</span>
         ${isIncomplete ? `<span class="badge-triagem">Triagem ⚠️</span>` : ""}
@@ -4673,8 +4705,10 @@ function buildCard(c, col, cols) {
     </div>
 
     <div class="card-zone-mid" onclick="event.stopPropagation()">
-      <div class="card-title" contenteditable="true" data-phone="${esc(c.phone)}"
-        onblur="saveCardField(this,'cardTitle')"
+      <div class="card-title" contenteditable="false" data-phone="${esc(c.phone)}"
+        onmousedown="this.contentEditable='false'"
+        onclick="event.stopPropagation(); this.contentEditable='true'; this.focus()"
+        onblur="saveCardField(this,'cardTitle'); this.contentEditable='false'"
         onkeydown="if(event.key==='Enter'){event.preventDefault();this.blur()}"
         data-placeholder="${esc(!cardTitle ? (resumoOperacional(c) || 'Resumo do pedido...') : '')}"
         title="${cardTitle ? esc(cardTitle) + ' — clique para editar' : 'Clique para adicionar resumo do pedido'}">${esc(cardTitle)}</div>
