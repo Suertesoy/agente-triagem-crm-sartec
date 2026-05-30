@@ -856,6 +856,40 @@ async function getPjLunchMode() {
 }
 
 // ============================================================
+// SANITIZAÇÃO — remove bloco interno antes de enviar ao cliente
+// ============================================================
+
+/**
+ * Remove o bloco de ESTRUTURA INTERNA da resposta do Claude antes de enviá-la
+ * ao cliente. O bloco pode aparecer após separador "---" ou como linhas
+ * consecutivas com campos tipo/intencao/setor/dados/resumo/status.
+ * Não afeta mensagens normais com traços de pontuação ou listas.
+ */
+function sanitizeAgentReply(text) {
+  if (!text) return text;
+
+  // Campo estrutural interno (com ou sem markdown bold: tipo: | **tipo:** | **tipo**)
+  const FIELD_RE = /(?:tipo|inten[cç][aã]o|setor|dados|resumo|status)[ \t]*\*{0,2}[ \t]*:/i;
+
+  // Padrão 1: bloco após separador de 3+ traços que contenha campos estruturais
+  const sepIdx = text.search(/\n[ \t]*[-─—]{3,}[ \t]*\n/);
+  if (sepIdx !== -1 && FIELD_RE.test(text.slice(sepIdx))) {
+    console.log("[Agente] 🔒 Bloco interno removido da resposta ao cliente");
+    return text.slice(0, sepIdx).trimEnd();
+  }
+
+  // Padrão 2: 2+ linhas consecutivas com campos estruturais ao final da resposta
+  const tailRe = /(\n[ \t]*\*{0,2}[ \t]*(?:tipo|inten[cç][aã]o|setor|dados|resumo|status)[ \t]*\*{0,2}[ \t]*:[^\n]*){2,}\s*$/i;
+  const tailM  = tailRe.exec(text);
+  if (tailM) {
+    console.log("[Agente] 🔒 Bloco interno removido da resposta ao cliente (inline)");
+    return text.slice(0, tailM.index).trimEnd();
+  }
+
+  return text;
+}
+
+// ============================================================
 // DOWNLOAD DE MÍDIA DA META
 // ============================================================
 
@@ -1148,7 +1182,9 @@ async function chatWithAgent(phone, userText, mediaPayload = null, name = "", me
     messages:   _finalMsgs,
   });
 
-  const reply = aiResponse.content[0]?.type === "text" ? aiResponse.content[0].text : "";
+  const reply = sanitizeAgentReply(
+    aiResponse.content[0]?.type === "text" ? aiResponse.content[0].text : ""
+  );
 
   addMessage(session, "assistant", reply);
   await saveSession(phone, session);
@@ -1630,7 +1666,9 @@ async function handleIncomingMessage(req, res) {
                 system:     SYSTEM_PROMPT,
                 messages:   getMessages(session),
               });
-              const reply = _aiRes.content[0]?.type === "text" ? _aiRes.content[0].text : "";
+              const reply = sanitizeAgentReply(
+                _aiRes.content[0]?.type === "text" ? _aiRes.content[0].text : ""
+              );
 
               addMessage(session, "assistant", reply);
               await saveSession(from, session);

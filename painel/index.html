@@ -5071,9 +5071,43 @@ function buildSummaryHTML(data) {
           : "")
     : "";
 
+  // Últimas mensagens substantivas do cliente (texto, transcrição de áudio ou marcador de mídia)
+  const _TRIVIAL = /^(oi+|ol[áa]|hey|hi|bom\s+dia|boa\s+tarde|boa\s+noite|ok|obrigad|valeu|sim|não|nao|pode|certo|entendi|por\s+favor)[\s!.,?]*$/i;
+  const _lastMsgs = (data.history || [])
+    .filter(m => m.role === "user")
+    .map(m => {
+      if (m.mediaType === "audio") {
+        if (m.transcription) return { txt: m.transcription.trim(), icon: "🎙" };
+        return { txt: "Cliente enviou áudio", icon: "🎙", muted: true };
+      }
+      if (m.mediaType === "image" || m.mediaType === "document") {
+        return { txt: "Cliente enviou documento/imagem", icon: "📎", muted: true };
+      }
+      const raw = typeof m.content === "string" ? m.content.trim() : "";
+      if (!raw || raw === "[áudio]" || raw === "[mídia]") return null;
+      if (raw.length < 8 || _TRIVIAL.test(raw)) return null;
+      return { txt: raw, icon: "›" };
+    })
+    .filter(Boolean)
+    .slice(-3);
+
+  const lastMsgsHTML = _lastMsgs.length > 0
+    ? `<div class="modal-summary-item" style="margin-top:5px;border-top:1px solid rgba(0,0,0,.07);padding-top:5px;">
+        <span class="sum-text" style="font-size:.6rem;font-weight:700;letter-spacing:.05em;color:var(--text-muted);text-transform:uppercase">Últimas mensagens</span>
+       </div>` +
+      _lastMsgs.map(m => {
+        const txt = m.txt.length > 85 ? m.txt.substring(0, 85) + "…" : m.txt;
+        const st  = m.muted ? "font-style:italic;opacity:.72" : "";
+        return `<div class="modal-summary-item">
+          <span class="sum-text" style="font-size:.78rem;${st}">${m.icon} ${esc(txt)}</span>
+        </div>`;
+      }).join("")
+    : "";
+
   const rows = [
     contextRows,
     triagemCtx,
+    lastMsgsHTML,
     smLabelRow("Pedido:", titleStr),
     smLabelRow("Aguardando:", `${waitStr} · ${statusStr}`),
   ].filter(Boolean).join("");
