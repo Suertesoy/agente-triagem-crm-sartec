@@ -4387,20 +4387,23 @@ async function loadQueue() {
 }
 
 function updateHeader(convs) {
-  const activeCount = convs.filter(c => 
+  const tabType = currentTab === "pf" ? "pf" : currentTab === "pj" ? "pj" : null;
+  const scopedConvs = tabType ? convs.filter(c => (c.clientType || "pf") === tabType) : convs;
+
+  const activeCount = scopedConvs.filter(c => 
     c.status !== "resolvido" && 
     (c.pipelineStatus || "novo") !== "resolvido" && 
     !c.isArchive
   ).length;
 
-  const closedCount = convs.filter(c => 
+  const closedCount = scopedConvs.filter(c => 
     c.status !== "resolvido" && 
     (c.pipelineStatus || "novo") !== "resolvido" && 
     !c.isArchive &&
     (c.conversationWindowStatus !== "open" || c.windowRemainingMs <= 0)
   ).length;
 
-  const waiting = convs.filter(c => c.status === "aguardando_humano" && !c.isArchive).length;
+  const waiting = scopedConvs.filter(c => c.status === "aguardando_humano" && !c.isArchive).length;
 
   document.getElementById("waiting-count").textContent =
     activeCount === 0 ? "Nenhum atendimento ativo" :
