@@ -4313,18 +4313,26 @@ function updateHeader(convs) {
   if (aberEl) aberEl.textContent = `⬡ ${wsAbertas} abertas`;
   if (fechEl) fechEl.textContent = `✕ ${wsFechadas} fechadas`;
 
-  // Badges nas abas
-  const pfWaiting = convs.filter(c => (c.clientType||"pf") === "pf" && c.status === "aguardando_humano" && c.pipelineStatus === "novo").length;
-  const pjWaiting = convs.filter(c => c.clientType === "pj" && c.status === "aguardando_humano" && c.pipelineStatus === "novo").length;
-  document.getElementById("badge-pf").textContent = pfWaiting || "";
-  document.getElementById("badge-pj").textContent = pjWaiting || "";
+  // Badges nas abas — número de cards com mensagens não lidas (não conta resolvidos)
+  const pfUnread = convs.filter(c =>
+    (c.clientType || "pf") === "pf" &&
+    c.status !== "resolvido" &&
+    (_cardUnreadCount[c.phone] || 0) > 0
+  ).length;
+  const pjUnread = convs.filter(c =>
+    c.clientType === "pj" &&
+    c.status !== "resolvido" &&
+    (_cardUnreadCount[c.phone] || 0) > 0
+  ).length;
+  document.getElementById("badge-pf").textContent = pfUnread || "";
+  document.getElementById("badge-pj").textContent = pjUnread || "";
 
   // Atualizar badges nas abas mobile
   ["pf", "pj"].forEach(t => {
     const bPf = document.getElementById("mob-badge-pf-" + t);
-    if (bPf) bPf.textContent = pfWaiting || "";
+    if (bPf) bPf.textContent = pfUnread || "";
     const bPj = document.getElementById("mob-badge-pj-" + t);
-    if (bPj) bPj.textContent = pjWaiting || "";
+    if (bPj) bPj.textContent = pjUnread || "";
   });
 }
 
