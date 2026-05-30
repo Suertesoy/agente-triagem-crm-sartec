@@ -3038,8 +3038,8 @@
       padding: 2px 7px;
     }
 
-    /* ── Linha de etapa: visível apenas no mobile ── */
-    .card-stage-row { display: none; }
+    /* ── Etapa na área expandida: oculta no desktop ── */
+    .card-expand-stage { display: none; }
 
     /* ── Linha de ação principal (CTA) ── */
     .card-cta-row { margin: 8px 0 6px; }
@@ -3384,20 +3384,20 @@
       .mob-help-card { background:var(--bg-sidebar,#f8f9fc);border-radius:10px;padding:13px 14px; }
       .mob-help-card-title { font-size:.82rem;font-weight:700;color:var(--text-primary,#1a1a2e);margin-bottom:5px; }
       .mob-help-card-text { font-size:.78rem;color:var(--text-secondary,#5a6380);line-height:1.45; }
-      /* min-height maior para cards ativos acomodarem a linha de Etapa sem clipping */
-      .card:not(.resolvido) { min-height:200px; }
-      /* Linha de Etapa: linha própria acima do botão, visível no mobile */
-      .card-stage-row {
-        display:flex; align-items:center; gap:6px; margin:4px 0;
+      /* Etapa contextual na área expandida do card — visível somente no mobile */
+      .card-expand-stage {
+        display:flex; align-items:center; gap:8px;
+        padding-bottom:8px; margin-bottom:6px;
+        border-bottom:1px solid rgba(0,0,0,.07);
       }
-      .card-stage-row .stage-select {
+      .card-expand-stage .stage-select {
         flex:1; min-width:0;
         -webkit-appearance:none; -moz-appearance:none; appearance:none;
         background:#fff; border:1px solid rgba(15,23,42,.15); border-radius:8px;
-        padding:4px 22px 4px 8px; cursor:pointer; font-family:inherit;
-        color:var(--brand-navy); font-size:.72rem; font-weight:700; outline:none;
+        padding:4px 20px 4px 8px; cursor:pointer; font-family:inherit;
+        color:var(--brand-navy); font-size:.67rem; font-weight:700; outline:none;
         background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' fill='none' viewBox='0 0 24 24' stroke='%25231a2a5e' stroke-width='3'%3E%3Cpath stroke-linecap='round' stroke-linejoin='round' d='M19.5 8.25l-7.5 7.5-7.5-7.5'/%3E%3C/svg%3E");
-        background-repeat:no-repeat; background-position:right 7px center; background-size:9px;
+        background-repeat:no-repeat; background-position:right 6px center; background-size:9px;
         transition:background-color .12s,border-color .12s;
       }
     }
@@ -4174,7 +4174,23 @@ function buildExpandBody(c, clientType) {
   }
 
   const isExpanded = _expandedCards.has(c.phone);
-  return `<div class="card-expand-body${isExpanded ? " visible" : ""}">${rows.join("")}</div>`;
+
+  // Seletor de Etapa no topo da área expandida — apenas cards ativos, visível somente no mobile via CSS
+  let stageHtml = "";
+  if (c.status !== "resolvido") {
+    const stageCols = (clientType === "pj" ? PJ_COLS : PF_COLS).filter(col => !col.resolved);
+    const stageOpts = stageCols.map(col =>
+      `<option value="${col.key}"${col.key === (c.pipelineStatus||"novo") ? " selected" : ""}>${MOB_STAGE_SHORT[col.key] || col.label}</option>`
+    ).join("");
+    stageHtml = `<div class="card-expand-stage" onclick="event.stopPropagation()">
+      <span class="card-expand-label">ETAPA</span>
+      <select class="stage-select" data-phone="${esc(c.phone)}"
+        onchange="changePipelineStage(this,'${esc(c.phone)}','${clientType}')"
+        onclick="event.stopPropagation()">${stageOpts}</select>
+    </div>`;
+  }
+
+  return `<div class="card-expand-body${isExpanded ? " visible" : ""}">${stageHtml}${rows.join("")}</div>`;
 }
 
 // ── Toggle card expandido ─────────────────────────────────────────────────
@@ -4183,6 +4199,11 @@ function toggleCardExpand(event, phone) {
   if (_expandedCards.has(phone)) _expandedCards.delete(phone);
   else _expandedCards.add(phone);
   renderPipeline(allConvs);
+  if (window.innerWidth <= 768) {
+    const conv = allConvs.find(c => c.phone === phone);
+    const tabId = (conv?.clientType || "pf") === "pj" ? "pj" : "pf";
+    renderMobStageCards(tabId, _mobActiveStage[tabId] || "novo");
+  }
 }
 
 function relTime(iso) {
@@ -4799,10 +4820,6 @@ function buildCard(c, col, cols) {
 
   const unreadCount = !isResolved ? processCardNewMsg(c.phone, c.lastUserMessageAt) : 0;
 
-  const colsForStatus = cols.filter(col => !col.resolved);
-  const statusOptions = colsForStatus.map(col =>
-    `<option value="${col.key}"${col.key === (c.pipelineStatus||"novo") ? " selected" : ""}>${MOB_STAGE_SHORT[col.key] || col.label}</option>`
-  ).join("");
 
   const cardTitle  = c.cardTitle || "";
   const isManual   = !!c.priorityManual;
@@ -4870,15 +4887,6 @@ function buildCard(c, col, cols) {
       <button class="btn-cat-mgr" onclick="event.stopPropagation();openCatManager()" title="Gerenciar categorias">⚙️</button>
       <span class="card-win-time">${cardWindowTimeText(c)}</span>
     </div>
-
-    ${!isResolved ? `<div class="card-stage-row" onclick="event.stopPropagation()">
-      <span class="card-cat-label">ETAPA:</span>
-      <select class="stage-select" data-phone="${esc(c.phone)}"
-        onchange="changePipelineStage(this,'${esc(c.phone)}','${clientType}')"
-        onclick="event.stopPropagation()" title="Mover card para outra etapa">
-        ${statusOptions}
-      </select>
-    </div>` : ""}
 
     <div class="card-cta-row" onclick="event.stopPropagation()">
       ${isResolved
