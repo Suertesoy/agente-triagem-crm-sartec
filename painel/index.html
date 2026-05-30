@@ -191,10 +191,12 @@
     .pfpj-btn-confirm:hover { background:var(--brand-navy-mid); }
 
     /* ── Botão flutuante de atendente (desktop only) ─────────── */
-    .attendant-fab { position:fixed; bottom:80px; right:24px; display:flex; align-items:center; gap:10px; background:var(--fab-bg,#dbeafe); color:var(--fab-text,#1e3a5f); border:1px solid rgba(30,58,95,.12); border-radius:28px; padding:12px 20px 12px 10px; box-shadow:0 8px 28px rgba(15,23,42,.22),0 2px 8px rgba(15,23,42,.10); cursor:pointer; font-size:.85rem; font-weight:700; z-index:390; transition:background .15s,box-shadow .15s,color .15s; white-space:nowrap; }
+    .attendant-fab { position:fixed; bottom:80px; right:24px; display:flex; align-items:center; gap:10px; background:var(--fab-bg,#dbeafe); color:var(--fab-text,#1e3a5f); border:1px solid rgba(30,58,95,.12); border-radius:28px; padding:12px 20px 12px 10px; box-shadow:0 8px 28px rgba(15,23,42,.22),0 2px 8px rgba(15,23,42,.10); cursor:pointer; font-size:.85rem; font-weight:700; z-index:390; transition:background .15s,box-shadow .15s,color .15s,bottom .2s ease-out; white-space:nowrap; }
     .attendant-fab:hover { background:var(--fab-bg-hover,#bfdbfe); box-shadow:0 10px 32px rgba(15,23,42,.26),0 2px 8px rgba(15,23,42,.12); }
     .attendant-fab-avatar { width:38px; height:38px; border-radius:50%; background:rgba(30,58,95,.15); color:#fff; font-size:.72rem; font-weight:700; display:flex; align-items:center; justify-content:center; flex-shrink:0; }
     @media (max-width:768px) { .attendant-fab { display:none !important; } }
+    #view-convs.active:has(#convs-chat-area) ~ .attendant-fab { bottom: 140px; }
+    #view-convs.active:has(.composer.is-locked) ~ .attendant-fab { bottom: 180px; }
     .mob-new-fab { display:none; position:fixed; bottom:68px; right:16px; width:48px; height:48px; border-radius:50%; background:var(--accent,#2563eb); color:#fff; border:none; box-shadow:0 4px 16px rgba(15,23,42,.30); font-size:1.35rem; align-items:center; justify-content:center; cursor:pointer; z-index:390; transition:background .15s,box-shadow .15s; }
     .mob-new-fab:active { background:var(--accent-dark,#1d4ed8); }
 
@@ -6893,6 +6895,8 @@ function lockComposerResolved(prefix, phone, clientType) {
   if (textarea)  { textarea.disabled = true;  textarea.placeholder = "Atendimento resolvido"; }
   if (sendBtn)   sendBtn.disabled = true;
   if (fileInput) fileInput.disabled = true;
+  const composer = textarea?.closest('.composer');
+  if (composer) composer.classList.add('is-locked');
   if (lockBar) {
     lockBar.style.display = "flex";
     lockBar.className = "composer-lock-bar resolved-lock";
@@ -6986,6 +6990,9 @@ function lockComposer(prefix, reason) {
   if (sendBtn)   sendBtn.disabled = true;
   if (fileInput) fileInput.disabled = true;
 
+  const composer = textarea?.closest('.composer');
+  if (composer) composer.classList.add('is-locked');
+
   if (lockBar) {
     lockBar.style.display = "flex";
     if (reason === "waiting") {
@@ -7011,6 +7018,9 @@ function unlockComposer(prefix) {
   if (sendBtn)   sendBtn.disabled = false;
   if (fileInput) fileInput.disabled = false;
   if (lockBar)   lockBar.style.display = "none";
+
+  const composer = textarea?.closest('.composer');
+  if (composer) composer.classList.remove('is-locked');
 }
 
 // onSendTemplate está definida na seção TEMPLATES WHATSAPP acima
