@@ -6296,6 +6296,18 @@ async function sendMessage(prefix) {
   const messagesId = prefix === "modal" ? "modal-messages" : "convs-messages";
   const container  = document.getElementById(messagesId);
 
+  // Auto-reabertura silenciosa na aba Conversas quando conversa está resolvida e janela aberta
+  if (prefix === "convs") {
+    const _srPhone = getPhoneForPrefix(prefix);
+    const _srConv  = allConversationsList.find(c => c.phone === _srPhone)
+                  || allConvs.find(c => c.phone === _srPhone);
+    if (_srConv?.status === "resolvido") {
+      await reopenCard(_srPhone, _srConv.clientType || "pf");
+      _srConv.status     = "aguardando_humano";
+      _srConv.resolvedAt = null;
+    }
+  }
+
   try {
     if (hasPendingImages) {
       await sendImagesSequential(prefix, container, text);
@@ -6895,11 +6907,24 @@ function updateWindowUI(prefix, data) {
   const bar  = document.getElementById(`${prefix}-window-bar`);
   if (!bar) return;
 
-  // Conversa resolvida — bloqueia composer com CTA de reabertura e encerra aqui
+  // Conversa resolvida
   if (data.status === "resolvido") {
-    bar.className = "window-status-bar ws-closed";
+    if (prefix === "modal") {
+      // Modal: bloqueia composer com CTA de reabertura
+      bar.className = "window-status-bar ws-closed";
+      bar.innerHTML = `<span class="ws-icon">⬜</span><span class="ws-label">Atendimento encerrado</span>`;
+      lockComposerResolved(prefix, data.phone, data.clientType || "pf");
+      return;
+    }
+    // Aba Conversas: mostra indicação no topo; composer segue lógica de janela de 24h
+    // (janela aberta → pode enviar e reabre automaticamente; fechada → template normal)
+    const _rws    = data.conversationWindowStatus;
+    const _rOpen  = !_rws || _rws === "open";
+    bar.className = `window-status-bar${_rOpen ? "" : " ws-closed"}`;
     bar.innerHTML = `<span class="ws-icon">⬜</span><span class="ws-label">Atendimento encerrado</span>`;
-    lockComposerResolved(prefix, data.phone, data.clientType || "pf");
+    if (_rOpen)                          unlockComposer(prefix);
+    else if (_rws === "waiting_template_reply") lockComposer(prefix, "waiting");
+    else                                 lockComposer(prefix, "closed");
     return;
   }
 
