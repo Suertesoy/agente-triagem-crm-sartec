@@ -124,24 +124,52 @@
     }
     .btn-logout:hover { background: rgba(255,255,255,.18); }
 
-    /* ── Perfil do atendente ── */
-    .attendant-chip {
-      display: flex; align-items: center; gap: 6px;
-      background: rgba(255,255,255,.11);
-      border: 1px solid rgba(255,255,255,.18);
-      border-radius: 8px;
-      padding: 4px 10px 4px 5px;
-      cursor: pointer; color: #fff; font-size: .78rem;
-      white-space: nowrap; flex-shrink: 0;
-      transition: background .15s;
+    /* ── Container do grupo de controle à direita do header ── */
+    .header-right {
+      margin-left: auto;
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      flex-shrink: 0;
+      z-index: 10;
     }
-    .attendant-chip:hover { background: rgba(255,255,255,.2); }
+    @media (max-width: 768px) {
+      .header-right {
+        gap: 8px;
+      }
+    }
+
+    /* ── Perfil do atendente (badge destacado) ── */
+    .attendant-chip {
+      display: flex; align-items: center; gap: 8px;
+      background: var(--chip-bg, rgba(255,255,255,.11));
+      border: 1px solid rgba(0,0,0,.08);
+      border-radius: 20px;
+      padding: 4px 12px 4px 4px;
+      cursor: pointer; 
+      color: var(--chip-text, #fff); 
+      font-size: .78rem;
+      font-weight: 700;
+      white-space: nowrap; flex-shrink: 0;
+      box-shadow: 0 2px 8px rgba(0,0,0,.15);
+      transition: background .15s, transform .12s, box-shadow .15s;
+    }
+    .attendant-chip:hover { 
+      background: var(--chip-hover-bg, rgba(255,255,255,.2)); 
+      transform: translateY(-1px);
+      box-shadow: 0 4px 12px rgba(0,0,0,.22);
+    }
+    .attendant-chip:active {
+      transform: translateY(0);
+    }
     .attendant-avatar {
       width: 24px; height: 24px; border-radius: 50%;
       background: #3b82f6; color: #fff;
-      font-size: .6rem; font-weight: 700;
+      font-size: .62rem; font-weight: 800;
       display: flex; align-items: center; justify-content: center;
       flex-shrink: 0;
+      border: 1.5px solid rgba(255,255,255,.9);
+      box-shadow: 0 1px 3px rgba(0,0,0,.15);
     }
     .attendant-name { max-width: 130px; overflow: hidden; text-overflow: ellipsis; }
     .attendant-picker-box {
@@ -3331,13 +3359,15 @@
         <div class="contact-results" id="contact-results" style="display:none"></div>
       </div>
     </div>
-    <button class="attendant-chip" id="attendant-chip" style="margin-left:auto" onclick="openAttendantPicker()" title="Trocar perfil de atendimento">
-      <span class="attendant-avatar" id="attendant-avatar">?</span>
-      <span class="attendant-name" id="attendant-name">Perfil</span>
-    </button>
-    <div class="refresh-info">Atualiza em <span id="countdown">6</span>s<span id="refresh-state" class="refresh-state"></span></div>
-    <button class="btn-tutorial" onclick="restartOnboarding()" title="Ver tutorial">?</button>
-    <button class="btn-logout" onclick="logout()">Sair</button>
+    <div class="header-right">
+      <button class="attendant-chip" id="attendant-chip" onclick="openAttendantPicker()" title="Trocar perfil de atendimento">
+        <span class="attendant-avatar" id="attendant-avatar">?</span>
+        <span class="attendant-name" id="attendant-name">Perfil</span>
+      </button>
+      <div class="refresh-info">Atualiza em <span id="countdown">6</span>s<span id="refresh-state" class="refresh-state"></span></div>
+      <button class="btn-tutorial" onclick="restartOnboarding()" title="Ver tutorial">?</button>
+      <button class="btn-logout" onclick="logout()">Sair</button>
+    </div>
   </div>
 </header>
 
@@ -8378,11 +8408,31 @@ function getCurrentAttendant() {
   try { return JSON.parse(raw); } catch { return null; }
 }
 
+function getAttendantFabColors(color) {
+  const map = {
+    "#3b82f6": { bg:"#dbeafe", hover:"#bfdbfe", text:"#1e3a5f" }, // azul
+    "#8b5cf6": { bg:"#ede9fe", hover:"#ddd6fe", text:"#3b0764" }, // roxo
+    "#10b981": { bg:"#d1fae5", hover:"#a7f3d0", text:"#065f46" }, // verde
+    "#f59e0b": { bg:"#fef3c7", hover:"#fde68a", text:"#78350f" }, // âmbar
+    "#ec4899": { bg:"#fce7f3", hover:"#fbcfe8", text:"#831843" }, // rosa
+    "#06b6d4": { bg:"#cffafe", hover:"#a5f3fc", text:"#0c4a6e" }, // ciano
+    "#f97316": { bg:"#ffedd5", hover:"#fed7aa", text:"#7c2d12" }, // laranja
+  };
+  return map[color] || { bg:"#dbeafe", hover:"#bfdbfe", text:"#1e3a5f" };
+}
+
 function renderAttendantBadge(att) {
   const avatar = document.getElementById("attendant-avatar");
   const name   = document.getElementById("attendant-name");
+  const chip   = document.getElementById("attendant-chip");
   if (avatar) { avatar.textContent = att.initials; avatar.style.background = att.color; }
   if (name)   name.textContent = "Atendente: " + att.name;
+  if (chip) {
+    const { bg, hover, text } = getAttendantFabColors(att.color);
+    chip.style.setProperty("--chip-bg", bg);
+    chip.style.setProperty("--chip-hover-bg", hover);
+    chip.style.setProperty("--chip-text", text);
+  }
 }
 
 function setAttendant(id) {
