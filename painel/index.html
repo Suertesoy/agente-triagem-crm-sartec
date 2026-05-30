@@ -477,15 +477,37 @@
     @keyframes card-new-flash { 0%,100% { transform:translateX(0); } 20% { transform:translateX(-5px); } 40% { transform:translateX(5px); } 60% { transform:translateX(-3px); } 80% { transform:translateX(3px); } }
     .card-new-msg-flash { animation:card-new-flash 0.45s ease-out; box-shadow:0 0 0 2px rgba(59,130,246,.35),0 4px 16px rgba(15,23,42,.1) !important; }
 
-    /* ── Semântica: fundo do card = temperatura operacional ── */
-    .card.resolvido      { opacity: .80; background: #f1f2f4; border-color: rgba(107,114,128,.20); cursor: default; }
+    /* ── Cards resolvidos — arquivados com temperatura preservada ── */
+    .card.resolvido {
+      opacity: .82;
+      background: #f3f4f6;
+      border-color: rgba(107,114,128,.22);
+      cursor: pointer;
+    }
     .card.resolvido:hover { transform: none; box-shadow: 0 1px 3px rgba(15,23,42,.05), 0 2px 8px rgba(15,23,42,.06); }
-    /* Neutraliza cores de prioridade em cards resolvidos */
-    .card.resolvido.pri-alta, .card.resolvido.pri-media, .card.resolvido.card-critica,
-    .card.resolvido.card-finalizado, .card.resolvido.urgent, .card.resolvido.forgotten,
-    .card.resolvido.warn-10 { background: #f1f2f4; border-color: rgba(107,114,128,.20); }
-    /* Neutraliza hover de campos editáveis em resolvidos */
-    .card.resolvido .card-name:hover, .card.resolvido .card-title:hover { background: transparent; cursor: default; }
+    /* Overlay cinza sobre o conteúdo — card-cta-row fica acima via z-index */
+    .card.resolvido::after {
+      content: "";
+      position: absolute;
+      inset: 0;
+      background: rgba(243,244,246,.52);
+      border-radius: inherit;
+      pointer-events: none;
+      z-index: 1;
+    }
+    /* Temperatura preservada em versão desaturada */
+    .card.resolvido.pri-alta,
+    .card.resolvido.card-critica,
+    .card.resolvido.urgent,
+    .card.resolvido.forgotten  { background: rgba(239,68,68,.05);  border-color: rgba(239,68,68,.22); }
+    .card.resolvido.pri-media,
+    .card.resolvido.warn-10    { background: rgba(202,138,4,.05);  border-color: rgba(202,138,4,.22); }
+    .card.resolvido.card-finalizado { background: rgba(52,211,153,.05); border-color: rgba(52,211,153,.22); }
+    /* CTA de reabertura acima da camada */
+    .card.resolvido .card-cta-row { position: relative; z-index: 2; }
+    /* Bloqueia cursor nos campos de texto */
+    .card.resolvido .card-name,
+    .card.resolvido .card-title { cursor: default; user-select: text; }
     .card.card-finalizado { background: #e8f3ee; border-color: rgba(22,163,74,.55); }
     .card.card-critica   { background: #fff4f4; border-color: rgba(220,38,38,.44); }
     .card.pri-alta       { background: #fff4f4; border-color: rgba(220,38,38,.44); }
@@ -746,19 +768,20 @@
     .btn-open:hover { background: var(--brand-navy-mid); }
 
     .btn-reopen {
-      font-size: .7rem;
-      background: #f0fdf4;
-      color: #15803d;
+      font-size: .72rem;
+      font-weight: 700;
+      background: var(--brand-navy, #1a2a5e);
+      color: #fff;
       cursor: pointer;
-      border: 1px solid #86efac;
-      border-radius: 7px;
-      padding: 5px 10px;
-      cursor: pointer;
+      border: none;
+      border-radius: 8px;
+      padding: 7px 12px;
       white-space: nowrap;
-      flex: 1;
+      width: 100%;
       text-align: center;
+      transition: background .12s;
     }
-    .btn-reopen:hover { background: #dcfce7; }
+    .btn-reopen:hover { background: var(--brand-navy-mid, #243880); }
 
     /* ─ Card footer ─ */
     .card-footer {
@@ -1443,6 +1466,11 @@
       background: #fffbeb;
       border-top-color: #fde68a;
       color: #92400e;
+    }
+    .composer-lock-bar.resolved-lock {
+      background: #f3f4f6;
+      border-top: 2px solid rgba(107,114,128,.25);
+      color: var(--text-secondary, #5a6380);
     }
     .composer-lock-bar span { flex: 1; }
     .btn-send-template {
@@ -4664,6 +4692,19 @@ function buildCard(c, col, cols) {
     </div>
   `;
 
+  // Bloqueia edição de todos os campos quando o card está resolvido
+  if (isResolved) {
+    card.querySelectorAll("[contenteditable]").forEach(el => {
+      el.contentEditable = "false";
+      el.removeAttribute("onblur");
+      el.removeAttribute("onkeydown");
+      el.style.cursor = "default";
+    });
+    card.querySelectorAll("select, button:not(.btn-reopen)").forEach(el => {
+      el.disabled = true;
+    });
+  }
+
   if (!isResolved && !isIncomplete) {
     card.draggable = true;
     card.addEventListener("dragstart", (e) => {
@@ -5042,11 +5083,22 @@ function renderModal(data) {
   document.getElementById("modal-pipeline-status").textContent =
     pipelineLabel(data.pipelineStatus, data.clientType);
 
-  // Janela de 24h
+  // Janela de 24h (inclui lock por status resolvido)
   updateWindowUI("modal", data);
   renderActiveAttendantNotice("modal", data);
 
+  // Botão "Resolver" no header — oculto quando já resolvida
+  const _resolveBtn = document.querySelector(".btn-resolve-modal");
+  if (_resolveBtn) _resolveBtn.style.display = data.status === "resolvido" ? "none" : "";
+
   populateDadosFormSafe("modal", data);
+
+  // Dados do pedido — somente leitura quando resolvida
+  if (data.status === "resolvido") {
+    document.querySelectorAll(
+      "#modal-dados-section input, #modal-dados-section select, #modal-dados-section textarea, #modal-dados-section button"
+    ).forEach(el => { el.disabled = true; });
+  }
 
   // ── Resumo colapsável para o atendente ──
   let summaryBlock = document.getElementById("modal-summary-block");
@@ -6763,9 +6815,35 @@ async function setPriorityManual(level) {
  * Atualiza a barra de status da janela e bloqueia/libera o compositor.
  * `data` deve conter conversationWindowStatus, windowRemainingMs, windowExpiresAt.
  */
+function lockComposerResolved(prefix, phone, clientType) {
+  const textarea  = document.getElementById(`${prefix}-msg-input`);
+  const sendBtn   = document.getElementById(`${prefix}-send-btn`);
+  const fileInput = document.getElementById(`${prefix}-file-input`);
+  const lockBar   = document.getElementById(`${prefix}-composer-lock`);
+  if (textarea)  { textarea.disabled = true;  textarea.placeholder = "Atendimento resolvido"; }
+  if (sendBtn)   sendBtn.disabled = true;
+  if (fileInput) fileInput.disabled = true;
+  if (lockBar) {
+    lockBar.style.display = "flex";
+    lockBar.className = "composer-lock-bar resolved-lock";
+    lockBar.innerHTML = `
+      <span>Atendimento resolvido.</span>
+      <button class="btn-send-template" onclick="reopenCard('${esc(phone)}','${clientType}');closeModal()">↺ Reabrir conversa</button>
+    `;
+  }
+}
+
 function updateWindowUI(prefix, data) {
   const bar  = document.getElementById(`${prefix}-window-bar`);
   if (!bar) return;
+
+  // Conversa resolvida — bloqueia composer com CTA de reabertura e encerra aqui
+  if (data.status === "resolvido") {
+    bar.className = "window-status-bar ws-closed";
+    bar.innerHTML = `<span class="ws-icon">⬜</span><span class="ws-label">Atendimento encerrado</span>`;
+    lockComposerResolved(prefix, data.phone, data.clientType || "pf");
+    return;
+  }
 
   const ws = data.conversationWindowStatus;
 
