@@ -4667,7 +4667,7 @@ function renderPipelineTab(tabId, cols, convs) {
         }).then(res => {
           if (!res.ok) throw new Error("HTTP error");
         }).catch(() => {
-          showToast("Erro ao reordenar card", "t-err");
+          showToast(getHumanErrorMsg("reorder_card"), "t-err");
           _colOrder[tabId + ":" + targetKey] = originalOrder;
           renderPipeline(allConvs);
         });
@@ -4691,7 +4691,7 @@ function renderPipelineTab(tabId, cols, convs) {
             throw new Error("HTTP error");
           }
         } catch {
-          showToast("Erro ao mover card", "t-err");
+          showToast(getHumanErrorMsg("move_card"), "t-err");
           conv.pipelineStatus = originalStatus;
           renderPipeline(allConvs);
           loadQueue();
@@ -5137,9 +5137,9 @@ function quickResolveCard(phone) {
         showToast("Conversa resolvida ✓");
       } else {
         const err = await res.json().catch(() => ({}));
-        showToast(`Erro: ${err.error || "falha"}`, "t-err");
+        showToast(getHumanErrorMsg("resolve_conversation", err), "t-err");
       }
-    } catch { showToast("Falha de rede.", "t-err"); }
+    } catch { showToast(getHumanErrorMsg("resolve_conversation"), "t-err"); }
   };
 }
 
@@ -5597,7 +5597,7 @@ async function loadConversations() {
     if (convsSectionMode !== 'convs') return; // não sobrescreve lista de contatos
     const list = document.getElementById("convs-list");
     if (list) list.innerHTML = `<div style="padding:24px 16px;text-align:center;color:var(--text-secondary)">
-      <div style="font-size:.85rem;margin-bottom:12px">Erro ao carregar conversas.</div>
+      <div style="font-size:.85rem;margin-bottom:12px">Não foi possível carregar as conversas agora. Verifique a conexão e tente novamente.</div>
       <button onclick="loadConversations()" style="background:var(--brand-navy);color:#fff;border:none;padding:8px 18px;border-radius:8px;cursor:pointer;font-size:.8rem;font-weight:600">
         Tentar novamente
       </button>
@@ -5979,10 +5979,10 @@ async function saveCardData(prefix) {
       btn.classList.add("saved");
       setTimeout(() => { btn.textContent = "Salvar dados"; btn.classList.remove("saved"); }, 2200);
     } else {
-      const err = await res.json();
-      alert(`Erro: ${err.error}`);
+      const err = await res.json().catch(() => ({}));
+      showToast(getHumanErrorMsg("save_card", err), "t-err");
     }
-  } catch { alert("Falha de rede ao salvar."); }
+  } catch { showToast(getHumanErrorMsg("save_card"), "t-err"); }
 }
 
 // ╔══════════════════════════════════════════════════════════════╗
@@ -6771,7 +6771,7 @@ async function sendTextMessage(prefix, container, text) {
     });
     if (!res.ok) {
       const err = await res.json();
-      alert(`Erro ao enviar: ${err.detail || err.error || "Falha de envio"}`);
+      showToast(getHumanErrorMsg("send_text", err), "t-err");
       removeLastOptimistic(container);
     } else {
       clearReplyTarget(prefix);
@@ -6938,10 +6938,10 @@ function resolveConversation(prefix) {
         renderPipeline(allConvs);
         updateHeader(allConvs);
       } else {
-        const err = await res.json();
-        alert(`Erro: ${err.error}`);
+        const err = await res.json().catch(() => ({}));
+        showToast(getHumanErrorMsg("resolve_conversation", err), "t-err");
       }
-    } catch { alert("Falha de rede."); }
+    } catch { showToast(getHumanErrorMsg("resolve_conversation"), "t-err"); }
   };
 }
 
@@ -7028,6 +7028,32 @@ window.addEventListener("storage", (e) => {
 });
 
 // ╔══════════════════════════════════════════════════════════════╗
+// ║  MENSAGENS HUMANAS DE ERRO                                   ║
+// ╚══════════════════════════════════════════════════════════════╝
+function getHumanErrorMsg(context, errData) {
+  const raw = (errData?.error || "") + " " + (errData?.detail || "");
+  if (/window|janela|24h/i.test(raw)) {
+    return "A janela de 24h está encerrada. Envie um template para retomar o contato.";
+  }
+  const msgs = {
+    send_text:            "Não foi possível enviar agora. Verifique se a janela do WhatsApp está aberta ou tente novamente em alguns segundos.",
+    send_template:        "Não consegui enviar o template agora. Confira os dados preenchidos e tente novamente em alguns segundos.",
+    start_conversation:   "Não consegui iniciar a conversa agora. Confira os dados preenchidos e tente novamente em alguns segundos.",
+    save_card:            "As alterações não foram salvas. A conexão pode ter oscilado. Tente novamente.",
+    save_contact:         "As alterações não foram salvas. A conexão pode ter oscilado. Tente novamente.",
+    move_card:            "Não consegui mover o card agora. Ele voltou para a etapa anterior para evitar perda de informação.",
+    reorder_card:         "Não consegui reorganizar a ordem dos cards agora. Tente novamente.",
+    resolve_conversation: "Não consegui marcar esta conversa como resolvida agora. Tente novamente antes de sair da tela.",
+    reopen_contact:       "Não consegui reabrir este atendimento agora. Os dados do contato foram mantidos na tela para você tentar novamente.",
+    update_priority:      "Não foi possível salvar a prioridade agora. Tente novamente.",
+    change_client_type:   "Não consegui desfazer a alteração de tipo de cliente. Verifique e ajuste manualmente se necessário.",
+    pj_lunch_mode:        "Não consegui alterar o modo almoço PJ agora. Tente novamente.",
+    generic_network:      "O painel não conseguiu atualizar os dados agora. Aguarde alguns segundos ou atualize a página.",
+  };
+  return msgs[context] || msgs.generic_network;
+}
+
+// ╔══════════════════════════════════════════════════════════════╗
 // ║  TOAST — feedback de ação                                    ║
 // ╚══════════════════════════════════════════════════════════════╝
 function showToast(msg, type = "t-ok") {
@@ -7097,7 +7123,7 @@ async function undoClientTypeChange() {
     showToast("Alteração desfeita");
   } catch (e) {
     console.error("[undoClientTypeChange]", e);
-    showToast("Erro ao desfazer", "t-err");
+    showToast(getHumanErrorMsg("change_client_type"), "t-err");
   }
 }
 
@@ -7125,9 +7151,9 @@ function quickResolveCard(phone) {
         updateHeader(allConvs);
       } else {
         const err = await res.json();
-        showToast(`Erro: ${err.error}`, "t-err");
+        showToast(getHumanErrorMsg("resolve_conversation", err), "t-err");
       }
-    } catch { showToast("Falha de rede", "t-err"); }
+    } catch { showToast(getHumanErrorMsg("resolve_conversation"), "t-err"); }
   };
 }
 
@@ -7160,14 +7186,14 @@ async function sendQuickReply(phone) {
     });
     if (!res.ok) {
       const err = await res.json();
-      showToast(`Erro: ${err.detail || err.error || "Falha de envio"}`, "t-err");
+      showToast(getHumanErrorMsg("send_text", err), "t-err");
     } else {
       showToast("Mensagem enviada");
       closeQuickReply(phone);
       autoAdvanceAfterHumanReply(phone);
       loadQueue();
     }
-  } catch { showToast("Falha de rede", "t-err"); }
+  } catch { showToast(getHumanErrorMsg("send_text"), "t-err"); }
   if (btn) btn.disabled = false;
 }
 
@@ -7219,7 +7245,7 @@ async function setPriorityManual(level) {
       body: JSON.stringify({ phone, priorityManual: level }),
     });
     showToast(level ? "Prioridade atualizada" : "Prioridade removida");
-  } catch { showToast("Erro ao salvar prioridade", "t-err"); }
+  } catch { showToast(getHumanErrorMsg("update_priority"), "t-err"); }
 }
 
 // ╔══════════════════════════════════════════════════════════════╗
@@ -7555,8 +7581,7 @@ async function submitNewConvo() {
     const data = await res.json();
 
     if (!res.ok) {
-      const detail = data.detail ? `\n${data.detail}` : "";
-      alert(`Erro ao iniciar conversa:\n${data.error}${detail}`);
+      showToast(getHumanErrorMsg("start_conversation", data), "t-err");
       btn.disabled = false;
       btn.textContent = origText;
       return;
@@ -7573,7 +7598,7 @@ async function submitNewConvo() {
     console.log(`[Nova conversa] ✅ Template "${data.templateName}" → +${phone} (${name})`);
 
   } catch (err) {
-    alert("Falha de rede ao iniciar conversa.");
+    showToast(getHumanErrorMsg("start_conversation"), "t-err");
     btn.disabled = false;
     btn.textContent = origText;
   }
@@ -7701,8 +7726,7 @@ async function submitTemplate() {
     const data = await res.json();
 
     if (!res.ok) {
-      const detail = data.detail ? `\n${data.detail}` : "";
-      alert(`Erro ao enviar template:\n${data.error}${detail}`);
+      showToast(getHumanErrorMsg("send_template", data), "t-err");
       btn.disabled = false;
       btn.textContent = origText;
       return;
@@ -7720,7 +7744,7 @@ async function submitTemplate() {
     console.log(`[Template] ✅ "${data.templateName}" enviado para +${phone}`);
 
   } catch (err) {
-    alert("Falha de rede ao enviar template.");
+    showToast(getHumanErrorMsg("send_template"), "t-err");
     btn.disabled = false;
     btn.textContent = origText;
   }
@@ -7866,7 +7890,7 @@ function addCat() {
   if (!key) return;
 
   const cats = getCategories();
-  if (cats[key]) { alert(`Categoria "${cats[key]}" já existe.`); return; }
+  if (cats[key]) { showToast(`A categoria "${cats[key]}" já existe. Escolha um nome diferente.`, "t-err"); return; }
   cats[key] = raw;
   saveCategories(cats);
   input.value = "";
@@ -7876,7 +7900,7 @@ function addCat() {
 
 function removeCat(key) {
   const inUse = new Set(allConvs.map(c => c.demandType).filter(Boolean));
-  if (inUse.has(key)) { alert("Esta categoria está em uso em cards ativos."); return; }
+  if (inUse.has(key)) { showToast("Esta categoria está em uso em cards ativos e não pode ser removida agora.", "t-err"); return; }
   const cats = getCategories();
   delete cats[key];
   saveCategories(cats);
@@ -8025,7 +8049,7 @@ async function loadContacts() {
     console.error('[loadContacts]', e);
     if (convsSectionMode !== 'contacts') return; // modo mudou durante o fetch
     if (list) list.innerHTML = `<div style="padding:24px 16px;text-align:center;color:var(--text-secondary)">
-      <div style="font-size:.85rem;margin-bottom:12px">Erro ao carregar contatos.</div>
+      <div style="font-size:.85rem;margin-bottom:12px">Não foi possível carregar os contatos agora. Verifique a conexão e tente novamente.</div>
       <button onclick="loadContacts()" style="background:var(--brand-navy);color:#fff;border:none;padding:8px 18px;border-radius:8px;cursor:pointer;font-size:.8rem;font-weight:600">
         Tentar novamente
       </button>
@@ -8242,7 +8266,7 @@ async function saveContactEdit(phone, prefix = 'cd') {
 
     if (!res.ok) {
       const err = await res.json().catch(() => ({}));
-      showToast(err.error || 'Erro ao salvar contato.', 't-err');
+      showToast(getHumanErrorMsg("save_contact", err), 't-err');
       return;
     }
 
@@ -8277,7 +8301,7 @@ async function saveContactEdit(phone, prefix = 'cd') {
     }
     loadQueue();
   } catch {
-    showToast('Erro ao salvar contato.', 't-err');
+    showToast(getHumanErrorMsg("save_contact"), 't-err');
   } finally {
     if (saveBtn) { saveBtn.disabled = false; saveBtn.textContent = 'Salvar alterações'; }
   }
@@ -9137,9 +9161,9 @@ async function togglePjLunchMode() {
       renderPjLunchBtn();
       showToast(newEnabled ? "🍽️ Almoço PJ ativado" : "✅ Almoço PJ desativado", "t-ok");
     } else {
-      showToast("Erro ao alterar modo almoço PJ", "t-err");
+      showToast(getHumanErrorMsg("pj_lunch_mode"), "t-err");
     }
-  } catch { showToast("Erro ao alterar modo almoço PJ", "t-err"); }
+  } catch { showToast(getHumanErrorMsg("pj_lunch_mode"), "t-err"); }
 }
 
 // iOS Safari: touchend no container bypassa o defer de click em scroll containers
@@ -9244,7 +9268,7 @@ async function openContactResult(contact) {
     });
     if (!res.ok) {
       const err = await res.json().catch(() => ({}));
-      showToast(`Erro ao reabrir: ${err.error || "falha"}`, "t-err");
+      showToast(getHumanErrorMsg("reopen_contact", err), "t-err");
       return;
     }
     // Sessão existe no Redis — abre o modal imediatamente
@@ -9253,7 +9277,7 @@ async function openContactResult(contact) {
     loadQueue();
     showToast("Contato reaberto ✓");
   } catch {
-    showToast("Falha de rede ao reabrir contato.", "t-err");
+    showToast(getHumanErrorMsg("reopen_contact"), "t-err");
   }
 }
 
