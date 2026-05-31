@@ -129,6 +129,76 @@
     .btn-login:hover  { background: #cc2222; }
     .btn-login:active { transform: scale(.98); }
     .btn-login:disabled { opacity: .5; cursor: default; }
+
+    /* ── Loading pós-login ── */
+    .loading-screen {
+      display: none;
+      position: fixed;
+      inset: 0;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      background: linear-gradient(135deg, #1a2a5e 0%, #0f1a3e 100%);
+      padding: 32px 24px;
+    }
+    .loading-screen.visible {
+      display: flex;
+      animation: load-fade-in .28s ease forwards;
+    }
+    @keyframes load-fade-in {
+      from { opacity: 0; }
+      to   { opacity: 1; }
+    }
+    .loading-logo {
+      max-width: 180px;
+      width: 100%;
+      height: auto;
+      object-fit: contain;
+      margin-bottom: 36px;
+      opacity: .93;
+    }
+    .loading-title {
+      font-size: 1.15rem;
+      font-weight: 700;
+      color: #fff;
+      letter-spacing: .02em;
+      margin-bottom: 10px;
+      text-align: center;
+    }
+    .loading-sub {
+      font-size: .8rem;
+      color: rgba(255,255,255,.55);
+      text-align: center;
+      max-width: 300px;
+      line-height: 1.55;
+      margin-bottom: 38px;
+    }
+    .progress-wrap {
+      width: 240px;
+      height: 3px;
+      background: rgba(255,255,255,.12);
+      border-radius: 99px;
+      overflow: hidden;
+      margin-bottom: 18px;
+    }
+    .progress-fill {
+      height: 100%;
+      width: 0%;
+      background: rgba(255,255,255,.7);
+      border-radius: 99px;
+      transition: width .32s cubic-bezier(.4,0,.2,1);
+    }
+    .loading-step {
+      font-size: .72rem;
+      color: rgba(255,255,255,.42);
+      letter-spacing: .06em;
+      text-transform: uppercase;
+      font-weight: 600;
+    }
+    @media (max-width: 480px) {
+      .loading-logo { max-width: 140px; margin-bottom: 28px; }
+      .progress-wrap { width: 200px; }
+    }
   </style>
 </head>
 <body>
@@ -147,6 +217,16 @@
     </div>
     <button type="submit" class="btn-login" id="btn-login">Entrar</button>
   </form>
+</div>
+
+<div class="loading-screen" id="loading-screen" aria-live="polite">
+  <img src="/LOGO_SARTEC_PNG.png" alt="Sartec Papelaria" class="loading-logo">
+  <div class="loading-title">Preparando seu painel</div>
+  <div class="loading-sub">Estamos organizando as informações para o atendimento da Sartec.</div>
+  <div class="progress-wrap">
+    <div class="progress-fill" id="progress-fill"></div>
+  </div>
+  <div class="loading-step" id="loading-step">Validando acesso...</div>
 </div>
 
 <script>
@@ -168,11 +248,11 @@
       sessionStorage.setItem("sartec_auth", "true");
       sessionStorage.setItem("sartec_show_onboarding_after_login", "1");
       localStorage.removeItem("sartec_current_attendant");
-      btn.disabled  = true;
+      btn.disabled    = true;
       btn.textContent = "Entrando...";
-      // Fade out suave antes de redirecionar
+      // Fade out suave do card; em seguida exibe o loading
       card.style.animation = "fade-out .3s ease forwards";
-      setTimeout(() => location.replace("index.html"), 300);
+      setTimeout(showLoadingScreen, 300);
     } else {
       // Shake + mensagem de erro
       errMsg.textContent = "Senha incorreta. Tente novamente.";
@@ -183,6 +263,28 @@
       document.getElementById("pwd").focus();
       setTimeout(() => errMsg.textContent = "", 3000);
     }
+  }
+
+  function showLoadingScreen() {
+    const screen = document.getElementById("loading-screen");
+    const fill   = document.getElementById("progress-fill");
+    const step   = document.getElementById("loading-step");
+
+    screen.classList.add("visible");
+
+    const steps = [
+      { text: "Validando acesso...",            pct: "22%",  delay: 0   },
+      { text: "Sincronizando atendimentos...",  pct: "55%",  delay: 350 },
+      { text: "Carregando contatos...",         pct: "82%",  delay: 720 },
+      { text: "Tudo pronto. Abrindo painel...", pct: "100%", delay: 1050 },
+    ];
+
+    steps.forEach(({ text, pct, delay }) => {
+      setTimeout(() => { step.textContent = text; fill.style.width = pct; }, delay);
+    });
+
+    // Redireciona após os passos — total: 300ms (fade) + 1350ms (loading) = 1650ms
+    setTimeout(() => location.replace("index.html"), 1350);
   }
 </script>
 </body>
