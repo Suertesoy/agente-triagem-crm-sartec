@@ -3467,6 +3467,478 @@
       .card-window-closed::after { display:none; }
       .card-window-closed > *:not(.card-status-dot) { position:static; z-index:auto; }
     }
+
+    /* ══════════════════════════════════════════════════
+       MÉTRICAS DASHBOARD
+    ══════════════════════════════════════════════════ */
+    #view-metrics {
+      display: none;
+      padding: 24px;
+      overflow-y: auto;
+      height: calc(100vh - 146px); /* 56px header + 90px navy */
+      box-sizing: border-box;
+      background: var(--bg-main);
+    }
+    #view-metrics.active {
+      display: block;
+    }
+    @media (max-width: 768px) {
+      #view-metrics {
+        height: auto;
+        padding: 12px;
+        margin-top: var(--mob-header-h);
+        margin-bottom: var(--mob-nav-h);
+        overflow-y: auto;
+      }
+    }
+    .metrics-container {
+      max-width: 1200px;
+      margin: 0 auto;
+      display: flex;
+      flex-direction: column;
+      gap: 24px;
+    }
+    .metrics-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      flex-wrap: wrap;
+      gap: 16px;
+    }
+    .metrics-main-title {
+      font-size: 1.6rem;
+      font-weight: 800;
+      color: var(--brand-navy);
+      margin: 0 0 4px 0;
+    }
+    .metrics-subtitle {
+      font-size: 0.88rem;
+      color: var(--text-secondary);
+      margin: 0;
+    }
+    .metrics-period-filter {
+      display: flex;
+      background: #e2e6f0;
+      padding: 4px;
+      border-radius: 8px;
+      gap: 2px;
+    }
+    .metrics-period-filter .filter-btn {
+      border: none;
+      background: none;
+      padding: 6px 16px;
+      font-size: 0.82rem;
+      font-weight: 600;
+      color: var(--text-secondary);
+      border-radius: 6px;
+      cursor: pointer;
+      transition: background 0.15s, color 0.15s;
+    }
+    .metrics-period-filter .filter-btn:hover {
+      color: var(--brand-navy);
+    }
+    .metrics-period-filter .filter-btn.active {
+      background: #fff;
+      color: var(--brand-navy);
+      box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+    }
+    
+    /* Loading e Erro Discretos */
+    .metrics-loading-state {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 12px;
+      padding: 32px;
+      background: #fff;
+      border-radius: 12px;
+      border: 1px solid var(--border);
+      color: var(--text-secondary);
+      font-size: 0.9rem;
+      font-weight: 500;
+    }
+    .metrics-spinner {
+      width: 20px;
+      height: 20px;
+      border: 2px solid rgba(26, 42, 94, 0.1);
+      border-top-color: var(--brand-navy);
+      border-radius: 50%;
+      animation: metrics-spin 0.8s linear infinite;
+    }
+    @keyframes metrics-spin {
+      to { transform: rotate(360deg); }
+    }
+    
+    .metrics-error-state {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      gap: 12px;
+      padding: 32px;
+      background: #fff;
+      border-radius: 12px;
+      border: 1px solid #fca5a5;
+      color: #7f1d1d;
+      font-size: 0.9rem;
+    }
+    .metrics-error-state button {
+      border: 1px solid #fca5a5;
+      background: #fee2e2;
+      color: #7f1d1d;
+      padding: 6px 14px;
+      border-radius: 6px;
+      font-size: 0.8rem;
+      font-weight: 600;
+      cursor: pointer;
+      transition: background 0.12s;
+    }
+    .metrics-error-state button:hover {
+      background: #fcd3d3;
+    }
+
+    /* Grid de Cards */
+    .metrics-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
+      gap: 16px;
+    }
+    .metric-card {
+      background: #fff;
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      padding: 20px;
+      display: flex;
+      flex-direction: column;
+      box-shadow: 0 2px 4px rgba(0,0,0,0.02);
+      transition: transform 0.15s, box-shadow 0.15s;
+    }
+    .metric-card:hover {
+      transform: translateY(-2px);
+      box-shadow: 0 4px 12px rgba(0,0,0,0.05);
+    }
+    .metric-val {
+      font-size: 1.8rem;
+      font-weight: 800;
+      color: var(--brand-navy);
+      margin-bottom: 4px;
+      line-height: 1.2;
+    }
+    .metric-label {
+      font-size: 0.82rem;
+      font-weight: 700;
+      color: var(--text-primary);
+      margin-bottom: 6px;
+    }
+    .metric-desc {
+      font-size: 0.72rem;
+      color: var(--text-muted);
+      margin: 0;
+      line-height: 1.35;
+    }
+
+    /* Blocos e Linhas */
+    .metrics-row {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 20px;
+    }
+    @media (max-width: 768px) {
+      .metrics-row {
+        grid-template-columns: 1fr;
+      }
+    }
+    .metrics-row.full-width {
+      grid-template-columns: 1fr;
+    }
+    .metrics-block {
+      background: #fff;
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      padding: 20px;
+      box-shadow: 0 2px 4px rgba(0,0,0,0.02);
+    }
+    .metrics-block h3 {
+      font-size: 1rem;
+      font-weight: 700;
+      color: var(--brand-navy);
+      margin: 0 0 16px 0;
+      border-bottom: 1px solid var(--border);
+      padding-bottom: 10px;
+    }
+
+    /* Lista de Produtividade */
+    .metrics-list-card {
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+    }
+    .attendant-rank-item {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      padding: 8px 12px;
+      border-radius: 8px;
+      background: #f8f9fc;
+      border: 1px solid var(--border);
+    }
+    .attendant-rank-badge {
+      width: 24px;
+      height: 24px;
+      border-radius: 50%;
+      background: var(--brand-navy);
+      color: #fff;
+      font-size: 0.72rem;
+      font-weight: 700;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+    .attendant-rank-info {
+      flex: 1;
+    }
+    .attendant-rank-name {
+      font-size: 0.85rem;
+      font-weight: 700;
+      color: var(--text-primary);
+    }
+    .attendant-rank-meta {
+      font-size: 0.74rem;
+      color: var(--text-secondary);
+    }
+    .attendant-rank-score {
+      font-size: 0.9rem;
+      font-weight: 800;
+      color: var(--brand-navy);
+      text-align: right;
+    }
+
+    /* Gráfico de Barras CSS Puro (Volume por dia) */
+    .chart-container {
+      height: 200px;
+      display: flex;
+      align-items: flex-end;
+      gap: 8px;
+      padding-top: 20px;
+      box-sizing: border-box;
+      overflow-x: auto;
+      border-bottom: 1px solid var(--border);
+      position: relative;
+    }
+    .chart-bar-wrap {
+      flex: 1;
+      min-width: 24px;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      height: 100%;
+      justify-content: flex-end;
+      gap: 4px;
+      cursor: pointer;
+      position: relative;
+    }
+    .chart-bar {
+      width: 100%;
+      background: var(--brand-navy-mid);
+      border-radius: 4px 4px 0 0;
+      min-height: 2px;
+      transition: background 0.15s, height 0.3s ease;
+      position: relative;
+    }
+    .chart-bar:hover {
+      background: var(--brand-navy);
+    }
+    .chart-bar:hover::after {
+      content: attr(data-tooltip);
+      position: absolute;
+      bottom: 100%;
+      left: 50%;
+      transform: translateX(-50%);
+      background: rgba(26, 42, 94, 0.95);
+      color: #fff;
+      padding: 4px 8px;
+      border-radius: 4px;
+      font-size: 0.68rem;
+      white-space: nowrap;
+      box-shadow: 0 2px 6px rgba(0,0,0,0.15);
+      z-index: 10;
+      margin-bottom: 4px;
+    }
+    .chart-label {
+      font-size: 0.65rem;
+      color: var(--text-muted);
+      white-space: nowrap;
+      transform: rotate(-30deg);
+      transform-origin: top center;
+      margin-top: 4px;
+      height: 20px;
+    }
+
+    /* Funil do Pipeline */
+    .funnel-container {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 16px;
+    }
+    @media (max-width: 480px) {
+      .funnel-container {
+        grid-template-columns: 1fr;
+      }
+    }
+    .funnel-column h4 {
+      font-size: 0.85rem;
+      font-weight: 700;
+      color: var(--text-primary);
+      margin: 0 0 12px 0;
+      text-align: center;
+    }
+    .funnel-stages {
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+    }
+    .funnel-stage-row {
+      display: flex;
+      flex-direction: column;
+      gap: 2px;
+    }
+    .funnel-stage-label-wrap {
+      display: flex;
+      justify-content: space-between;
+      font-size: 0.72rem;
+      font-weight: 600;
+      color: var(--text-secondary);
+      padding: 0 4px;
+    }
+    .funnel-stage-bar-bg {
+      height: 18px;
+      background: #f1f3f9;
+      border-radius: 4px;
+      overflow: hidden;
+      position: relative;
+    }
+    .funnel-stage-bar-fill {
+      height: 100%;
+      background: var(--brand-navy-mid);
+      border-radius: 4px;
+      transition: width 0.3s ease;
+    }
+    .funnel-stage-bar-fill.pf-novo { background: #3b82f6; }
+    .funnel-stage-bar-fill.pf-em_atendimento { background: #f59e0b; }
+    .funnel-stage-bar-fill.pf-orcamento_enviado { background: #8b5cf6; }
+    .funnel-stage-bar-fill.pf-confirmado { background: #10b981; }
+    .funnel-stage-bar-fill.pf-finalizado { background: #6b7280; }
+    .funnel-stage-bar-fill.pf-resolvido { background: #d1d5db; }
+
+    .funnel-stage-bar-fill.pj-novo { background: #3b82f6; }
+    .funnel-stage-bar-fill.pj-em_cotacao { background: #f59e0b; }
+    .funnel-stage-bar-fill.pj-proposta_enviada { background: #8b5cf6; }
+    .funnel-stage-bar-fill.pj-confirmado { background: #10b981; }
+    .funnel-stage-bar-fill.pj-entregue { background: #6b7280; }
+    .funnel-stage-bar-fill.pj-resolvido { background: #d1d5db; }
+
+    /* Demandas */
+    .demand-list {
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+    }
+    .demand-item {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+    }
+    .demand-lbl {
+      width: 90px;
+      font-size: 0.78rem;
+      font-weight: 600;
+      color: var(--text-primary);
+      text-transform: capitalize;
+    }
+    .demand-bar-bg {
+      flex: 1;
+      height: 14px;
+      background: #f1f3f9;
+      border-radius: 7px;
+      overflow: hidden;
+    }
+    .demand-bar-fill {
+      height: 100%;
+      background: var(--brand-navy);
+      border-radius: 7px;
+      transition: width 0.3s ease;
+    }
+    .demand-count {
+      width: 30px;
+      text-align: right;
+      font-size: 0.8rem;
+      font-weight: 700;
+      color: var(--brand-navy);
+    }
+
+    /* Alertas de Saúde Operacional */
+    .alerts-summary-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(130px, 1fr));
+      gap: 12px;
+      margin-bottom: 20px;
+    }
+    .alert-summary-card {
+      background: #fdf2f2;
+      border: 1px solid #fde8e8;
+      border-radius: 8px;
+      padding: 12px;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      text-align: center;
+    }
+    .alert-summary-val {
+      font-size: 1.4rem;
+      font-weight: 800;
+      color: #9b1c1c;
+    }
+    .alert-summary-label {
+      font-size: 0.72rem;
+      font-weight: 600;
+      color: #7f1d1d;
+      margin-top: 2px;
+    }
+    .alerts-table-wrap {
+      overflow-x: auto;
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      background: #fff;
+    }
+    .alerts-table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 0.8rem;
+      text-align: left;
+    }
+    .alerts-table th, .alerts-table td {
+      padding: 10px 14px;
+      border-bottom: 1px solid var(--border);
+    }
+    .alerts-table th {
+      background: #f8f9fc;
+      font-weight: 700;
+      color: var(--text-primary);
+    }
+    .alerts-table tr:last-child td {
+      border-bottom: none;
+    }
+    .alert-badge {
+      display: inline-block;
+      background: #fde8e8;
+      color: #9b1c1c;
+      padding: 2px 8px;
+      border-radius: 12px;
+      font-size: 0.68rem;
+      font-weight: 600;
+      margin-right: 4px;
+      margin-bottom: 2px;
+    }
   </style>
 </head>
 <body>
@@ -3525,6 +3997,9 @@
   </button>
   <button class="tab-btn"        id="tab-convs" onclick="switchTab('convs')">
     Conversas
+  </button>
+  <button class="tab-btn"        id="tab-metrics" onclick="switchTab('metrics')" style="display: none;">
+    Métricas
   </button>
   <div class="tab-actions">
     <button id="btn-lunch-pj" class="pj-lunch-toggle" onclick="togglePjLunchMode()" title="Ativar/desativar modo almoço PJ">
@@ -3585,6 +4060,161 @@
       <div class="convs-empty-text">Selecione uma conversa</div>
     </div>
     <!-- Chat da aba Conversas é preenchido dinamicamente -->
+  </div>
+</div>
+
+<!-- ══════ VIEW METRICAS ══════ -->
+<div class="view" id="view-metrics">
+  <div class="metrics-container">
+    <div class="metrics-header">
+      <div class="metrics-title-block">
+        <h1 class="metrics-main-title">Métricas de Atendimento</h1>
+        <p class="metrics-subtitle">Indicadores operacionais baseados nas conversas do CRM</p>
+      </div>
+      <div class="metrics-period-filter">
+        <button class="filter-btn active" data-period="30d">30 dias</button>
+        <button class="filter-btn" data-period="hoje">Hoje</button>
+        <button class="filter-btn" data-period="7d">7 dias</button>
+        <button class="filter-btn" data-period="tudo">Tudo</button>
+      </div>
+    </div>
+    
+    <!-- Loading discreto interno -->
+    <div class="metrics-loading-state" id="metrics-loading" style="display: none;">
+      <div class="metrics-spinner"></div>
+      <span>Atualizando métricas...</span>
+    </div>
+    
+    <!-- Erro amigável discreto -->
+    <div class="metrics-error-state" id="metrics-error" style="display: none;">
+      <span>⚠️ Não foi possível carregar as métricas.</span>
+      <button onclick="retryLoadMetrics()">Tentar novamente</button>
+    </div>
+    
+    <!-- Conteúdo principal -->
+    <div class="metrics-content" id="metrics-content-area">
+      <!-- Grid de Cards de Métricas Principais -->
+      <div class="metrics-grid">
+        <div class="metric-card">
+          <span class="metric-val" id="metric-total-chats">-</span>
+          <span class="metric-label">Conversas no período</span>
+          <p class="metric-desc">Volume total de atendimentos ativos e arquivados</p>
+        </div>
+        <div class="metric-card">
+          <span class="metric-val" id="metric-waiting-chats">-</span>
+          <span class="metric-label">Aguardando atendimento</span>
+          <p class="metric-desc">Contatos na fila aguardando resposta humana</p>
+        </div>
+        <div class="metric-card">
+          <span class="metric-val" id="metric-resolved-chats">-</span>
+          <span class="metric-label">Conversas resolvidas</span>
+          <p class="metric-desc">Atendimentos finalizados com sucesso</p>
+        </div>
+        <div class="metric-card">
+          <span class="metric-val" id="metric-avg-res-time">-</span>
+          <span class="metric-label">Tempo médio de resolução</span>
+          <p class="metric-desc">Intervalo entre handoff/mensagem e resolução</p>
+        </div>
+        <div class="metric-card">
+          <span class="metric-val" id="metric-avg-resp-time">-</span>
+          <span class="metric-label">Primeira resposta humana</span>
+          <p class="metric-desc">Tempo médio até o primeiro retorno do atendente</p>
+        </div>
+        <div class="metric-card">
+          <span class="metric-val" id="metric-failed-templates">-</span>
+          <span class="metric-label">Templates com falha</span>
+          <p class="metric-desc">Mensagens ativas rejeitadas pela Meta</p>
+        </div>
+      </div>
+      
+      <!-- Linha Secundária: Gráficos e Tabelas -->
+      <div class="metrics-row">
+        <!-- Produtividade por Atendente -->
+        <div class="metrics-block">
+          <h3>Produtividade por Atendente</h3>
+          <div id="metrics-attendants-list" class="metrics-list-card">
+            <!-- Renderizado dinamicamente -->
+          </div>
+        </div>
+        
+        <!-- Volume por Dia -->
+        <div class="metrics-block">
+          <h3>Volume de Conversas por Dia</h3>
+          <div class="chart-container" id="metrics-volume-chart">
+            <!-- Gráfico de barras verticais em CSS puro renderizado dinamicamente -->
+          </div>
+        </div>
+      </div>
+      
+      <div class="metrics-row">
+        <!-- Funil do Pipeline (PF vs PJ) -->
+        <div class="metrics-block">
+          <h3>Funil do Pipeline</h3>
+          <div class="funnel-container">
+            <div class="funnel-column">
+              <h4>Pessoa Física (PF)</h4>
+              <div id="funnel-pf" class="funnel-stages"></div>
+            </div>
+            <div class="funnel-column">
+              <h4>Pessoa Jurídica (PJ)</h4>
+              <div id="funnel-pj" class="funnel-stages"></div>
+            </div>
+          </div>
+        </div>
+        
+        <!-- Distribuição por Tipo de Demanda -->
+        <div class="metrics-block">
+          <h3>Tipos de Demanda</h3>
+          <div id="demand-distribution" class="demand-list"></div>
+        </div>
+      </div>
+      
+      <div class="metrics-row full-width">
+        <!-- Alertas de Saúde da Operação -->
+        <div class="metrics-block">
+          <h3>Saúde da Operação (Alertas)</h3>
+          <div class="alerts-summary-grid">
+            <div class="alert-summary-card">
+              <span id="alert-idle30m" class="alert-summary-val">0</span>
+              <span class="alert-summary-label">Paradas > 30m</span>
+            </div>
+            <div class="alert-summary-card">
+              <span id="alert-window-closed" class="alert-summary-val">0</span>
+              <span class="alert-summary-label">Janela fechada</span>
+            </div>
+            <div class="alert-summary-card">
+              <span id="alert-waiting-template" class="alert-summary-val">0</span>
+              <span class="alert-summary-label">Aguardando template</span>
+            </div>
+            <div class="alert-summary-card">
+              <span id="alert-failed-template" class="alert-summary-val">0</span>
+              <span class="alert-summary-label">Template com falha</span>
+            </div>
+            <div class="alert-summary-card">
+              <span id="alert-missing-name" class="alert-summary-val">0</span>
+              <span class="alert-summary-label">Sem nome definido</span>
+            </div>
+          </div>
+          
+          <h4 style="margin-top: 20px; font-size: 0.9rem; color: var(--text-primary);">Lista de Conversas em Alerta</h4>
+          <div class="alerts-table-wrap">
+            <table class="alerts-table">
+              <thead>
+                <tr>
+                  <th>Cliente</th>
+                  <th>Telefone</th>
+                  <th>Motivos do Alerta</th>
+                  <th>Última Atividade</th>
+                </tr>
+              </thead>
+              <tbody id="alerts-table-body">
+                <!-- Preenchido dinamicamente -->
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+    </div>
   </div>
 </div>
 
@@ -4403,13 +5033,19 @@ function updateDocTitle(convs) {
 // ║  TABS                                                        ║
 // ╚══════════════════════════════════════════════════════════════╝
 function switchTab(tab) {
+  if (tab === "metrics" && !checkMetricsAccess()) {
+    tab = "pf"; // Redireciona para PF se acesso não for permitido
+  }
+  
   currentTab = tab;
   closeConvMenu();
   sessionStorage.setItem("activeTab", tab);
 
-  ["pf","pj","convs"].forEach(t => {
-    document.getElementById(`tab-${t}`).classList.toggle("active", t === tab);
-    document.getElementById(`view-${t}`).classList.toggle("active", t === tab);
+  ["pf","pj","convs","metrics"].forEach(t => {
+    const tabEl = document.getElementById(`tab-${t}`);
+    const viewEl = document.getElementById(`view-${t}`);
+    if (tabEl) tabEl.classList.toggle("active", t === tab);
+    if (viewEl) viewEl.classList.toggle("active", t === tab);
   });
 
   if (tab === "convs") {
@@ -4420,11 +5056,309 @@ function switchTab(tab) {
   } else {
     stopConvsPoll();
   }
+  
+  if (tab === "metrics") {
+    loadMetrics();
+  }
+  
   if (window.innerWidth <= 768) {
     const isKanban=(tab==="pf"||tab==="pj");
     document.querySelectorAll(".mob-nav-btn").forEach(b=>{const t=b.dataset.tab;b.classList.toggle("active",t===tab||(t==="kanban"&&isKanban));});
   }
   updateHeader(allConvs);
+}
+
+// ╔══════════════════════════════════════════════════════════════╗
+// ║  MÉTRICAS DASHBOARD CONTROLLER                               ║
+// ╚══════════════════════════════════════════════════════════════╝
+let metricsPeriod = "30d";
+let _metricsInitialized = false;
+
+function checkMetricsAccess() {
+  const current = getCurrentAttendant();
+  if (!current) return false;
+  const idNormalized = (current.id || "").toLowerCase().trim();
+  const nameNormalized = (current.name || "").toLowerCase().trim();
+  return idNormalized === "lucas" || idNormalized === "denise" || nameNormalized === "lucas" || nameNormalized === "denise";
+}
+
+function updateMetricsTabVisibility() {
+  const tabEl = document.getElementById("tab-metrics");
+  if (!tabEl) return;
+  const hasAccess = checkMetricsAccess();
+  tabEl.style.display = hasAccess ? "" : "none";
+  if (!hasAccess && currentTab === "metrics") {
+    switchTab("pf");
+  }
+}
+
+function initMetricsView() {
+  if (_metricsInitialized) return;
+  const container = document.getElementById("view-metrics");
+  if (!container) return;
+  const filterBtns = container.querySelectorAll(".metrics-period-filter .filter-btn");
+  filterBtns.forEach(btn => {
+    btn.onclick = (e) => {
+      filterBtns.forEach(b => b.classList.remove("active"));
+      e.target.classList.add("active");
+      metricsPeriod = e.target.dataset.period;
+      loadMetrics();
+    };
+  });
+  _metricsInitialized = true;
+}
+
+function retryLoadMetrics() {
+  loadMetrics();
+}
+
+function loadMetrics() {
+  if (!checkMetricsAccess()) {
+    switchTab("pf");
+    return;
+  }
+  
+  initMetricsView();
+  
+  const loadingEl = document.getElementById("metrics-loading");
+  const contentEl = document.getElementById("metrics-content-area");
+  const errorEl = document.getElementById("metrics-error");
+  
+  if (loadingEl) loadingEl.style.display = "flex";
+  if (contentEl) contentEl.style.display = "none";
+  if (errorEl) errorEl.style.display = "none";
+  
+  fetch(`/api/metrics?period=${metricsPeriod}`)
+    .then(res => {
+      if (!res.ok) throw new Error("Erro de resposta da rede");
+      return res.json();
+    })
+    .then(data => {
+      if (loadingEl) loadingEl.style.display = "none";
+      if (contentEl) contentEl.style.display = "block";
+      renderMetricsData(data);
+    })
+    .catch(err => {
+      console.error("Erro ao carregar métricas:", err);
+      if (loadingEl) loadingEl.style.display = "none";
+      if (contentEl) contentEl.style.display = "none";
+      if (errorEl) errorEl.style.display = "flex";
+    });
+}
+
+function formatDuration(ms) {
+  if (ms === null || ms === undefined || isNaN(ms)) return "Sem dados suficientes";
+  const sec = Math.round(ms / 1000);
+  if (sec < 60) return `${sec}s`;
+  const min = Math.round(sec / 60);
+  if (min < 60) return `${min}min`;
+  const hr = Math.floor(min / 60);
+  const remMin = min % 60;
+  if (hr < 24) return `${hr}h ${remMin}m`;
+  const days = Math.floor(hr / 24);
+  const remHr = hr % 24;
+  return `${days}d ${remHr}h`;
+}
+
+function renderMetricsData(data) {
+  const sum = data.summary || {};
+  
+  const totalEl = document.getElementById("metric-total-chats");
+  const waitingEl = document.getElementById("metric-waiting-chats");
+  const resolvedEl = document.getElementById("metric-resolved-chats");
+  const avgResEl = document.getElementById("metric-avg-res-time");
+  const avgRespEl = document.getElementById("metric-avg-resp-time");
+  const failedEl = document.getElementById("metric-failed-templates");
+
+  if (totalEl) totalEl.textContent = sum.totalChats !== null && sum.totalChats !== undefined ? sum.totalChats : "Sem dados suficientes";
+  if (waitingEl) waitingEl.textContent = sum.waitingChats !== null && sum.waitingChats !== undefined ? sum.waitingChats : "Sem dados suficientes";
+  if (resolvedEl) resolvedEl.textContent = sum.resolvedChats !== null && sum.resolvedChats !== undefined ? sum.resolvedChats : "Sem dados suficientes";
+  if (avgResEl) avgResEl.textContent = formatDuration(sum.avgResolutionTimeMs);
+  if (avgRespEl) avgRespEl.textContent = formatDuration(sum.avgFirstResponseTimeMs);
+  if (failedEl) failedEl.textContent = sum.failedTemplatesCount !== null && sum.failedTemplatesCount !== undefined ? sum.failedTemplatesCount : "Sem dados suficientes";
+  
+  // Produtividade por Atendente
+  const attsList = document.getElementById("metrics-attendants-list");
+  if (attsList) {
+    if (!data.attendants || data.attendants.length === 0) {
+      attsList.innerHTML = `<div style="text-align:center; padding:16px; color:var(--text-secondary); font-size:0.8rem;">Sem dados suficientes</div>`;
+    } else {
+      attsList.innerHTML = data.attendants.map((att, index) => `
+        <div class="attendant-rank-item">
+          <div class="attendant-rank-badge">${index + 1}</div>
+          <div class="attendant-rank-info">
+            <div class="attendant-rank-name">${esc(att.name)}</div>
+            <div class="attendant-rank-meta">Conversas atuadas: ${att.conversationsActed}</div>
+          </div>
+          <div class="attendant-rank-score">${att.messagesSent} msgs</div>
+        </div>
+      `).join("");
+    }
+  }
+  
+  // Volume por Dia
+  const chartContainer = document.getElementById("metrics-volume-chart");
+  if (chartContainer) {
+    if (!data.volumeByDay || data.volumeByDay.length === 0) {
+      chartContainer.innerHTML = `<div style="text-align:center; width:100%; padding:48px 0; color:var(--text-secondary); font-size:0.8rem;">Sem dados suficientes</div>`;
+    } else {
+      const maxCount = Math.max(...data.volumeByDay.map(d => d.count), 1);
+      chartContainer.innerHTML = data.volumeByDay.map(day => {
+        const heightPct = Math.min(100, Math.max(5, Math.round((day.count / maxCount) * 100)));
+        let label = day.date;
+        try {
+          const parts = day.date.split("-");
+          if (parts.length === 3) label = `${parts[2]}/${parts[1]}`;
+        } catch {}
+        return `
+          <div class="chart-bar-wrap">
+            <div class="chart-bar" style="height: ${heightPct}%" data-tooltip="${day.count} conversas em ${day.date}"></div>
+            <span class="chart-label">${label}</span>
+          </div>
+        `;
+      }).join("");
+    }
+  }
+  
+  // Funil do Pipeline
+  renderFunnel(data.funnel || {});
+  
+  // Tipos de Demanda
+  renderDemands(data.demands || {});
+  
+  // Alertas de Saúde
+  const alerts = data.alerts || {};
+  const aIdle = document.getElementById("alert-idle30m");
+  const aClosed = document.getElementById("alert-window-closed");
+  const aWaiting = document.getElementById("alert-waiting-template");
+  const aFailed = document.getElementById("alert-failed-template");
+  const aMissing = document.getElementById("alert-missing-name");
+
+  if (aIdle) aIdle.textContent = alerts.idle30m !== undefined ? alerts.idle30m : 0;
+  if (aClosed) aClosed.textContent = alerts.windowClosed !== undefined ? alerts.windowClosed : 0;
+  if (aWaiting) aWaiting.textContent = alerts.waitingTemplate !== undefined ? alerts.waitingTemplate : 0;
+  if (aFailed) aFailed.textContent = alerts.failedTemplate !== undefined ? alerts.failedTemplate : 0;
+  if (aMissing) aMissing.textContent = alerts.missingName !== undefined ? alerts.missingName : 0;
+  
+  // Tabela de Alertas
+  const tableBody = document.getElementById("alerts-table-body");
+  if (tableBody) {
+    if (!data.alertsList || data.alertsList.length === 0) {
+      tableBody.innerHTML = `<tr><td colspan="4" style="text-align:center; color:var(--text-secondary); padding:20px;">Nenhum alerta operacional detectado</td></tr>`;
+    } else {
+      tableBody.innerHTML = data.alertsList.map(item => {
+        const reasonsHtml = item.reasons.map(r => `<span class="alert-badge">${esc(r)}</span>`).join("");
+        let formattedTime = item.lastActivity;
+        try {
+          if (item.lastActivity !== "—") {
+            formattedTime = new Date(item.lastActivity).toLocaleString("pt-BR", {
+              day: "2-digit",
+              month: "2-digit",
+              hour: "2-digit",
+              minute: "2-digit"
+            });
+          }
+        } catch {}
+        return `
+          <tr>
+            <td style="font-weight: 600; color: var(--text-primary);">${esc(item.clientName)}</td>
+            <td>+${esc(item.phone)}</td>
+            <td>${reasonsHtml}</td>
+            <td style="color: var(--text-secondary); font-variant-numeric: tabular-nums;">${esc(formattedTime)}</td>
+          </tr>
+        `;
+      }).join("");
+    }
+  }
+}
+
+function renderFunnel(funnelData) {
+  const pf = funnelData.pf || {};
+  const pfStages = [
+    { key: "novo", label: "Novo", cls: "pf-novo" },
+    { key: "em_atendimento", label: "Em Atendimento", cls: "pf-em_atendimento" },
+    { key: "orcamento_enviado", label: "Orçamento Enviado", cls: "pf-orcamento_enviado" },
+    { key: "confirmado", label: "Confirmado", cls: "pf-confirmado" },
+    { key: "finalizado", label: "Finalizado", cls: "pf-finalizado" },
+    { key: "resolvido", label: "Resolvido", cls: "pf-resolvido" }
+  ];
+  const pfMax = Math.max(...pfStages.map(s => pf[s.key] || 0), 1);
+  const pfHtml = pfStages.map(s => {
+    const val = pf[s.key] || 0;
+    const widthPct = Math.round((val / pfMax) * 100);
+    return `
+      <div class="funnel-stage-row">
+        <div class="funnel-stage-label-wrap">
+          <span>${s.label}</span>
+          <span>${val}</span>
+        </div>
+        <div class="funnel-stage-bar-bg">
+          <div class="funnel-stage-bar-fill ${s.cls}" style="width: ${widthPct}%"></div>
+        </div>
+      </div>
+    `;
+  }).join("");
+  const pfEl = document.getElementById("funnel-pf");
+  if (pfEl) pfEl.innerHTML = pfHtml;
+
+  const pj = funnelData.pj || {};
+  const pjStages = [
+    { key: "novo", label: "Novo", cls: "pj-novo" },
+    { key: "em_cotacao", label: "Em Cotação", cls: "pj-em_cotacao" },
+    { key: "proposta_enviada", label: "Proposta Enviada", cls: "pj-proposta_enviada" },
+    { key: "confirmado", label: "Confirmado", cls: "pj-confirmado" },
+    { key: "entregue", label: "Entregue", cls: "pj-entregue" },
+    { key: "resolvido", label: "Resolvido", cls: "pj-resolvido" }
+  ];
+  const pjMax = Math.max(...pjStages.map(s => pj[s.key] || 0), 1);
+  const pjHtml = pjStages.map(s => {
+    const val = pj[s.key] || 0;
+    const widthPct = Math.round((val / pjMax) * 100);
+    return `
+      <div class="funnel-stage-row">
+        <div class="funnel-stage-label-wrap">
+          <span>${s.label}</span>
+          <span>${val}</span>
+        </div>
+        <div class="funnel-stage-bar-bg">
+          <div class="funnel-stage-bar-fill ${s.cls}" style="width: ${widthPct}%"></div>
+        </div>
+      </div>
+    `;
+  }).join("");
+  const pjEl = document.getElementById("funnel-pj");
+  if (pjEl) pjEl.innerHTML = pjHtml;
+}
+
+function renderDemands(demandsData) {
+  const container = document.getElementById("demand-distribution");
+  if (!container) return;
+  const labelsMap = {
+    lista: "Lista",
+    cotacao_pj: "Cotação PJ",
+    xerox: "Xerox",
+    produto: "Produto",
+    duvida: "Dúvida",
+    outro: "Outro"
+  };
+  const demands = Object.keys(labelsMap).map(key => ({
+    key,
+    label: labelsMap[key],
+    count: demandsData[key] || 0
+  }));
+  const maxCount = Math.max(...demands.map(d => d.count), 1);
+  container.innerHTML = demands.map(d => {
+    const widthPct = Math.round((d.count / maxCount) * 100);
+    return `
+      <div class="demand-item">
+        <div class="demand-lbl">${esc(d.label)}</div>
+        <div class="demand-bar-bg">
+          <div class="demand-bar-fill" style="width: ${widthPct}%"></div>
+        </div>
+        <div class="demand-count">${d.count}</div>
+      </div>
+    `;
+  }).join("");
 }
 
 // ╔══════════════════════════════════════════════════════════════╗
@@ -9307,6 +10241,7 @@ function setAttendant(id) {
   renderAttendantBadge(profile);
   closeAttendantPicker();
   requestNotificationPermission();
+  updateMetricsTabVisibility();
   if (checkAndShowOnboardingAfterLogin()) {
     return;
   }
@@ -9355,6 +10290,7 @@ function initAttendant() {
   } else {
     setTimeout(() => openAttendantPicker(true), 600);
   }
+  updateMetricsTabVisibility();
 }
 
 function introduceAttendant(prefix) {
