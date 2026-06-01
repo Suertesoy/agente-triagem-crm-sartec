@@ -1524,6 +1524,31 @@
       transition: background .12s, border-color .12s;
     }
     .btn-assume:hover { background: rgba(146,64,14,.18); border-color: rgba(146,64,14,.55); }
+    .active-attendant-bar.aa-none {
+      background: #f8f9fc;
+      border-bottom: 1px solid var(--border);
+      color: var(--text-secondary);
+      font-weight: 500;
+      padding: 7px 14px;
+    }
+    .btn-assume-none {
+      margin-left: auto;
+      font-size: .67rem;
+      font-weight: 700;
+      padding: 3px 10px;
+      border-radius: 5px;
+      border: 1px solid rgba(26,42,94,.3);
+      background: rgba(26,42,94,.06);
+      color: var(--brand-navy);
+      cursor: pointer;
+      flex-shrink: 0;
+      white-space: nowrap;
+      transition: background .12s, border-color .12s;
+    }
+    .btn-assume-none:hover {
+      background: rgba(26,42,94,.14);
+      border-color: rgba(26,42,94,.55);
+    }
 
     /* ── Chip de atendente ativo no card do Kanban ── */
     .card-attendant-tag {
@@ -7855,6 +7880,7 @@ async function sendImagesSequential(prefix, container, caption) {
   clearReplyTarget(prefix);
   prefix === "modal" ? await refreshModal() : await refreshConvsChat(phone);
   showToast(imgs.length === 1 ? "Foto enviada" : `${imgs.length} fotos enviadas`);
+  await ensureAttendantAssumedOnMessage(phone, prefix);
   autoAdvanceAfterHumanReply(phone);
 }
 
@@ -7891,6 +7917,7 @@ async function sendTextMessage(prefix, container, text) {
       clearReplyTarget(prefix);
       prefix === "modal" ? await refreshModal() : await refreshConvsChat(phone);
       showToast("Mensagem enviada");
+      await ensureAttendantAssumedOnMessage(phone, prefix);
       autoAdvanceAfterHumanReply(phone);
     }
   } catch (e) { showToast("Não foi possível enviar a mensagem. Verifique a conexão e tente novamente.", "t-err"); removeLastOptimistic(container); }
@@ -7932,6 +7959,7 @@ async function sendImageMessage(prefix, container, caption) {
       clearReplyTarget(prefix);
       prefix === "modal" ? await refreshModal() : await refreshConvsChat(phone);
       showToast("Imagem enviada");
+      await ensureAttendantAssumedOnMessage(phone, prefix);
       autoAdvanceAfterHumanReply(phone);
     }
   } catch (e) { showToast("Não foi possível enviar a imagem. Verifique a conexão e tente novamente.", "t-err"); removeLastOptimistic(container); }
@@ -7983,6 +8011,7 @@ async function sendDocumentMessage(prefix, container, caption) {
       clearReplyTarget(prefix);
       prefix === "modal" ? await refreshModal() : await refreshConvsChat(phone);
       showToast("Documento enviado");
+      await ensureAttendantAssumedOnMessage(phone, prefix);
       autoAdvanceAfterHumanReply(phone);
     }
   } catch (e) {
@@ -8625,6 +8654,7 @@ async function resendTemplate(prefix, skipCooldown = false) {
     });
 
     showToast("Template reenviado. Acompanhe a confirmação de entrega no status da conversa.");
+    await ensureAttendantAssumedOnMessage(phone, prefix);
 
     // Recarrega histórico para exibir a nova bolha de template
     if (prefix === "modal") {
@@ -9007,6 +9037,7 @@ async function submitTemplate() {
       windowExpiresAt:   null,
       lastUserMessageAt: null,
     });
+    await ensureAttendantAssumedOnMessage(phone, prefix);
 
     console.log(`[Template] ✅ "${data.templateName}" enviado para +${phone}`);
 
@@ -10125,21 +10156,40 @@ function isActiveAttendantFresh(activeAttendantAt) {
 function renderActiveAttendantNotice(prefix, data) {
   const bar = document.getElementById(`${prefix}-aa-bar`);
   if (!bar) return;
-  const { activeAttendant, activeAttendantAt } = data;
-  const current = getCurrentAttendant();
-  if (!activeAttendant || !isActiveAttendantFresh(activeAttendantAt)) {
+  
+  if (data.isArchive) {
     bar.className = "active-attendant-bar hidden";
     bar.innerHTML = "";
     return;
   }
-  if (current && activeAttendant.id === current.id) {
+  
+  const { activeAttendant, activeAttendantAt } = data;
+  const current = getCurrentAttendant();
+  
+  // Se o próprio atendente atual já tiver assumido:
+  if (activeAttendant && isActiveAttendantFresh(activeAttendantAt) && current && activeAttendant.id === current.id) {
     bar.className = "active-attendant-bar aa-self";
     bar.textContent = "Você está atendendo esta conversa";
-  } else {
+    const phone = prefix === "modal" ? openModalPhone : openConvsPhone;
+    if (phone) {
+      observerOnlyPhones.delete(phone); // garante que saiu do modo observador
+      startActiveAttendantRenewal(phone);
+    }
+    return;
+  }
+  
+  // Se outro atendente tiver assumido:
+  if (activeAttendant && isActiveAttendantFresh(activeAttendantAt)) {
     const phone = prefix === "modal" ? openModalPhone : openConvsPhone;
     bar.className = "active-attendant-bar aa-other";
-    bar.innerHTML = `<span>⚠ ${esc(activeAttendant.name)} está atendendo esta conversa agora</span><button class="btn-assume" onclick="event.stopPropagation();assumeAttendant('${esc(phone || "")}','${prefix}')">Assumir atendimento</button>`;
+    bar.innerHTML = `<span>⚠ ${esc(activeAttendant.name)} está cuidando desta conversa</span><button class="btn-assume" onclick="event.stopPropagation();confirmAndAssumeAttendant('${esc(phone || "")}','${prefix}','${esc(activeAttendant.name)}')">Assumir mesmo assim</button>`;
+    return;
   }
+  
+  // Quando ninguém assumiu:
+  const phone = prefix === "modal" ? openModalPhone : openConvsPhone;
+  bar.className = "active-attendant-bar aa-none";
+  bar.innerHTML = `<span>Nenhum atendente assumiu esta conversa.</span><button class="btn-assume-none" onclick="event.stopPropagation();assumeAttendant('${esc(phone || "")}','${prefix}')">Assumir atendimento</button>`;
 }
 
 function canTouchActiveAttendant(data, phone) {
@@ -10155,7 +10205,7 @@ function canTouchActiveAttendant(data, phone) {
 function startActiveAttendantRenewal(phone) {
   clearInterval(_aaIntervalId);
   _aaIntervalId = setInterval(() => {
-    if (openModalPhone === phone) touchActiveAttendant(phone);
+    if (openModalPhone === phone || openConvsPhone === phone) touchActiveAttendant(phone);
     else clearInterval(_aaIntervalId);
   }, 60000);
 }
@@ -10174,7 +10224,12 @@ async function touchActiveAttendant(phone) {
 
 async function assumeAttendant(phone, prefix) {
   const current = getCurrentAttendant();
-  if (!current || !phone) return;
+  if (!current) {
+    showToast("Selecione seu perfil de atendente antes de assumir uma conversa.", "t-warn");
+    setTimeout(() => openAttendantPicker(true), 1000);
+    return;
+  }
+  if (!phone) return;
   observerOnlyPhones.delete(phone);  // sair do modo observador antes de assumir
   await touchActiveAttendant(phone);
   _aaRegistered = true;
@@ -10185,7 +10240,22 @@ async function assumeAttendant(phone, prefix) {
     activeAttendant:   current,
     activeAttendantAt: new Date().toISOString(),
   });
-  showToast("Atendimento assumido", "t-ok");
+  showToast("Atendimento assumido por você.", "t-ok");
+}
+
+function confirmAndAssumeAttendant(phone, prefix, otherName) {
+  const ok = confirm(`Essa conversa já está marcada com outro atendente (${otherName}). Deseja assumir mesmo assim?`);
+  if (ok) {
+    assumeAttendant(phone, prefix);
+  }
+}
+
+async function ensureAttendantAssumedOnMessage(phone, prefix) {
+  const current = getCurrentAttendant();
+  if (!current || !phone) return;
+  if (observerOnlyPhones.has(phone)) {
+    await assumeAttendant(phone, prefix);
+  }
 }
 
 // ╔══════════════════════════════════════════════════════════════╗
