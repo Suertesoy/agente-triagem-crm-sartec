@@ -72,8 +72,8 @@
     }
 
     /* Faixa superior: logo sobre o fundo do painel (sem cor artificial) */
-    .brand { width:100%; height:52px; display:flex; justify-content:center; align-items:center; padding:0; flex-shrink:0; }
-    .brand-logo { height: 38px; width: auto; object-fit: contain; display: block; }
+    .brand { width:100%; height:56px; display:flex; justify-content:center; align-items:center; padding:0; flex-shrink:0; }
+    .brand-logo { height: 42px; width: auto; object-fit: contain; display: block; }
 
     /* Faixa navy: título + busca + controles */
     .header-nav-row { display:flex; align-items:center; gap:12px; height:90px; padding:0 20px; background:var(--brand-navy); position:relative; flex-shrink:0; }
@@ -3450,7 +3450,7 @@
 <header class="top-header">
   <!-- Faixa da logo: fundo igual ao painel -->
   <div class="brand">
-    <img src="/LOGO_SARTEC_OFICIAL_PNG.png" alt="Sartec" class="brand-logo">
+    <img src="/LOGO_SARTEC_PNG.png" alt="Sartec" class="brand-logo">
   </div>
   <!-- Faixa navy: título + busca centralizados, contador à esquerda, ações à direita -->
   <div class="header-nav-row">
@@ -4313,7 +4313,7 @@ function showBrowserNotification(clientName) {
       body: clientName && clientName !== "—"
         ? clientName + " enviou uma nova mensagem."
         : "Nova mensagem de cliente.",
-      icon: "/LOGO_SARTEC_OFICIAL_PNG.png",
+      icon: "/LOGO_SARTEC_PNG.png",
     });
     n.onclick = () => { window.focus(); n.close(); };
     setTimeout(() => n.close(), 5000);
