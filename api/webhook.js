@@ -1439,6 +1439,79 @@ function applyTemplateSessionStatus(session, msg, status, statusAt, errors) {
   }
 }
 
+function getFriendlyTemplateErrorText(err) {
+  if (!err) return null;
+  let raw = null;
+  if (typeof err === "string") {
+    raw = err;
+  } else if (err && typeof err === "object") {
+    // Prioridade: details > message > title (do mais específico ao mais genérico)
+    raw = err.details || err.message || err.title || null;
+  }
+  if (!raw) return null;
+  const lower = String(raw).toLowerCase();
+  // Mapeamento amigável para erros comuns da Meta
+  if (lower.includes("recipient") && lower.includes("not registered")) {
+    return "este número não parece estar registrado no WhatsApp.";
+  }
+  if (lower.includes("does not exist") || (lower.includes("invalid") && lower.includes("wa"))) {
+    return "número inválido ou indisponível para WhatsApp.";
+  }
+  if (lower.includes("template") && (lower.includes("not found") || lower.includes("blocked"))) {
+    return "template não encontrado ou bloqueado na Meta.";
+  }
+  if (lower.includes("rate limit") || lower.includes("too many")) {
+    return "limite de envios da Meta atingido. Aguarde alguns minutos.";
+  }
+  const s = String(raw);
+  return s.length > 80 ? s.slice(0, 80) + "…" : s;
+}
+
+function injectFailedTemplateEvent(session, msgId, statusAt, errors) {
+  if (!session.history) session.history = [];
+  const history = session.history;
+
+  // Encontra a mensagem de template correspondente no histórico (para herdar os dados)
+  const templateMsg = history.find(m => m.metaMessageId === msgId);
+
+  // Verifica se de fato é um evento de template (evita injetar para mensagens normais que falharem)
+  const isTemplate = (templateMsg && (templateMsg.messageType === "template" || templateMsg.sentByTemplate)) ||
+                     (session.lastTemplateMessageId === msgId);
+
+  if (!isTemplate) return false;
+
+  // 1. Evitar duplicidade
+  const alreadyExists = history.some(m =>
+    m.messageType === "template_status" &&
+    m.templateStatus === "failed" &&
+    m.relatedMessageId === msgId
+  );
+  if (alreadyExists) return false;
+
+  // 2. Obter erro amigável
+  const normErr = normalizeMetaStatusError(errors);
+  const friendlyErr = getFriendlyTemplateErrorText(normErr);
+
+  // 3. Montar a mensagem do evento
+  const content = "Falha na entrega do template. Motivo: " + (friendlyErr || "erro desconhecido");
+
+  // 4. Montar o item de status
+  const eventItem = {
+    role: "system",
+    content: content,
+    messageType: "template_status",
+    templateStatus: "failed",
+    templateType: (templateMsg && templateMsg.templateType) || session.lastTemplateType || null,
+    templateName: (templateMsg && templateMsg.templateName) || session.lastTemplateName || null,
+    relatedMessageId: msgId,
+    deliveryError: friendlyErr || (normErr ? (normErr.details || normErr.message || normErr.title) : null) || "Falha na entrega",
+    createdAt: statusAt || new Date().toISOString()
+  };
+
+  history.push(eventItem);
+  return true;
+}
+
 async function handleDeliveryStatus(s) {
   const { id: msgId, status, recipient_id, timestamp, errors } = s;
   if (!msgId || !status) return;
@@ -1506,6 +1579,9 @@ async function handleDeliveryStatus(s) {
             const applied = applyStatusToMessage(reMsg, status, statusAt, errors);
             if (applied) {
               applyTemplateSessionStatus(latestSession, reMsg, status, statusAt, errors);
+              if (status === "failed") {
+                injectFailedTemplateEvent(latestSession, msgId, statusAt, errors);
+              }
               latestSession.history = latestHistory;
               await redis.set(sessionKey, JSON.stringify(latestSession), "EX", SESSION_TTL);
               const isReMsg = reMsg.messageType === "template" || reMsg.sentByTemplate;
@@ -1540,6 +1616,7 @@ async function handleDeliveryStatus(s) {
               freshSession, msgId, status, statusAt, errors
             );
             if (appliedByMsgId) {
+              injectFailedTemplateEvent(freshSession, msgId, statusAt, errors);
               await redis.set(sessionKey, JSON.stringify(freshSession), "EX", SESSION_TTL);
             }
           }
@@ -1558,6 +1635,10 @@ async function handleDeliveryStatus(s) {
     if (!applied) return;
 
     applyTemplateSessionStatus(session, msg, status, statusAt, errors);
+
+    if (status === "failed") {
+      injectFailedTemplateEvent(session, msgId, statusAt, errors);
+    }
 
     session.history = history;
     await redis.set(sessionKey, JSON.stringify(session), "EX", SESSION_TTL);
