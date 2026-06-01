@@ -554,6 +554,13 @@
     .card.pri-media      { background: #fefde8; border-color: rgba(202,138,4,.50); }
     .card.warn-10        { background: #fefde8; border-color: rgba(202,138,4,.28); }
     .card.triagem_incompleta { border-color: rgba(245,158,11,.40); }
+    .card.template-failed {
+      border-color: rgba(220, 38, 38, 0.44) !important;
+      border-left: 5px solid var(--brand-red) !important;
+    }
+    .card.template-failed:not(.pri-alta):not(.card-critica):not(.urgent):not(.forgotten):not(.pri-media):not(.warn-10):not(.card-finalizado) {
+      background: #fff5f5;
+    }
 
     .priority-dot {
       display: inline-flex; align-items: center;
@@ -936,6 +943,34 @@
       flex-shrink: 0;
       white-space: nowrap;
       letter-spacing: .02em;
+    }
+    .badge-template-failed {
+      font-size: .56rem;
+      font-weight: 700;
+      padding: 2px 6px;
+      border-radius: 4px;
+      background: #fee2e2;
+      color: #991b1b;
+      flex-shrink: 0;
+      white-space: nowrap;
+      letter-spacing: .02em;
+    }
+    .card-template-failed-alert {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      background: #fee2e2;
+      border: 1px solid #fca5a5;
+      border-radius: 8px;
+      padding: 6px 10px;
+      margin-bottom: 8px;
+      font-size: 0.75rem;
+      font-weight: 600;
+      color: #991b1b;
+      cursor: help;
+    }
+    .card-template-failed-alert .ctf-icon {
+      font-size: 0.8rem;
     }
     .card-triagem-hint {
       font-size: .76rem;
@@ -4801,6 +4836,8 @@ function buildCard(c, col, cols) {
   if (isIncomplete) cls += " triagem_incompleta";
   const isWindowClosed = !isResolved && (c.conversationWindowStatus !== "open" || c.windowRemainingMs <= 0);
   if (isWindowClosed) cls += " card-window-closed";
+  const isTemplateFailed = !isResolved && c.lastTemplateDeliveryStatus === "failed";
+  if (isTemplateFailed) cls += " template-failed";
   card.className = cls;
 
   const unreadCount = !isResolved ? processCardNewMsg(c.phone, c.lastUserMessageAt) : 0;
@@ -4828,6 +4865,9 @@ function buildCard(c, col, cols) {
     ? `<span class="card-attendant-tag" title="${esc(_cardAtt.name)} está com esta conversa aberta">${esc(_cardAtt.name)}</span>`
     : "";
 
+  const errText = getTemplateErrorText(c.lastTemplateError);
+  const errTooltip = errText ? `Motivo: ${errText}` : "Mensagem não entregue. A Meta recusou o envio.";
+
   card.innerHTML = `
     <span class="card-status-dot"
       role="button"
@@ -4849,6 +4889,7 @@ function buildCard(c, col, cols) {
           onkeydown="if(event.key==='Enter'){event.preventDefault();this.blur()}"
           title="${esc(c.clientName)} — duplo clique para editar">${esc(c.clientName)}</span>
         ${isIncomplete ? `<span class="badge-triagem">Triagem ⚠️</span>` : ""}
+        ${isTemplateFailed ? `<span class="badge-template-failed" title="${esc(errTooltip)}">Mensagem não entregue ⚠️</span>` : ""}
       </div>
       ${attendantChip}
     </div>
@@ -4877,12 +4918,20 @@ function buildCard(c, col, cols) {
       <span class="card-win-time">${cardWindowTimeText(c)}</span>
     </div>
 
+    ${isTemplateFailed
+      ? `<div class="card-template-failed-alert" title="${esc(errTooltip)}" onclick="event.stopPropagation()">
+           <span class="ctf-icon">⚠️</span>
+           <span class="ctf-text">Mensagem não entregue</span>
+         </div>`
+      : ""
+    }
+
     <div class="card-cta-row" onclick="event.stopPropagation()">
       ${isResolved
         ? `<button class="btn-reopen" onclick="reopenCard('${esc(c.phone)}','${clientType}')" style="width:100%">&#8635; Reabrir</button>`
         : `<button class="card-open-hint" type="button"
              onclick="event.stopPropagation();openChat('${esc(c.phone)}')"
-             >${isWindowClosed ? "Reabrir conversa →" : "Abrir →"}${unreadCount > 0 ? `<span class="card-unread-badge">${unreadCount}</span>` : ""}</button>`
+             >${isTemplateFailed ? "Abrir · falha no envio →" : (isWindowClosed ? "Reabrir conversa →" : "Abrir →")}${unreadCount > 0 ? `<span class="card-unread-badge">${unreadCount}</span>` : ""}</button>`
       }
     </div>
 
@@ -5222,6 +5271,7 @@ async function openChat(phone) {
   _aaRegistered = false;  // decisão será tomada após carregar dados da conversa
   clearInterval(_aaIntervalId);
   _aaIntervalId = null;
+  _currentChatPollInterval = 6000;
   clearInterval(_chatPollId);
   _chatPollId = setInterval(() => {
     if (openModalPhone === phone) refreshModal();
@@ -5251,6 +5301,7 @@ async function refreshModal() {
       renderActiveAttendantNotice("modal", data);
       // Atualiza status de entrega nas bolhas existentes sem re-renderizar
       updateInPlaceDeliveryStatuses(document.getElementById("modal-messages"), data.history);
+      adjustModalPolling(data);
       return;
     }
     // Nova(s) mensagem(ns) detectada(s) — mostrar toast só se for do cliente
@@ -5266,9 +5317,29 @@ async function refreshModal() {
       if (hasOtherAttMsg) showToast("✦ Mensagem de outro atendente", "t-ok");
     }
     renderModal(data);
+    adjustModalPolling(data);
   } catch (e) {
     console.error("[refreshModal]", e);
     showToast("Falha ao carregar conversa", "t-err");
+  }
+}
+
+function adjustModalPolling(data) {
+  if (!openModalPhone || openModalPhone !== data.phone) return;
+  const ws = data.conversationWindowStatus;
+  const status = data.lastTemplateDeliveryStatus;
+
+  // Condição: conversationWindowStatus === "waiting_template_reply" ou lastTemplateDeliveryStatus em ["accepted", "sent"]
+  const needsFastPoll = (ws === "waiting_template_reply" || ["accepted", "sent"].includes(status));
+  const newInterval = needsFastPoll ? 3000 : 6000;
+
+  if (_currentChatPollInterval !== newInterval) {
+    _currentChatPollInterval = newInterval;
+    clearInterval(_chatPollId);
+    _chatPollId = setInterval(() => {
+      if (openModalPhone === data.phone) refreshModal();
+      else clearInterval(_chatPollId);
+    }, _currentChatPollInterval);
   }
 }
 
@@ -5582,6 +5653,7 @@ function closeModal() {
   _aaIntervalId = null;
   clearInterval(_chatPollId);
   _chatPollId = null;
+  _currentChatPollInterval = 6000;
   unlockConvTab(openModalPhone);
   openModalPhone = null;
   document.activeElement?.blur();
@@ -9020,6 +9092,7 @@ let _aaRegistered      = false;  // true quando modal principal registrou (ou de
 let _aaRegisteredConvs = false;  // equivalente para aba Conversas
 const observerOnlyPhones = new Set(); // phones abertos como observador nesta sessão do navegador
 let _chatPollId        = null;
+let _currentChatPollInterval = 6000;
 const _lastMsgCountByPhone = {};
 
 function isActiveAttendantFresh(activeAttendantAt) {
