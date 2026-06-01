@@ -1567,6 +1567,26 @@
       background: rgba(29,78,216,.14);
       border-color: rgba(29,78,216,.55);
     }
+    .active-attendant-bar.aa-loading {
+      background: #f0f4ff;
+      border-bottom: 1px solid #c7d7fa;
+      color: #5b6f99;
+      font-style: italic;
+    }
+    .btn-aa-loading {
+      margin-left: auto;
+      font-size: .67rem;
+      font-weight: 600;
+      padding: 3px 10px;
+      border-radius: 5px;
+      border: 1px solid #c7d7fa;
+      background: rgba(99,118,255,.06);
+      color: #8098c4;
+      cursor: wait;
+      flex-shrink: 0;
+      white-space: nowrap;
+      opacity: 0.65;
+    }
 
     /* ── Chip de atendente ativo no card do Kanban ── */
     .card-attendant-tag {
@@ -10161,7 +10181,8 @@ function clearConvHasNew(phone) {
 let _aaIntervalId      = null;
 let _aaRegistered      = false;  // true quando modal principal registrou (ou decidiu não registrar)
 let _aaRegisteredConvs = false;  // equivalente para aba Conversas
-const observerOnlyPhones = new Set(); // phones abertos como observador nesta sessão do navegador
+const observerOnlyPhones    = new Set(); // phones abertos como observador nesta sessão do navegador
+const _assumingAttendantKeys = new Set(); // chaves "phone|prefix" em processo de assunção (previne duplo clique)
 let _chatPollId        = null;
 let _currentChatPollInterval = 6000;
 const _lastMsgCountByPhone = {};
@@ -10210,6 +10231,13 @@ function renderActiveAttendantNotice(prefix, data) {
   bar.innerHTML = `<span>Nenhum atendente assumiu esta conversa.</span><button class="btn-assume-none" onclick="event.stopPropagation();assumeAttendant('${esc(phone || "")}','${prefix}')">Assumir atendimento</button>`;
 }
 
+function renderActiveAttendantLoading(prefix, text, btnText) {
+  const bar = document.getElementById(`${prefix}-aa-bar`);
+  if (!bar) return;
+  bar.className = "active-attendant-bar aa-loading";
+  bar.innerHTML = `<span>${text}</span><button class="btn-aa-loading" disabled>${btnText}</button>`;
+}
+
 function canTouchActiveAttendant(data, phone) {
   const current = getCurrentAttendant();
   if (!current) return false;
@@ -10248,17 +10276,51 @@ async function assumeAttendant(phone, prefix) {
     return;
   }
   if (!phone) return;
-  observerOnlyPhones.delete(phone);  // sair do modo observador antes de assumir
-  await touchActiveAttendant(phone);
-  _aaRegistered = true;
-  _aaRegisteredConvs = true;
-  startActiveAttendantRenewal(phone);
-  // Atualiza a barra visualmente de imediato, sem esperar polling
-  renderActiveAttendantNotice(prefix, {
-    activeAttendant:   current,
-    activeAttendantAt: new Date().toISOString(),
-  });
-  showToast("Atendimento assumido por você.", "t-ok");
+
+  const key = phone + "|" + prefix;
+  if (_assumingAttendantKeys.has(key)) return; // previne duplo clique durante requisição em curso
+  _assumingAttendantKeys.add(key);
+
+  // Captura estado anterior da barra para restaurar em caso de erro
+  const bar = document.getElementById(`${prefix}-aa-bar`);
+  const prevClass = bar ? bar.className : "";
+  const prevHTML  = bar ? bar.innerHTML : "";
+
+  // Feedback imediato: estado de carregamento claro antes da resposta da API
+  renderActiveAttendantLoading(prefix, "Assumindo atendimento...", "Assumindo...");
+
+  observerOnlyPhones.delete(phone);
+
+  try {
+    const res = await fetch("/api/active-attendant", {
+      method:  "POST",
+      headers: { "Content-Type": "application/json" },
+      body:    JSON.stringify({ phone, attendant: current }),
+    });
+
+    if (!res.ok) {
+      const errData = await res.json().catch(() => ({}));
+      throw new Error(errData.error || "Falha ao registrar atendimento");
+    }
+
+    _aaRegistered = true;
+    _aaRegisteredConvs = true;
+    startActiveAttendantRenewal(phone);
+    renderActiveAttendantNotice(prefix, {
+      activeAttendant:   current,
+      activeAttendantAt: new Date().toISOString(),
+    });
+    showToast("Atendimento assumido por você.", "t-ok");
+  } catch (err) {
+    console.error("[assumeAttendant] ❌", err);
+    if (bar) {
+      bar.className = prevClass;
+      bar.innerHTML = prevHTML;
+    }
+    showToast("Erro ao assumir atendimento. Tente novamente.", "t-err");
+  } finally {
+    _assumingAttendantKeys.delete(key);
+  }
 }
 
 function confirmAndAssumeAttendant(phone, prefix, otherName) {
@@ -10273,37 +10335,45 @@ async function clearActiveAttendant(phone, prefix) {
   const ok = confirm("Deseja liberar esta conversa? Ela voltará para o estado sem atendente assumido.");
   if (!ok) return;
 
+  // Captura estado anterior da barra para restaurar em caso de erro
+  const bar = document.getElementById(`${prefix}-aa-bar`);
+  const prevClass = bar ? bar.className : "";
+  const prevHTML  = bar ? bar.innerHTML : "";
+
+  // Feedback imediato: estado de carregamento claro antes da resposta da API
+  renderActiveAttendantLoading(prefix, "Liberando atendimento...", "Liberando...");
+
   try {
     const res = await fetch("/api/active-attendant", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ action: "clear", phone })
     });
-    
-    if (res.ok) {
-      // Parar a renovação de lease, se estiver ativa
-      clearInterval(_aaIntervalId);
-      _aaIntervalId = null;
 
-      // Adicionar o telefone de volta ao observerOnlyPhones
-      observerOnlyPhones.add(phone);
-
-      // Atualizar a UI do modal do Kanban e da aba Conversas para o estado "Nenhum atendente assumiu esta conversa"
-      if (openModalPhone === phone) {
-        renderActiveAttendantNotice("modal", { activeAttendant: null, activeAttendantAt: null });
-      }
-      if (openConvsPhone === phone) {
-        renderActiveAttendantNotice("convs", { activeAttendant: null, activeAttendantAt: null });
-      }
-      
-      showToast("Atendimento liberado.", "t-ok");
-    } else {
+    if (!res.ok) {
       const errData = await res.json().catch(() => ({}));
-      showToast(errData.error || "Erro ao liberar atendimento.", "t-err");
+      throw new Error(errData.error || "Erro ao liberar atendimento");
     }
+
+    clearInterval(_aaIntervalId);
+    _aaIntervalId = null;
+    observerOnlyPhones.add(phone);
+
+    if (openModalPhone === phone) {
+      renderActiveAttendantNotice("modal", { activeAttendant: null, activeAttendantAt: null });
+    }
+    if (openConvsPhone === phone) {
+      renderActiveAttendantNotice("convs", { activeAttendant: null, activeAttendantAt: null });
+    }
+
+    showToast("Atendimento liberado.", "t-ok");
   } catch (err) {
     console.error("[clearActiveAttendant] ❌", err);
-    showToast("Erro ao conectar ao servidor.", "t-err");
+    if (bar) {
+      bar.className = prevClass;
+      bar.innerHTML = prevHTML;
+    }
+    showToast(err.message || "Erro ao conectar ao servidor.", "t-err");
   }
 }
 
