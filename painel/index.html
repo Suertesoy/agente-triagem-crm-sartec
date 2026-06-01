@@ -1549,6 +1549,24 @@
       background: rgba(26,42,94,.14);
       border-color: rgba(26,42,94,.55);
     }
+    .btn-release {
+      margin-left: auto;
+      font-size: .67rem;
+      font-weight: 700;
+      padding: 3px 10px;
+      border-radius: 5px;
+      border: 1px solid rgba(29,78,216,.3);
+      background: rgba(29,78,216,.06);
+      color: #1d4ed8;
+      cursor: pointer;
+      flex-shrink: 0;
+      white-space: nowrap;
+      transition: background .12s, border-color .12s;
+    }
+    .btn-release:hover {
+      background: rgba(29,78,216,.14);
+      border-color: rgba(29,78,216,.55);
+    }
 
     /* ── Chip de atendente ativo no card do Kanban ── */
     .card-attendant-tag {
@@ -10169,8 +10187,8 @@ function renderActiveAttendantNotice(prefix, data) {
   // Se o próprio atendente atual já tiver assumido:
   if (activeAttendant && isActiveAttendantFresh(activeAttendantAt) && current && activeAttendant.id === current.id) {
     bar.className = "active-attendant-bar aa-self";
-    bar.textContent = "Você está atendendo esta conversa";
     const phone = prefix === "modal" ? openModalPhone : openConvsPhone;
+    bar.innerHTML = `<span>Você está atendendo esta conversa</span><button class="btn-release" onclick="event.stopPropagation();clearActiveAttendant('${esc(phone || "")}','${prefix}')">Liberar atendimento</button>`;
     if (phone) {
       observerOnlyPhones.delete(phone); // garante que saiu do modo observador
       startActiveAttendantRenewal(phone);
@@ -10247,6 +10265,45 @@ function confirmAndAssumeAttendant(phone, prefix, otherName) {
   const ok = confirm(`Essa conversa já está marcada com outro atendente (${otherName}). Deseja assumir mesmo assim?`);
   if (ok) {
     assumeAttendant(phone, prefix);
+  }
+}
+
+async function clearActiveAttendant(phone, prefix) {
+  if (!phone) return;
+  const ok = confirm("Deseja liberar esta conversa? Ela voltará para o estado sem atendente assumido.");
+  if (!ok) return;
+
+  try {
+    const res = await fetch("/api/active-attendant", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ action: "clear", phone })
+    });
+    
+    if (res.ok) {
+      // Parar a renovação de lease, se estiver ativa
+      clearInterval(_aaIntervalId);
+      _aaIntervalId = null;
+
+      // Adicionar o telefone de volta ao observerOnlyPhones
+      observerOnlyPhones.add(phone);
+
+      // Atualizar a UI do modal do Kanban e da aba Conversas para o estado "Nenhum atendente assumiu esta conversa"
+      if (openModalPhone === phone) {
+        renderActiveAttendantNotice("modal", { activeAttendant: null, activeAttendantAt: null });
+      }
+      if (openConvsPhone === phone) {
+        renderActiveAttendantNotice("convs", { activeAttendant: null, activeAttendantAt: null });
+      }
+      
+      showToast("Atendimento liberado.", "t-ok");
+    } else {
+      const errData = await res.json().catch(() => ({}));
+      showToast(errData.error || "Erro ao liberar atendimento.", "t-err");
+    }
+  } catch (err) {
+    console.error("[clearActiveAttendant] ❌", err);
+    showToast("Erro ao conectar ao servidor.", "t-err");
   }
 }
 

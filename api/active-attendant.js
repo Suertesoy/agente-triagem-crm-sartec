@@ -70,6 +70,30 @@ async function handlePost(req, res) {
       return res.status(500).json({ error: "Erro ao salvar estado de almoço PJ", detail: err.message });
     }
   }
+  
+  // ── action: clear ──────────────────────────────────────────────────────────
+  if (body.action === "clear") {
+    const { phone } = body;
+    if (!phone) {
+      return res.status(400).json({ error: "Campo phone obrigatório para action clear" });
+    }
+    try {
+      const redis = getRedis();
+      const raw   = await redis.get(`sartec:${phone}`);
+      if (!raw) return res.status(404).json({ error: "Conversa não encontrada" });
+
+      const session = JSON.parse(raw);
+      session.activeAttendant   = null;
+      session.activeAttendantAt = null;
+
+      await redis.set(`sartec:${phone}`, JSON.stringify(session), "EX", SESSION_TTL);
+      console.log(`[active-attendant] 🧹 Atendimento liberado para +${phone}`);
+      return res.status(200).json({ success: true });
+    } catch (err) {
+      console.error("[active-attendant/clear] ❌", err.message);
+      return res.status(500).json({ error: "Erro ao liberar atendimento", detail: err.message });
+    }
+  }
 
   // ── Comportamento original: registrar atendente ativo ─────────────────────
   const { phone, attendant } = body;
