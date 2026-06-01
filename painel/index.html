@@ -3416,52 +3416,88 @@
 
     /* ═══════════════════════════════════════════════════════════
        RESPONSIVIDADE INTERMEDIÁRIA — sem redesenho mobile
-       Desktop compacto:  1025px – 1366px
-       Faixa crítica:      769px – 1024px
+       ≤1366px  ajustes leves de header, gap e espaçamento
+       ≤1200px  scroll controlado no Kanban, colunas fixas
+       ≤1024px  notebook compacto, colunas mais largas no scroll
+       ≤900px   estreito pré-mobile, compactação final
     ═══════════════════════════════════════════════════════════ */
 
-    /* ── Desktop compacto (1025px → 1366px) ─────────────────── */
-    @media (max-width: 1366px) and (min-width: 1025px) {
-      /* Pipeline: padding e gap reduzidos; colunas com mínimo legível */
-      .pipeline-wrap { padding: 16px 16px 80px; }
-      .pipeline { gap: 10px; }
-      .pipe-col { flex: 1 1 185px; min-width: 185px; }
-      .pipe-col-header { padding: 8px 10px 10px; }
-      .pipe-col-cards { padding: 4px 6px 10px; }
+    /* ── ≤1366px: ajustes leves ──────────────────────────────── */
+    @media (max-width: 1366px) {
+      /* Header: reduz logo e faixa navy levemente */
+      .brand          { height: 50px; }
+      .brand-logo     { height: 36px; }
+      .header-nav-row { height: 78px; }
+      .header-search-wrap { width: 440px; }
+      .tab-btn        { padding: 9px 15px; }
 
-      /* Cards: levemente mais compactos, sem perder informação */
-      .card { padding: 13px 12px 11px; min-height: 215px; border-radius: 14px; }
-      .card-name { font-size: .84rem; }
-      .card-title { font-size: .88rem; }
+      /* Pipeline: gap e padding reduzidos; colunas ainda flexíveis */
+      .pipeline-wrap  { padding: 16px 16px 90px; }
+      .pipeline       { gap: 10px; }
+      .pipe-col       { flex: 1 1 210px; }
 
-      /* Busca: levemente mais estreita para dar respiro ao header */
-      .header-search-wrap { width: 420px; }
+      /* Cards: leve compactação sem perder informação */
+      .card { padding: 14px 13px 12px; min-height: 235px; border-radius: 16px; }
     }
 
-    /* ── Faixa crítica (769px → 1024px) — scroll controlado ─── */
-    @media (max-width: 1024px) and (min-width: 769px) {
-      /* Header: oculta info secundária, estreita busca */
-      .refresh-info { display: none; }
-      .header-search-wrap { width: 280px; }
+    /* ── ≤1200px: scroll controlado no Kanban ────────────────── */
+    @media (max-width: 1200px) {
+      /* Header: mais compacto */
+      .brand          { height: 44px; }
+      .brand-logo     { height: 30px; }
+      .header-nav-row { height: 68px; }
+      .header-search-wrap { width: 360px; }
+      .tab-btn        { padding: 8px 13px; font-size: .79rem; }
 
-      /* Tabs: levemente mais compactas */
-      .tab-btn { padding: 8px 12px; font-size: .76rem; }
+      /* Pipeline: colunas fixas, pipeline-wrap já tem overflow-x:auto */
+      .pipeline-wrap  { padding: 14px 14px 80px; }
+      .pipeline       { width: max-content; min-width: 100%; gap: 9px; }
+      .pipe-col       { flex: 0 0 235px; min-width: 235px; max-width: 235px; }
+      .pipe-col-header { padding: 8px 10px 10px; }
+      .pipe-col-cards { padding: 4px 6px 10px; grid-template-columns: 1fr; }
 
-      /* Pipeline: colunas com largura mínima fixa
-         — quando não cabem, pipeline-wrap rola lateralmente */
-      .pipeline-wrap { padding: 10px 10px 56px; }
-      .pipeline { gap: 8px; }
-      .pipe-col { flex: 1 0 195px; min-width: 195px; }
+      /* Cards */
+      .card       { padding: 13px 12px 11px; min-height: 215px; border-radius: 14px; }
+      .card-name  { font-size: .84rem; }
+      .card-title { font-size: .88rem; }
+    }
+
+    /* ── ≤1024px: notebook compacto ─────────────────────────── */
+    @media (max-width: 1024px) {
+      /* Header: oculta refresh, estreita busca */
+      .refresh-info       { display: none; }
+      .header-search-wrap { width: 300px; }
+      .tab-btn            { font-size: .77rem; }
+
+      /* Pipeline: colunas ligeiramente maiores para melhor leitura no scroll */
+      .pipe-col       { flex: 0 0 250px; min-width: 250px; max-width: 250px; }
       .pipe-col-header { padding: 7px 9px 9px; }
-      .pipe-col-label { font-size: .63rem; letter-spacing: .05em; }
-      .pipe-col-cards { padding: 4px 5px 10px; }
+      .pipe-col-label  { font-size: .63rem; letter-spacing: .05em; }
+      .pipe-col-cards  { grid-template-columns: 1fr; }
 
-      /* Cards: compactos mas com informações preservadas */
-      .card { padding: 11px 11px 10px; min-height: 195px; border-radius: 12px; }
-      .card-name { font-size: .82rem; }
+      /* Cards */
+      .card       { padding: 12px 11px 10px; min-height: 200px; }
+      .card-title { font-size: .86rem; }
+      .card-time  { font-size: .59rem; }
+      .btn-open   { padding: 6px 10px; font-size: .72rem; }
+    }
+
+    /* ── ≤900px (pré-mobile): compactação final ──────────────── */
+    @media (max-width: 900px) and (min-width: 769px) {
+      /* Header */
+      .header-search-wrap { width: 220px; }
+      .tab-btn { padding: 7px 10px; font-size: .75rem; }
+
+      /* Pipeline: colunas um pouco mais estreitas para mostrar mais */
+      .pipe-col       { flex: 0 0 225px; min-width: 225px; max-width: 225px; }
+      .pipeline-wrap  { padding: 10px 8px 56px; }
+
+      /* Cards */
+      .card       { padding: 11px 10px 10px; min-height: 190px; border-radius: 12px; }
+      .card-name  { font-size: .82rem; }
       .card-title { font-size: .84rem; }
-      .card-time { font-size: .58rem; }
-      .btn-open { padding: 6px 10px; font-size: .71rem; }
+      .card-time  { font-size: .58rem; }
+      .btn-open   { padding: 5px 9px; font-size: .70rem; }
     }
 
     @media (max-width: 768px) {
