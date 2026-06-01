@@ -7327,11 +7327,24 @@ function updateWindowUI(prefix, data) {
     unlockComposer(prefix);
 
   } else if (ws === "waiting_template_reply") {
+    const tds = data.lastTemplateDeliveryStatus;
+    let tmplLabel  = "Template enviado.";
+    let tmplDetail = "Aguardando resposta do cliente para retomar.";
+    if (tds === "delivered") {
+      tmplLabel  = "Template entregue.";
+      tmplDetail = "O cliente recebeu o template. Aguardando resposta para reabrir a janela.";
+    } else if (tds === "read") {
+      tmplLabel  = "Template lido.";
+      tmplDetail = "O cliente leu o template. Aguardando resposta para reabrir a janela.";
+    } else if (!tds || tds === "accepted") {
+      tmplLabel  = "Template solicitado à Meta.";
+      tmplDetail = "Aguardando confirmação de entrega.";
+    }
     bar.classList.add("ws-waiting");
     bar.innerHTML = `
       <span class="ws-icon">🟡</span>
-      <span class="ws-label">Template enviado.</span>
-      <span class="ws-detail">Aguardando resposta do cliente para retomar.</span>
+      <span class="ws-label">${tmplLabel}</span>
+      <span class="ws-detail">${tmplDetail}</span>
     `;
     lockComposer(prefix, "waiting");
 

@@ -1379,10 +1379,30 @@ function applyStatusToMessage(msg, status, statusAt, errors) {
   return true;
 }
 
+// Aplica status de entrega ao nível de sessão para mensagens de template.
+// Chamado após applyStatusToMessage confirmar que o status foi atualizado no histórico.
+function applyTemplateSessionStatus(session, msg, status, statusAt, errors) {
+  // Só aplica se a mensagem for um template
+  if (!msg.messageType && !msg.sentByTemplate) return;
+
+  const errTitle = (status === "failed" && errors?.length)
+    ? (errors[0]?.title || errors[0]?.message || "Falha na entrega pela Meta")
+    : null;
+
+  session.lastTemplateDeliveryStatus = status;
+  session.lastTemplateStatusAt       = statusAt;
+  session.lastTemplateError          = errTitle;
+
+  if (status === "failed") {
+    // Libera a UI — computeWindowInfo vai retornar "closed" em vez de "waiting_template_reply"
+    session.templateWaitingReply = false;
+    session.templateSentAt       = null;
+  }
+}
+
 async function handleDeliveryStatus(s) {
   const { id: msgId, status, recipient_id, timestamp, errors } = s;
   if (!msgId || !status) return;
-  console.log(`[Status] ${status} — ${msgId}`);
 
   const phone = recipient_id;
   if (!phone) return;
@@ -1443,11 +1463,20 @@ async function handleDeliveryStatus(s) {
           const recheckIdx = latestHistory.findIndex(m => m.metaMessageId === msgId);
 
           if (recheckIdx !== -1) {
-            const applied = applyStatusToMessage(latestHistory[recheckIdx], status, statusAt, errors);
+            const reMsg   = latestHistory[recheckIdx];
+            const applied = applyStatusToMessage(reMsg, status, statusAt, errors);
             if (applied) {
+              applyTemplateSessionStatus(latestSession, reMsg, status, statusAt, errors);
               latestSession.history = latestHistory;
               await redis.set(sessionKey, JSON.stringify(latestSession), "EX", SESSION_TTL);
-              console.log(`[Status] ✅ Pendente aplicado após recheck — ${status} → ${msgId} (+${phone})`);
+              const logPfx = (reMsg.messageType === "template" || reMsg.sentByTemplate)
+                ? "[webhook/status] template" : "[Status]";
+              if (status === "failed") {
+                const errTitle = errors?.length ? (errors[0]?.title || errors[0]?.message || "?") : "sem detalhe";
+                console.log(`${logPfx} failed (recheck) +${phone} msgId=${msgId} title=${errTitle}`);
+              } else {
+                console.log(`[Status] ✅ Pendente aplicado após recheck — ${status} → ${msgId} (+${phone})`);
+              }
             } else {
               console.log(`[Status] ⏳ Pendente ignorado no recheck por ranking inferior — ${status} → ${msgId} (+${phone})`);
             }
@@ -1467,9 +1496,22 @@ async function handleDeliveryStatus(s) {
     const applied = applyStatusToMessage(msg, status, statusAt, errors);
     if (!applied) return;
 
+    applyTemplateSessionStatus(session, msg, status, statusAt, errors);
+
     session.history = history;
     await redis.set(sessionKey, JSON.stringify(session), "EX", SESSION_TTL);
-    console.log(`[Status] ✅ ${status} → ${msgId} (+${phone})`);
+
+    const isTemplate = msg.messageType === "template" || msg.sentByTemplate;
+    if (isTemplate) {
+      if (status === "failed") {
+        const errTitle = errors?.length ? (errors[0]?.title || errors[0]?.message || "?") : "sem detalhe";
+        console.log(`[webhook/status] template failed +${phone} msgId=${msgId} title=${errTitle}`);
+      } else {
+        console.log(`[webhook/status] template ${status} +${phone} msgId=${msgId}`);
+      }
+    } else {
+      console.log(`[Status] ✅ ${status} → ${msgId} (+${phone})`);
+    }
   } catch (err) {
     console.error("[Status] ❌ Erro ao salvar status:", err.message);
   }

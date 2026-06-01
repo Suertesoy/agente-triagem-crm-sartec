@@ -116,6 +116,9 @@ export default async function handler(req, res) {
         handoffAt:    session.handoffAt    || null,
         resolvedAt:   session.resolvedAt   || null,
         archivedAt:   session.archivedAt   || null,
+        lastTemplateDeliveryStatus: session.lastTemplateDeliveryStatus || null,
+        lastTemplateStatusAt:       session.lastTemplateStatusAt       || null,
+        lastTemplateError:          session.lastTemplateError          || null,
         ...computeWindowInfo(session),
       });
     }

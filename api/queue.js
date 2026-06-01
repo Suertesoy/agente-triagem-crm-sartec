@@ -227,8 +227,11 @@ export default async function handler(req, res) {
         observacoes:    session.observacoes     || null,
         escola:            session.escola             || null,
         serie:             session.serie              || null,
-        activeAttendant:   session.activeAttendant    || null,
-        activeAttendantAt: session.activeAttendantAt  || null,
+        activeAttendant:           session.activeAttendant           || null,
+        activeAttendantAt:         session.activeAttendantAt         || null,
+        lastTemplateDeliveryStatus: session.lastTemplateDeliveryStatus || null,
+        lastTemplateStatusAt:       session.lastTemplateStatusAt       || null,
+        lastTemplateError:          session.lastTemplateError          || null,
         ...computeWindowInfo(session),
       });
     }

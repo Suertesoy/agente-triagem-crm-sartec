@@ -135,6 +135,13 @@ export default async function handler(req, res) {
       if (m.metaMessageId) item.metaMessageId = m.metaMessageId;
       if (m.replyToMsgId)  item.replyToMsgId  = m.replyToMsgId;
       if (m.replyToFrom)   item.replyToFrom   = m.replyToFrom;
+      // Campos de template — necessários para renderização e status no painel
+      if (m.messageType)    item.messageType    = m.messageType;
+      if (m.templateType)   item.templateType   = m.templateType;
+      if (m.templateName)   item.templateName   = m.templateName;
+      if (m.templateLabel)  item.templateLabel  = m.templateLabel;
+      if (m.templateText)   item.templateText   = m.templateText;
+      if (m.sentByTemplate) item.sentByTemplate = m.sentByTemplate;
 
       if (mediaType) {
         item.mediaType     = mediaType;
@@ -174,6 +181,10 @@ export default async function handler(req, res) {
       // Atendente ativo
       activeAttendant:   session.activeAttendant   || null,
       activeAttendantAt: session.activeAttendantAt || null,
+      // Status de entrega do último template enviado
+      lastTemplateDeliveryStatus: session.lastTemplateDeliveryStatus || null,
+      lastTemplateStatusAt:       session.lastTemplateStatusAt       || null,
+      lastTemplateError:          session.lastTemplateError          || null,
       history,
     });
   } catch (err) {

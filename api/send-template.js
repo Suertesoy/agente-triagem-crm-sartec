@@ -145,8 +145,9 @@ export default async function handler(req, res) {
     }
 
     const msgId = metaData?.messages?.[0]?.id;
+    const phoneNorm = String(to).replace(/\D/g, "");
     console.log(
-      `[send-template] ✅ "${templateName}" → +${to} | msg_id: ${msgId}`
+      `[send-template] ✅ "${templateName}" → +${phoneNorm} | accepted | msg_id: ${msgId}`
     );
 
     // ── Persiste estado de espera na sessão Redis ─────────────────────────
@@ -236,10 +237,16 @@ async function markTemplateSent(phone, templateType, { clientName, clientType, v
 
     const now = new Date().toISOString();
 
-    session.templateSentAt       = now;   // chave para computeWindowInfo
-    session.lastTemplateType     = templateType;
-    session.templateWaitingReply = true;  // flag de conveniência
-    session.lastActivityAt       = now;
+    session.templateSentAt            = now;        // chave para computeWindowInfo
+    session.lastTemplateType          = templateType;
+    session.templateWaitingReply      = true;       // flag de conveniência
+    session.lastActivityAt            = now;
+    // Campos de rastreamento de entrega — atualizados pelo webhook de status da Meta
+    session.lastTemplateMessageId     = msgId    || null;
+    session.lastTemplateName          = templateName;
+    session.lastTemplateDeliveryStatus = "accepted"; // Meta aceitou; confirmação real vem pelo webhook
+    session.lastTemplateStatusAt      = now;
+    session.lastTemplateError         = null;
 
     // Nota interna visível na aba Conversas antes do cliente responder
     const templateLabels = {
@@ -253,16 +260,20 @@ async function markTemplateSent(phone, templateType, { clientName, clientType, v
     if (!Array.isArray(session.history)) session.history = [];
     const _tmplText  = buildTemplateText(templateType, variables);
     const _tmplEntry = {
-      role:           "system",
-      content:        `Template enviado: ${templateLabels[templateType] || templateType}`,
-      messageType:    "template",
+      role:             "system",
+      content:          `Template enviado: ${templateLabels[templateType] || templateType}`,
+      messageType:      "template",
       templateType,
-      templateName:   templateName || templateType,
-      templateLabel:  templateLabels[templateType] || templateType,
-      templateText:   _tmplText,
-      sentByTemplate: true,
-      sentByHuman:    false,
-      createdAt:      now,
+      templateName:     templateName || templateType,
+      templateLabel:    templateLabels[templateType] || templateType,
+      templateText:     _tmplText,
+      sentByTemplate:   true,
+      sentByHuman:      false,
+      createdAt:        now,
+      // Status inicial — atualizado pelo webhook de status da Meta
+      deliveryStatus:   "accepted",
+      deliveryStatusAt: now,
+      deliveryError:    null,
     };
     if (msgId) _tmplEntry.metaMessageId = msgId;
     session.history.push(_tmplEntry);
