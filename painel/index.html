@@ -1517,6 +1517,11 @@
       border-top-color: #fde68a;
       color: #92400e;
     }
+    .composer-lock-bar.ws-failed-lock {
+      background: #fff1f2;
+      border-top-color: #fecdd3;
+      color: #b91c1c;
+    }
     .composer-lock-bar.resolved-lock {
       background: #f3f4f6;
       border-top: 2px solid rgba(107,114,128,.25);
@@ -7363,8 +7368,23 @@ function updateWindowUI(prefix, data) {
     `;
     lockComposer(prefix, "waiting");
 
+  } else if (data.lastTemplateDeliveryStatus === "failed") {
+    // Falha confirmada no template — estado específico, não genérico
+    const rawErr   = data.lastTemplateError;
+    const errShort = rawErr ? rawErr.slice(0, 80) : null;
+    const errDetail = errShort
+      ? `Motivo: ${errShort}`
+      : "A Meta recusou o envio.";
+    bar.classList.add("ws-closed");
+    bar.innerHTML = `
+      <span class="ws-icon">🔴</span>
+      <span class="ws-label">Falha no template.</span>
+      <span class="ws-detail">O cliente não recebeu a mensagem de retomada. ${errDetail}</span>
+    `;
+    lockComposer(prefix, "failed_template");
+
   } else {
-    // closed
+    // closed genérico — janela encerrada sem tentativa de template ou sem falha registrada
     bar.classList.add("ws-closed");
     bar.innerHTML = `
       <span class="ws-icon">🔴</span>
@@ -7390,6 +7410,10 @@ function lockComposer(prefix, reason) {
     if (reason === "waiting") {
       lockBar.className = "composer-lock-bar ws-waiting-lock";
       lockBar.innerHTML = `<span>⏳ Aguardando resposta do cliente ao template enviado. Quando o cliente responder, a janela reabre.</span><button class="btn-resend-template" onclick="resendTemplate('${prefix}')" title="Reenviar se a mensagem anterior não chegou">Reenviar</button>`;
+    } else if (reason === "failed_template") {
+      // Falha confirmada: pula cooldown e mostra botão "Tentar novamente"
+      lockBar.className = "composer-lock-bar ws-failed-lock";
+      lockBar.innerHTML = `<span>⚠️ Não foi possível entregar o template anterior. Tente novamente.</span><button class="btn-send-template" onclick="resendTemplate('${prefix}', true)" title="Enviar novo template">Tentar novamente</button>`;
     } else {
       lockBar.className = "composer-lock-bar";
       lockBar.innerHTML = `
@@ -7402,20 +7426,24 @@ function lockComposer(prefix, reason) {
 
 // ── Reenvio seguro de template quando conversa está em waiting_template_reply ──
 // Chamado pelo botão "Reenviar" no lock bar. Tem cooldown de 2 min e confirmação.
-async function resendTemplate(prefix) {
+// skipCooldown=true quando delivery já confirmou failed — não tem sentido esperar
+async function resendTemplate(prefix, skipCooldown = false) {
   const phone = getPhoneForPrefix(prefix);
   if (!phone) return;
 
   const conv = allConvs.find(c => c.phone === phone);
 
-  // Cooldown: bloqueia reenvio nos 2 primeiros minutos após o último envio
-  const lastSentAt = conv?.lastTemplateStatusAt || null;
-  if (lastSentAt) {
-    const elapsedMs = Date.now() - new Date(lastSentAt).getTime();
-    if (elapsedMs < 2 * 60 * 1000) {
-      const remainSecs = Math.ceil((2 * 60 * 1000 - elapsedMs) / 1000);
-      showToast(`Aguarde ${remainSecs}s antes de reenviar. A confirmação da Meta pode demorar alguns segundos.`, "t-err");
-      return;
+  // Cooldown: bloqueia reenvio nos 2 primeiros minutos após o último envio.
+  // Pulado quando o status anterior já confirmou falha (a Meta já respondeu).
+  if (!skipCooldown) {
+    const lastSentAt = conv?.lastTemplateStatusAt || null;
+    if (lastSentAt) {
+      const elapsedMs = Date.now() - new Date(lastSentAt).getTime();
+      if (elapsedMs < 2 * 60 * 1000) {
+        const remainSecs = Math.ceil((2 * 60 * 1000 - elapsedMs) / 1000);
+        showToast(`Aguarde ${remainSecs}s antes de reenviar. A confirmação da Meta pode demorar alguns segundos.`, "t-err");
+        return;
+      }
     }
   }
 
