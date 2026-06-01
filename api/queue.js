@@ -229,6 +229,7 @@ export default async function handler(req, res) {
         serie:             session.serie              || null,
         activeAttendant:           session.activeAttendant           || null,
         activeAttendantAt:         session.activeAttendantAt         || null,
+        lastTemplateType:           session.lastTemplateType           || null,
         lastTemplateDeliveryStatus: session.lastTemplateDeliveryStatus || null,
         lastTemplateStatusAt:       session.lastTemplateStatusAt       || null,
         lastTemplateError:          session.lastTemplateError          || null,

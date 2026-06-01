@@ -182,6 +182,7 @@ export default async function handler(req, res) {
       activeAttendant:   session.activeAttendant   || null,
       activeAttendantAt: session.activeAttendantAt || null,
       // Status de entrega do último template enviado
+      lastTemplateType:           session.lastTemplateType           || null,
       lastTemplateDeliveryStatus: session.lastTemplateDeliveryStatus || null,
       lastTemplateStatusAt:       session.lastTemplateStatusAt       || null,
       lastTemplateError:          session.lastTemplateError          || null,

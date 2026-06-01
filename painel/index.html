@@ -1523,6 +1523,21 @@
       color: var(--text-secondary, #5a6380);
     }
     .composer-lock-bar span { flex: 1; }
+    .btn-resend-template {
+      background: transparent;
+      border: 1px solid rgba(180,83,9,.35);
+      color: #92400e;
+      border-radius: 6px;
+      padding: 4px 10px;
+      font-size: .72rem;
+      font-weight: 600;
+      cursor: pointer;
+      white-space: nowrap;
+      flex-shrink: 0;
+      transition: background .12s, border-color .12s;
+    }
+    .btn-resend-template:hover { background: rgba(180,83,9,.06); border-color: rgba(180,83,9,.55); }
+    .btn-resend-template:disabled { opacity: .45; cursor: default; pointer-events: none; }
     .btn-send-template {
       background: var(--brand-navy);
       color: #fff;
@@ -7374,7 +7389,7 @@ function lockComposer(prefix, reason) {
     lockBar.style.display = "flex";
     if (reason === "waiting") {
       lockBar.className = "composer-lock-bar ws-waiting-lock";
-      lockBar.innerHTML = `<span>⏳ Aguardando resposta do cliente ao template enviado. Quando o cliente responder, a janela reabre.</span>`;
+      lockBar.innerHTML = `<span>⏳ Aguardando resposta do cliente ao template enviado. Quando o cliente responder, a janela reabre.</span><button class="btn-resend-template" onclick="resendTemplate('${prefix}')" title="Reenviar se a mensagem anterior não chegou">Reenviar</button>`;
     } else {
       lockBar.className = "composer-lock-bar";
       lockBar.innerHTML = `
@@ -7382,6 +7397,95 @@ function lockComposer(prefix, reason) {
         <button class="btn-send-template" onclick="onSendTemplate('${prefix}')">Enviar template</button>
       `;
     }
+  }
+}
+
+// ── Reenvio seguro de template quando conversa está em waiting_template_reply ──
+// Chamado pelo botão "Reenviar" no lock bar. Tem cooldown de 2 min e confirmação.
+async function resendTemplate(prefix) {
+  const phone = getPhoneForPrefix(prefix);
+  if (!phone) return;
+
+  const conv = allConvs.find(c => c.phone === phone);
+
+  // Cooldown: bloqueia reenvio nos 2 primeiros minutos após o último envio
+  const lastSentAt = conv?.lastTemplateStatusAt || null;
+  if (lastSentAt) {
+    const elapsedMs = Date.now() - new Date(lastSentAt).getTime();
+    if (elapsedMs < 2 * 60 * 1000) {
+      const remainSecs = Math.ceil((2 * 60 * 1000 - elapsedMs) / 1000);
+      showToast(`Aguarde ${remainSecs}s antes de reenviar. A confirmação da Meta pode demorar alguns segundos.`, "t-err");
+      return;
+    }
+  }
+
+  // Confirmação explícita antes de reenviar
+  const clientDisplay = (conv?.clientName && conv.clientName !== "—") ? conv.clientName : `+${phone}`;
+  const confirmed = window.confirm(
+    `Reenviar template para ${clientDisplay}?\n\nO cliente pode receber uma nova mensagem de retomada. Use esta opção apenas se a mensagem anterior não chegou ou se for necessário tentar novamente.`
+  );
+  if (!confirmed) return;
+
+  const templateType = conv?.lastTemplateType || "attendance_resume";
+  const clientName   = (conv?.clientName && conv.clientName !== "—") ? conv.clientName : "";
+  const clientType   = conv?.clientType || "pf";
+
+  // Desabilita botão durante envio
+  const lockBar    = document.getElementById(`${prefix}-composer-lock`);
+  const resendBtn  = lockBar?.querySelector(".btn-resend-template");
+  if (resendBtn) { resendBtn.disabled = true; resendBtn.textContent = "Reenviando..."; }
+
+  try {
+    const res = await fetch("/api/send-template", {
+      method:  "POST",
+      headers: { "Content-Type": "application/json" },
+      body:    JSON.stringify({
+        to:           phone,
+        templateType,
+        variables:    clientName ? [clientName] : [],
+        clientName,
+        clientType,
+      }),
+    });
+
+    const data = await res.json();
+
+    if (!res.ok) {
+      showToast(getHumanErrorMsg("send_template", data), "t-err");
+      if (resendBtn) { resendBtn.disabled = false; resendBtn.textContent = "Reenviar"; }
+      return;
+    }
+
+    // Sucesso — atualiza otimisticamente o allConvs local
+    if (conv) {
+      conv.lastTemplateDeliveryStatus = "accepted";
+      conv.lastTemplateStatusAt       = new Date().toISOString();
+      conv.lastTemplateError          = null;
+    }
+
+    // Atualiza barra de janela para "aceito pela Meta"
+    updateWindowUI(prefix, {
+      conversationWindowStatus:   "waiting_template_reply",
+      windowRemainingMs:          0,
+      windowExpiresAt:            null,
+      lastUserMessageAt:          null,
+      lastTemplateDeliveryStatus: "accepted",
+      lastTemplateStatusAt:       new Date().toISOString(),
+      lastTemplateError:          null,
+    });
+
+    showToast("Template reenviado. Acompanhe a confirmação de entrega no status da conversa.");
+
+    // Recarrega histórico para exibir a nova bolha de template
+    if (prefix === "modal") {
+      await refreshModal();
+    } else if (openConvsPhone === phone) {
+      await refreshConvsChat(phone, openConvsRedisKey);
+    }
+
+  } catch {
+    showToast("Não foi possível reenviar o template. Verifique os logs ou tente novamente em instantes.", "t-err");
+    if (resendBtn) { resendBtn.disabled = false; resendBtn.textContent = "Reenviar"; }
   }
 }
 
