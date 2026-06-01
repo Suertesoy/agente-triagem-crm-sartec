@@ -138,8 +138,9 @@
       flex-direction: column;
       align-items: center;
       justify-content: center;
-      background: linear-gradient(135deg, #1a2a5e 0%, #0f1a3e 100%);
+      background: radial-gradient(circle at center, #1e326f 0%, #0a1128 100%);
       padding: 32px 24px;
+      z-index: 1000;
     }
     .loading-screen.visible {
       display: flex;
@@ -150,54 +151,67 @@
       to   { opacity: 1; }
     }
     .loading-logo {
-      max-width: 180px;
+      max-width: 260px;
       width: 100%;
       height: auto;
       object-fit: contain;
-      margin-bottom: 36px;
-      opacity: .93;
+      margin-bottom: 40px;
+      opacity: 1;
+      filter: drop-shadow(0 10px 30px rgba(0, 0, 0, 0.3));
     }
     .loading-title {
-      font-size: 1.15rem;
-      font-weight: 700;
-      color: #fff;
-      letter-spacing: .02em;
-      margin-bottom: 10px;
+      font-size: 1.8rem;
+      font-weight: 800;
+      color: #ffffff;
+      letter-spacing: -0.02em;
+      margin-bottom: 8px;
       text-align: center;
+      text-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
     }
     .loading-sub {
-      font-size: .8rem;
-      color: rgba(255,255,255,.55);
+      font-size: 0.95rem;
+      color: rgba(255, 255, 255, 0.7);
       text-align: center;
-      max-width: 300px;
-      line-height: 1.55;
-      margin-bottom: 38px;
+      max-width: 380px;
+      line-height: 1.5;
+      margin-bottom: 42px;
     }
     .progress-wrap {
-      width: 240px;
-      height: 3px;
-      background: rgba(255,255,255,.12);
+      width: 320px;
+      height: 10px;
+      background: rgba(255, 255, 255, 0.08);
+      border: 1px solid rgba(255, 255, 255, 0.25);
       border-radius: 99px;
       overflow: hidden;
-      margin-bottom: 18px;
+      margin-bottom: 24px;
+      padding: 1px;
+      box-sizing: border-box;
+      display: flex;
+      align-items: center;
     }
     .progress-fill {
       height: 100%;
       width: 0%;
-      background: rgba(255,255,255,.7);
+      background: #3b82f6;
       border-radius: 99px;
-      transition: width .32s cubic-bezier(.4,0,.2,1);
+      transition: width 0.35s cubic-bezier(.4, 0, .2, 1);
+      box-shadow: 0 0 10px rgba(59, 130, 246, 0.6);
     }
     .loading-step {
-      font-size: .72rem;
-      color: rgba(255,255,255,.42);
-      letter-spacing: .06em;
+      font-size: 0.8rem;
+      color: rgba(255, 255, 255, 0.5);
+      letter-spacing: 0.05em;
       text-transform: uppercase;
       font-weight: 600;
+      text-align: center;
+      min-height: 20px;
     }
     @media (max-width: 480px) {
-      .loading-logo { max-width: 140px; margin-bottom: 28px; }
-      .progress-wrap { width: 200px; }
+      .logo-img { max-width: 160px; }
+      .loading-logo { max-width: 200px; margin-bottom: 30px; }
+      .loading-title { font-size: 1.45rem; }
+      .loading-sub { font-size: 0.85rem; max-width: 280px; margin-bottom: 32px; }
+      .progress-wrap { width: 240px; }
     }
   </style>
 </head>
@@ -205,7 +219,7 @@
 
 <div class="login-card" id="card">
   <div class="logo">
-    <img src="/LOGO_SARTEC_PNG.png" alt="Sartec Papelaria" class="logo-img">
+    <img src="/LOGO_SARTEC_OFICIAL_PNG.png" alt="Sartec Papelaria" class="logo-img">
   </div>
   <div class="login-subtitle">Painel de Atendimento</div>
 
@@ -220,13 +234,13 @@
 </div>
 
 <div class="loading-screen" id="loading-screen" aria-live="polite">
-  <img src="/LOGO_SARTEC_PNG.png" alt="Sartec Papelaria" class="loading-logo">
+  <img src="/LOGO_SARTEC_OFICIAL_PNG.png" alt="Sartec Papelaria" class="loading-logo">
   <div class="loading-title">Preparando seu painel</div>
-  <div class="loading-sub">Estamos organizando as informações para o atendimento da Sartec.</div>
+  <div class="loading-sub">Carregando informações do atendimento</div>
   <div class="progress-wrap">
     <div class="progress-fill" id="progress-fill"></div>
   </div>
-  <div class="loading-step" id="loading-step">Validando acesso...</div>
+  <div class="loading-step" id="loading-step">Carregando contatos...</div>
 </div>
 
 <script>
@@ -273,18 +287,26 @@
     screen.classList.add("visible");
 
     const steps = [
-      { text: "Validando acesso...",            pct: "22%",  delay: 0   },
-      { text: "Sincronizando atendimentos...",  pct: "55%",  delay: 350 },
-      { text: "Carregando contatos...",         pct: "82%",  delay: 720 },
-      { text: "Tudo pronto. Abrindo painel...", pct: "100%", delay: 1050 },
+      { text: "Carregando contatos...",         pct: "25%",  delay: 0   },
+      { text: "Atualizando conversas...",       pct: "50%",  delay: 600 },
+      { text: "Organizando prioridades...",     pct: "75%",  delay: 1200 },
+      { text: "Preparando ambiente de atendimento...", pct: "100%", delay: 1800 },
     ];
 
     steps.forEach(({ text, pct, delay }) => {
       setTimeout(() => { step.textContent = text; fill.style.width = pct; }, delay);
     });
 
-    // Redireciona após os passos — total: 300ms (fade) + 1350ms (loading) = 1650ms
-    setTimeout(() => location.replace("index.html"), 1350);
+    // Timeout de conexão lenta caso demore mais do que 4000ms
+    const slowConnTimeout = setTimeout(() => {
+      step.textContent = "Conexão lenta. Ainda estamos tentando carregar...";
+    }, 4500);
+
+    // Redireciona após os passos (total 2100ms)
+    setTimeout(() => {
+      clearTimeout(slowConnTimeout);
+      location.replace("index.html");
+    }, 2200);
   }
 </script>
 </body>
