@@ -7317,17 +7317,45 @@ async function saveCardData(prefix) {
 // ║  BOLHAS DE MENSAGEM                                          ║
 // ╚══════════════════════════════════════════════════════════════╝
 function getQuotedPreview(msg, history) {
-  if (!msg?.replyToMsgId || !Array.isArray(history)) return "";
+  if (!msg?.replyToMsgId || !Array.isArray(history)) return null;
   const quoted = history.find(m => m.metaMessageId === msg.replyToMsgId);
-  if (!quoted) return "Mensagem anterior";
+  if (!quoted) return { text: "Mensagem anterior", replyToMsgId: msg.replyToMsgId };
+
+  const result = { replyToMsgId: msg.replyToMsgId };
+
+  // BUG3 FIX: carry media info from the quoted message so the quote block can render it
+  if (quoted.mediaType) result.mediaType = quoted.mediaType;
+  if (quoted.mediaData) result.mediaData = quoted.mediaData;
+  if (quoted.mediaMimeType) result.mediaMimeType = quoted.mediaMimeType;
+  if (quoted.mediaFilename) result.mediaFilename = quoted.mediaFilename;
+
   if (typeof quoted.content === "string" && quoted.content.trim()) {
-    return quoted.content.trim().slice(0, 90);
-  }
-  if (Array.isArray(quoted.content)) {
+    result.text = quoted.content.trim().slice(0, 90);
+  } else if (Array.isArray(quoted.content)) {
     const textPart = quoted.content.find(c => c.type === "text");
-    if (textPart?.text?.trim()) return textPart.text.trim().slice(0, 90);
+    if (textPart?.text?.trim()) result.text = textPart.text.trim().slice(0, 90);
+    // also check for media in the multipart array if not already set
+    if (!result.mediaType) {
+      const imgPart = quoted.content.find(c => c.type === "image");
+      const docPart = quoted.content.find(c => c.type === "document");
+      if (imgPart?.source?.data) {
+        result.mediaType = "image";
+        result.mediaData = imgPart.source.data;
+        result.mediaMimeType = imgPart.source.media_type || "image/jpeg";
+      } else if (docPart?.source?.data) {
+        result.mediaType = "document";
+        result.mediaData = docPart.source.data;
+        result.mediaMimeType = docPart.source.media_type || "application/pdf";
+        result.mediaFilename = docPart.source.filename || "documento.pdf";
+      }
+    }
   }
-  return "[mídia]";
+
+  if (!result.text && result.mediaType === "image") result.text = "Imagem";
+  if (!result.text && result.mediaType === "document") result.text = result.mediaFilename || "Documento";
+  if (!result.text) result.text = "[mídia]";
+
+  return result;
 }
 
 function appendBubble(container, msg, optimistic = false, history = null) {
@@ -7388,11 +7416,48 @@ function appendBubble(container, msg, optimistic = false, history = null) {
   }
 
   // ── Reply quote ──
-  const _quoteText = getQuotedPreview(msg, history);
-  if (_quoteText) {
+  const _quoteInfo = getQuotedPreview(msg, history);
+  if (_quoteInfo) {
     const _quoteEl = document.createElement("div");
     _quoteEl.className = "bubble-quote";
-    _quoteEl.textContent = "↩ " + _quoteText;
+    _quoteEl.style.cursor = "pointer";
+    _quoteEl.title = "Clique para ir à mensagem original";
+
+    // BUG3 FIX: show thumbnail for quoted image, icon+name for quoted document
+    if (_quoteInfo.mediaType === "image" && _quoteInfo.mediaData) {
+      const _qImg = document.createElement("img");
+      _qImg.src = `data:${_quoteInfo.mediaMimeType || "image/jpeg"};base64,${_quoteInfo.mediaData}`;
+      _qImg.style.cssText = "height:36px;width:auto;max-width:60px;border-radius:3px;object-fit:cover;vertical-align:middle;margin-right:5px;";
+      _qImg.alt = "imagem citada";
+      _quoteEl.appendChild(_qImg);
+      if (_quoteInfo.text && _quoteInfo.text !== "Imagem") {
+        _quoteEl.appendChild(document.createTextNode(_quoteInfo.text));
+      } else {
+        _quoteEl.appendChild(document.createTextNode("📷 Imagem"));
+      }
+    } else if (_quoteInfo.mediaType === "document") {
+      _quoteEl.textContent = "📄 " + (_quoteInfo.mediaFilename || _quoteInfo.text || "Documento");
+    } else {
+      _quoteEl.textContent = "↩ " + (_quoteInfo.text || "Mensagem anterior");
+    }
+
+    // BUG4 FIX: click on quote scrolls to and highlights the original message
+    if (_quoteInfo.replyToMsgId) {
+      _quoteEl.addEventListener("click", (e) => {
+        e.stopPropagation();
+        const target = container.querySelector(`[data-msg-id="${_quoteInfo.replyToMsgId}"]`);
+        if (target) {
+          target.scrollIntoView({ behavior: "smooth", block: "center" });
+          target.style.transition = "outline .1s";
+          target.style.outline = "2px solid #3b82f6";
+          target.style.outlineOffset = "2px";
+          setTimeout(() => { target.style.outline = "none"; target.style.outlineOffset = ""; }, 1500);
+        } else {
+          showToast("Mensagem original não encontrada nesta janela", "t-err");
+        }
+      });
+    }
+
     bubble.appendChild(_quoteEl);
   }
 
@@ -7468,8 +7533,10 @@ function appendBubble(container, msg, optimistic = false, history = null) {
   }
 
   // Marca a bolha com o ID da mensagem para permitir atualização cirúrgica de status
+  // BUG4 FIX: also set data-msg-id so quote click-to-scroll can find the target element
   if (msg.metaMessageId) {
     wrap.dataset.metaMsgId = msg.metaMessageId;
+    wrap.dataset.msgId     = msg.metaMessageId;
   }
 
   // Meta-line: nome, horário e status de entrega em uma única linha discreta abaixo da bolha

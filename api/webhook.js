@@ -717,6 +717,7 @@ function addMessage(session, role, content, meta = {}) {
   if (meta.mediaType)          item.mediaType          = meta.mediaType;
   if (meta.mediaMimeType)      item.mediaMimeType      = meta.mediaMimeType;
   if (meta.mediaData)          item.mediaData          = meta.mediaData;
+  if (meta.mediaFilename)      item.mediaFilename      = meta.mediaFilename;  // BUG2 FIX
   if (meta.transcription)      item.transcription      = meta.transcription;
   if (meta.transcriptionError) item.transcriptionError = meta.transcriptionError;
   if (meta.pjLunchAutoReply)   item.pjLunchAutoReply   = true;
@@ -746,7 +747,8 @@ function addMessage(session, role, content, meta = {}) {
     if (!session.cardTitle)   session.cardTitle   = generateCardTitle(session);
   }
 
-  if (session.history.length > MAX_MESSAGES) trimHistory(session);
+  // BUG1 FIX: session.history never truncated — only update summary for AI context
+  if (session.history.length > MAX_MESSAGES) updateHistorySummary(session);
 }
 
 function hasMedia(msg) {
@@ -755,12 +757,13 @@ function hasMedia(msg) {
   return !!(msg.mediaType || msg.mediaData);
 }
 
-function trimHistory(session) {
-  const recent     = session.history.slice(-10);
-  const older      = session.history.slice(0, -10);
-
-  // Preserva no histórico todas as mensagens antigas com mídia (imagem/PDF)
-  const olderMedia = older.filter(hasMedia);
+/**
+ * BUG1 FIX: Builds/updates session.historySummary from older messages
+ * WITHOUT truncating session.history. The full history is always preserved
+ * in Redis so the panel always shows all messages.
+ */
+function updateHistorySummary(session) {
+  const older = session.history.slice(0, -10);
 
   // Resumo textual das mensagens antigas do cliente — sem tentar serializar base64
   const newParts = older
@@ -779,15 +782,21 @@ function trimHistory(session) {
     const combined = prev ? `${prev} | ${newText}` : newText;
     session.historySummary = combined.substring(0, 1000);
   }
-
-  // Histórico final: mídias antigas preservadas + últimas 10 mensagens reais
-  session.history = [...olderMedia, ...recent];
+  // session.history is intentionally NOT modified here
 }
 
 function getMessages(session) {
-  const msgs = session.history
-    .filter((m) => m.role !== "system")
-    .map((m) => {
+  // BUG1 FIX: slice to MAX_MESSAGES here for AI context only — full history stays in Redis
+  const allMsgs = session.history.filter((m) => m.role !== "system");
+  const contextMsgs = allMsgs.length > MAX_MESSAGES
+    ? [
+        // Preserve media messages from older part so Claude can still see them
+        ...allMsgs.slice(0, -10).filter(hasMedia),
+        ...allMsgs.slice(-10),
+      ]
+    : allMsgs;
+
+  const msgs = contextMsgs.map((m) => {
       if (m.mediaType === "audio") {
         return {
           role: m.role,
@@ -1005,6 +1014,18 @@ async function transcribeAudio(base64, mimeType) {
 // ============================================================
 
 async function chatWithAgent(phone, userText, mediaPayload = null, name = "", meta = {}) {
+  // BUG2 FIX: enrich meta with flat media fields from mediaPayload so ALL addMessage calls
+  // (including early-exit paths) persist mediaType/mediaMimeType/mediaData in history.
+  if (mediaPayload) {
+    meta = {
+      ...meta,
+      mediaType:     mediaPayload.mimeType === "application/pdf" ? "document" : "image",
+      mediaMimeType: mediaPayload.mimeType,
+      mediaData:     mediaPayload.base64,
+    };
+    // mediaFilename may already be set by the caller (PDF path passes it in msgMeta)
+  }
+
   return withSessionLock(getRedis(), phone, async () => {
   const session  = await loadSession(phone);
 
@@ -1920,7 +1941,12 @@ async function handleIncomingMessage(req, res) {
           if (type === "document" && message.document?.mime_type === "application/pdf") {
             try {
               const media = await downloadMedia(message.document.id);
-              const reply = await chatWithAgent(from, "O cliente enviou um PDF.", media, name, msgMeta);
+              // BUG2 FIX: pass filename in meta so it gets persisted in history
+              const pdfMeta = {
+                ...msgMeta,
+                mediaFilename: message.document?.filename || "documento.pdf",
+              };
+              const reply = await chatWithAgent(from, "O cliente enviou um PDF.", media, name, pdfMeta);
               if (reply) await sendTextMessage(from, reply);
             } catch (err) {
               console.error("[PDF] ❌", err.message);
