@@ -464,6 +464,48 @@
     /* Coluna resolvidos — visual mais discreto */
     .pipe-col.col-resolvido .pipe-col-label { opacity: .65; }
 
+    /* ── Botão de colapso da coluna Resolvidos ── */
+    .btn-collapse-resolved {
+      background: none; border: none; cursor: pointer;
+      color: var(--text-muted); font-size: .82rem;
+      padding: 2px 5px; border-radius: 5px;
+      flex-shrink: 0; opacity: .5; line-height: 1;
+      transition: opacity .12s, background .12s;
+      margin-left: 4px;
+    }
+    .btn-collapse-resolved:hover { background: rgba(0,0,0,.07); opacity: 1; }
+
+    /* ── Estado recolhido da coluna Resolvidos ── */
+    .pipe-col.col-resolvido {
+      transition: flex .22s ease, min-width .22s ease, max-width .22s ease;
+    }
+    .pipe-col.col-resolvido.resolved-collapsed {
+      flex: 0 0 58px !important;
+      min-width: 58px !important;
+      max-width: 58px !important;
+      overflow: hidden;
+    }
+    .pipe-col.col-resolvido.resolved-collapsed .pipe-col-cards { display: none; }
+    .pipe-col.col-resolvido.resolved-collapsed .pipe-col-header {
+      flex-direction: column;
+      align-items: center;
+      gap: 8px;
+      padding: 10px 6px 12px;
+    }
+    .pipe-col.col-resolvido.resolved-collapsed .pipe-col-dot { display: none; }
+    .pipe-col.col-resolvido.resolved-collapsed .pipe-col-label {
+      writing-mode: vertical-rl;
+      transform: rotate(180deg);
+      font-size: .6rem;
+      letter-spacing: .1em;
+      opacity: .75;
+    }
+    .pipe-col.col-resolvido.resolved-collapsed .pipe-col-count { margin-left: 0; }
+    .pipe-col.col-resolvido.resolved-collapsed .btn-collapse-resolved {
+      margin-left: 0;
+      font-size: .9rem;
+    }
+
     .empty-col {
       font-size: .75rem;
       color: var(--text-muted);
@@ -5663,6 +5705,15 @@ function detectNewCards(convs) {
   knownPhones = newPhones;
 }
 
+function toggleResolvedCol(btn) {
+  const col = btn.closest(".pipe-col.col-resolvido");
+  if (!col) return;
+  const isCollapsed = col.classList.toggle("resolved-collapsed");
+  btn.title       = isCollapsed ? "Expandir Resolvidos" : "Recolher Resolvidos";
+  btn.textContent = isCollapsed ? "›" : "‹";
+  try { localStorage.setItem("sartec_resolved_col_collapsed", isCollapsed ? "1" : "0"); } catch {}
+}
+
 function renderPipeline(convs) {
   renderPipelineTab("pf", PF_COLS, convs.filter(c => (c.clientType||"pf") === "pf"));
   renderPipelineTab("pj", PJ_COLS, convs.filter(c => c.clientType === "pj"));
@@ -5871,6 +5922,17 @@ function renderPipelineTab(tabId, cols, convs) {
     countEl.textContent = cards.length;
     hdr.innerHTML = `<span class="pipe-col-dot" style="background:${col.color}"></span><span class="pipe-col-label">${esc(col.label)}</span>`;
     hdr.appendChild(countEl);
+    if (col.resolved) {
+      let isCollapsed = false;
+      try { isCollapsed = localStorage.getItem("sartec_resolved_col_collapsed") === "1"; } catch {}
+      if (isCollapsed) colEl.classList.add("resolved-collapsed");
+      const colBtn = document.createElement("button");
+      colBtn.className   = "btn-collapse-resolved";
+      colBtn.title       = isCollapsed ? "Expandir Resolvidos" : "Recolher Resolvidos";
+      colBtn.textContent = isCollapsed ? "›" : "‹";
+      colBtn.addEventListener("click", (e) => { e.stopPropagation(); toggleResolvedCol(colBtn); });
+      hdr.appendChild(colBtn);
+    }
     colEl.appendChild(hdr);
 
     const cardsEl = document.createElement("div");
