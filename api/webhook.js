@@ -1379,19 +1379,58 @@ function applyStatusToMessage(msg, status, statusAt, errors) {
   return true;
 }
 
+// Extrai campos relevantes do array errors da Meta de forma segura.
+// Retorna objeto estruturado ou null — nunca loga token/payload.
+function normalizeMetaStatusError(errors) {
+  if (!errors?.length) return null;
+  const e       = errors[0];
+  const code    = e?.code                  ?? null;
+  const title   = e?.title                 ?? null;
+  const message = e?.message               ?? null;
+  const details = e?.error_data?.details   ?? null;
+  if (!code && !title && !message && !details) return null;
+  return { code, title, message, details };
+}
+
+// Log seguro para falha de template: code, title e details (truncado). Sem token/headers.
+function logTemplateFailure(phone, msgId, normErr, suffix) {
+  const tag   = suffix ? `[webhook/status] template failed (${suffix})` : "[webhook/status] template failed";
+  const parts = [`${tag} +${phone} msgId=${msgId}`];
+  if (normErr?.code)    parts.push(`code=${normErr.code}`);
+  if (normErr?.title)   parts.push(`title=${normErr.title}`);
+  if (normErr?.details) {
+    const d = String(normErr.details).trim();
+    parts.push(`details=${d.length > 180 ? d.slice(0, 180) + "…" : d}`);
+  }
+  if (!normErr) parts.push("(sem detalhe de erro)");
+  console.log(parts.join(" | "));
+}
+
+// Aplica status de template na sessão usando apenas o msgId (sem entrada no histórico).
+// Usado quando idx === -1 mas sabemos que é um template pelo lastTemplateMessageId.
+function applyTemplateSessionStatusByMsgId(session, msgId, status, statusAt, errors) {
+  if (session.lastTemplateMessageId !== msgId) return false;
+  const normErr = normalizeMetaStatusError(errors);
+  session.lastTemplateDeliveryStatus = status;
+  session.lastTemplateStatusAt       = statusAt;
+  session.lastTemplateError          = status === "failed" ? normErr : null;
+  if (status === "failed") {
+    session.templateWaitingReply = false;
+    session.templateSentAt       = null;
+  }
+  return true;
+}
+
 // Aplica status de entrega ao nível de sessão para mensagens de template.
 // Chamado após applyStatusToMessage confirmar que o status foi atualizado no histórico.
 function applyTemplateSessionStatus(session, msg, status, statusAt, errors) {
   // Só aplica se a mensagem for um template
   if (!msg.messageType && !msg.sentByTemplate) return;
 
-  const errTitle = (status === "failed" && errors?.length)
-    ? (errors[0]?.title || errors[0]?.message || "Falha na entrega pela Meta")
-    : null;
-
+  const normErr = normalizeMetaStatusError(errors);
   session.lastTemplateDeliveryStatus = status;
   session.lastTemplateStatusAt       = statusAt;
-  session.lastTemplateError          = errTitle;
+  session.lastTemplateError          = status === "failed" ? normErr : null;
 
   if (status === "failed") {
     // Libera a UI — computeWindowInfo vai retornar "closed" em vez de "waiting_template_reply"
@@ -1469,11 +1508,11 @@ async function handleDeliveryStatus(s) {
               applyTemplateSessionStatus(latestSession, reMsg, status, statusAt, errors);
               latestSession.history = latestHistory;
               await redis.set(sessionKey, JSON.stringify(latestSession), "EX", SESSION_TTL);
-              const logPfx = (reMsg.messageType === "template" || reMsg.sentByTemplate)
-                ? "[webhook/status] template" : "[Status]";
+              const isReMsg = reMsg.messageType === "template" || reMsg.sentByTemplate;
               if (status === "failed") {
-                const errTitle = errors?.length ? (errors[0]?.title || errors[0]?.message || "?") : "sem detalhe";
-                console.log(`${logPfx} failed (recheck) +${phone} msgId=${msgId} title=${errTitle}`);
+                logTemplateFailure(phone, msgId, normalizeMetaStatusError(errors), "recheck");
+              } else if (isReMsg) {
+                console.log(`[webhook/status] template ${status} (recheck) +${phone} msgId=${msgId}`);
               } else {
                 console.log(`[Status] ✅ Pendente aplicado após recheck — ${status} → ${msgId} (+${phone})`);
               }
@@ -1488,7 +1527,29 @@ async function handleDeliveryStatus(s) {
         }
       }
 
-      console.log(`[Status] ⏳ Pendente mantido — ${status} → ${msgId} (+${phone})`);
+      if (status === "failed") {
+        // Para failed, limpa o estado de espera do template na sessão mesmo sem
+        // encontrar a mensagem no histórico — o pendente continuará e será aplicado
+        // ao histórico quando send.js persistir a entrada.
+        const normErr = normalizeMetaStatusError(errors);
+        try {
+          const freshRaw = await redis.get(sessionKey);
+          if (freshRaw) {
+            const freshSession = JSON.parse(freshRaw);
+            const appliedByMsgId = applyTemplateSessionStatusByMsgId(
+              freshSession, msgId, status, statusAt, errors
+            );
+            if (appliedByMsgId) {
+              await redis.set(sessionKey, JSON.stringify(freshSession), "EX", SESSION_TTL);
+            }
+          }
+        } catch (err) {
+          console.warn(`[Status] ⚠️ Erro ao limpar sessão de template failed sem histórico: ${err.message}`);
+        }
+        logTemplateFailure(phone, msgId, normErr, "pendente-sem-historico");
+      } else {
+        console.log(`[Status] ⏳ Pendente mantido — ${status} → ${msgId} (+${phone})`);
+      }
       return;
     }
 
@@ -1504,8 +1565,7 @@ async function handleDeliveryStatus(s) {
     const isTemplate = msg.messageType === "template" || msg.sentByTemplate;
     if (isTemplate) {
       if (status === "failed") {
-        const errTitle = errors?.length ? (errors[0]?.title || errors[0]?.message || "?") : "sem detalhe";
-        console.log(`[webhook/status] template failed +${phone} msgId=${msgId} title=${errTitle}`);
+        logTemplateFailure(phone, msgId, normalizeMetaStatusError(errors));
       } else {
         console.log(`[webhook/status] template ${status} +${phone} msgId=${msgId}`);
       }

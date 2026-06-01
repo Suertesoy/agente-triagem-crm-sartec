@@ -7370,11 +7370,8 @@ function updateWindowUI(prefix, data) {
 
   } else if (data.lastTemplateDeliveryStatus === "failed") {
     // Falha confirmada no template — estado específico, não genérico
-    const rawErr   = data.lastTemplateError;
-    const errShort = rawErr ? rawErr.slice(0, 80) : null;
-    const errDetail = errShort
-      ? `Motivo: ${errShort}`
-      : "A Meta recusou o envio.";
+    const errText   = getTemplateErrorText(data.lastTemplateError);
+    const errDetail = errText ? `Motivo: ${errText}` : "A Meta recusou o envio.";
     bar.classList.add("ws-closed");
     bar.innerHTML = `
       <span class="ws-icon">🔴</span>
@@ -7422,6 +7419,37 @@ function lockComposer(prefix, reason) {
       `;
     }
   }
+}
+
+// Converte lastTemplateError (string legacy ou objeto {code,title,message,details})
+// num texto amigável e curto para o atendente.
+function getTemplateErrorText(err) {
+  if (!err) return null;
+  let raw;
+  if (typeof err === "string") {
+    raw = err;
+  } else if (err && typeof err === "object") {
+    // Prioridade: details > message > title (do mais específico ao mais genérico)
+    raw = err.details || err.message || err.title || null;
+  }
+  if (!raw) return null;
+  const lower = String(raw).toLowerCase();
+  // Mapeamento amigável para erros comuns da Meta
+  if (lower.includes("recipient") && lower.includes("not registered")) {
+    return "este número não parece estar registrado no WhatsApp.";
+  }
+  if (lower.includes("does not exist") || (lower.includes("invalid") && lower.includes("wa"))) {
+    return "número inválido ou indisponível para WhatsApp.";
+  }
+  if (lower.includes("template") && (lower.includes("not found") || lower.includes("blocked"))) {
+    return "template não encontrado ou bloqueado na Meta.";
+  }
+  if (lower.includes("rate limit") || lower.includes("too many")) {
+    return "limite de envios da Meta atingido. Aguarde alguns minutos.";
+  }
+  // Texto genérico truncado
+  const s = String(raw);
+  return s.length > 80 ? s.slice(0, 80) + "…" : s;
 }
 
 // ── Reenvio seguro de template quando conversa está em waiting_template_reply ──
