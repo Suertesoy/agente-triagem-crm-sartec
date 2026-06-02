@@ -80,7 +80,7 @@ p  { margin: 0 0 1em; color: var(--texto-suave); }
 .brand-text strong { color: #ffffff; font-size: 1.15rem; letter-spacing: .01em; }
 .brand-text span { color: rgba(255,255,255,0.75); font-size: .68rem; letter-spacing: .12em; text-transform: uppercase; margin-top: 2px; }
 
-.main-nav { display: flex; gap: 18px; }
+.main-nav { display: flex; gap: 26px; }
 .main-nav a {
   color: rgba(255,255,255,0.85);
   font-size: .86rem;
@@ -125,7 +125,7 @@ p  { margin: 0 0 1em; color: var(--texto-suave); }
 .menu-toggle { display: none; background: none; border: 0; cursor: pointer; color: white; padding: 4px; }
 
 @media (max-width: 1080px) {
-  .main-nav { gap: 12px; }
+  .main-nav { gap: 16px; }
   .main-nav a { font-size: .80rem; }
 }
 @media (max-width: 900px) {
