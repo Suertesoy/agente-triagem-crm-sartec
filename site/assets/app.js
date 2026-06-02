@@ -4,12 +4,14 @@
    ====================================================== */
 
 window.SARTEC = {
-  WPP_PRINCIPAL: '551239341666',
-  WPP_COPIAS:    '551239341666',
-  ENDERECO: 'Av. Andrômeda, 1805, Jardim Satélite, São José dos Campos/SP',
+  WPP_PRINCIPAL: '5512981594959',
+  WPP_COPIAS:    '5512981594959',
+  ENDERECO: 'Av. Andrômeda, 1805 — Jardim Satélite, São José dos Campos/SP',
+  CEP: '12230-000',
+  CNPJ: '06.241.041/0001-56',
   HORARIO:  'Seg a Sex: 8h às 18h • Sáb: 8h às 13h',
-  TELEFONE_DISPLAY: '(12) 3934-1666',
-  EMAIL: 'contato@sartec.com.br'
+  TELEFONE_DISPLAY: '(12) 98159-4959',
+  EMAIL: 'sartecpapelaria@uol.com.br'
 };
 
 function montarWpp(numero, mensagem) {
@@ -30,7 +32,7 @@ function renderHeader(active) {
     <header class="site-header">
       <div class="container">
         <a href="index.html" class="brand">
-          <img src="../LOGOS/LOGO%20SARTEC%20SYMBOL.png" alt="Sartec Papelaria" />
+          <img src="assets/logo-sartec.png" alt="Sartec Papelaria" />
           <div class="brand-text">
             <strong>Sartec</strong>
             <span>Papelaria &amp; Informática</span>
@@ -128,7 +130,7 @@ function renderFooter() {
       <div class="container">
         <div class="footer-grid">
           <div class="footer-brand">
-            <img src="../LOGOS/LOGO%20SARTEC%20VETORIZADA.png" alt="Sartec" />
+            <img src="assets/logo-sartec.png" alt="Sartec Papelaria" />
             <p>Papelaria, informática, cópias e impressão. Atendimento personalizado e tudo organizado pra você.</p>
           </div>
           <div class="footer-col">
@@ -143,10 +145,12 @@ function renderFooter() {
             <h4>Contato</h4>
             <p>${SARTEC.TELEFONE_DISPLAY}</p>
             <p>${SARTEC.EMAIL}</p>
+            <p>CNPJ: ${SARTEC.CNPJ}</p>
           </div>
           <div class="footer-col">
             <h4>Visite a loja</h4>
             <p>${SARTEC.ENDERECO}</p>
+            <p>CEP: ${SARTEC.CEP}</p>
             <p style="font-size:.85rem;opacity:.85">${SARTEC.HORARIO}</p>
           </div>
         </div>
