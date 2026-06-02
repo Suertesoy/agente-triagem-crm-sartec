@@ -105,20 +105,7 @@ p  { margin: 0 0 1em; color: var(--texto-suave); }
 
 .header-actions { display: flex; align-items: center; gap: 10px; flex-shrink: 0; }
 
-.dark-toggle {
-  width: 38px; height: 38px;
-  border-radius: 50%;
-  background: rgba(255,255,255,0.12);
-  border: 1px solid rgba(255,255,255,0.25);
-  color: white;
-  cursor: pointer;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  transition: background .2s, transform .2s;
-  flex-shrink: 0;
-}
-.dark-toggle:hover { background: rgba(255,255,255,0.22); transform: rotate(18deg); }
+/* .dark-toggle removido — site sempre em light mode */
 
 .btn-wpp-header {
   display: inline-flex;
@@ -1066,168 +1053,8 @@ section { padding: 64px 0; }
 .mb-2 { margin-bottom: 16px; }
 .mb-4 { margin-bottom: 32px; }
 
-/* ======================== DARK MODE ======================== */
-[data-theme="dark"] {
-  --texto: #F1F5F9;
-  --texto-suave: #94A3B8;
-  --cinza-borda: #334155;
-  --cinza-fundo: #1E293B;
-  --branco: #0F172A;
-  --azul-suave: #162040;
-  --vermelho-suave: #2D0E0E;
-  --shadow-sm: 0 1px 2px rgba(0,0,0,0.4);
-  --shadow: 0 4px 16px rgba(0,0,0,0.45);
-  --shadow-lg: 0 12px 32px rgba(0,0,0,0.55);
-}
+/* dark mode removido — site sempre em light mode */
 
-[data-theme="dark"] body {
-  background: #0F172A;
-  color: #F1F5F9;
-}
-
-[data-theme="dark"] .hero {
-  background:
-    radial-gradient(60% 70% at 80% 20%, rgba(220,38,38,0.07), transparent 60%),
-    radial-gradient(60% 70% at 20% 30%, rgba(30,58,138,0.14), transparent 60%),
-    #0F172A;
-}
-
-/* Superfícies / Cards */
-[data-theme="dark"] .step,
-[data-theme="dark"] .service-card,
-[data-theme="dark"] .item-card,
-[data-theme="dark"] .produto-card,
-[data-theme="dark"] .escola-card,
-[data-theme="dark"] .form-card,
-[data-theme="dark"] .loading-box,
-[data-theme="dark"] .faq-item,
-[data-theme="dark"] .acoes-finais,
-[data-theme="dark"] .beneficio,
-[data-theme="dark"] .copias-cat,
-[data-theme="dark"] .pedido-item-row {
-  background: #1E293B;
-  border-color: #334155;
-}
-
-[data-theme="dark"] .illu-card { background: #1E293B; }
-[data-theme="dark"] .illu-name { color: #F1F5F9; }
-
-/* Seções de fundo cinza */
-[data-theme="dark"] section,
-[data-theme="dark"] .copias-hero {
-  background: #0F172A;
-}
-
-[data-theme="dark"] .resultado-header { background: #162040; }
-
-[data-theme="dark"] .dica-box {
-  background: #162040;
-  color: #CBD5E1;
-  border-left-color: var(--azul-claro);
-}
-
-[data-theme="dark"] .upload-area {
-  background: #1E293B;
-  border-color: #334155;
-}
-[data-theme="dark"] .upload-area .label { color: #F1F5F9; }
-[data-theme="dark"] .upload-area:hover,
-[data-theme="dark"] .upload-area.dragover {
-  background: #162040;
-  border-color: var(--azul-claro);
-}
-
-/* Formulários */
-[data-theme="dark"] .form-group input,
-[data-theme="dark"] .form-group textarea,
-[data-theme="dark"] .form-group select {
-  background: #1E293B;
-  border-color: #334155;
-  color: #F1F5F9;
-}
-[data-theme="dark"] .form-group input:focus,
-[data-theme="dark"] .form-group textarea:focus,
-[data-theme="dark"] .form-group select:focus {
-  background: #243352;
-  border-color: var(--azul-claro);
-}
-[data-theme="dark"] .form-group label { color: #F1F5F9; }
-[data-theme="dark"] .form-group .hint { color: #94A3B8; }
-
-/* Textos gerais */
-[data-theme="dark"] h1,
-[data-theme="dark"] h2,
-[data-theme="dark"] h3,
-[data-theme="dark"] h4 { color: #F1F5F9; }
-[data-theme="dark"] p { color: #94A3B8; }
-[data-theme="dark"] a { color: var(--azul-claro); }
-[data-theme="dark"] .hero h1,
-[data-theme="dark"] .section-header h2,
-[data-theme="dark"] .cat-titulo { color: #F1F5F9; }
-
-/* Botões ghost */
-[data-theme="dark"] .btn-ghost {
-  color: var(--azul-claro);
-  border-color: var(--azul-claro);
-}
-[data-theme="dark"] .btn-ghost:hover { background: var(--azul-claro); color: white; }
-
-/* Quantidade (item card) */
-[data-theme="dark"] .qty-control { background: #243352; }
-[data-theme="dark"] .qty-btn { background: #334155; border-color: #475569; color: #93C5FD; }
-[data-theme="dark"] .qty-btn:hover { background: var(--azul-claro); color: white; }
-[data-theme="dark"] .qty-num { color: #F1F5F9; }
-
-/* Escola card body */
-[data-theme="dark"] .escola-card .body { background: #1E293B; }
-[data-theme="dark"] .escola-card .desconto-row { background: #243352; }
-[data-theme="dark"] .escola-card .acoes .btn-baixar {
-  background: #243352;
-  border-color: #334155;
-  color: #F1F5F9;
-}
-
-/* Faixa de escolas — mantém o gradiente */
-[data-theme="dark"] .escolas-faixa {
-  background: linear-gradient(90deg, #0d1f4a 0%, #6b0000 100%);
-}
-
-/* Copias aviso */
-[data-theme="dark"] .copias-aviso {
-  background: #2D0E0E;
-  border-left-color: var(--vermelho);
-}
-
-/* Why grid (gradiente branco sobre escuro) */
-[data-theme="dark"] .why {
-  background: linear-gradient(135deg, #0d1f4a 0%, #6b0000 100%);
-}
-
-/* Item img bg */
-[data-theme="dark"] .item-card .item-img {
-  background: linear-gradient(135deg, #1E293B, #243352);
-}
-
-/* Produto img bg */
-[data-theme="dark"] .produto-img {
-  background: linear-gradient(135deg, #1E293B, #243352);
-}
-
-/* Boleto destaque / seções azuis/vermelhas mantêm cor */
-/* FAQ aberto */
-[data-theme="dark"] .faq-item .resposta { color: #94A3B8; }
-[data-theme="dark"] .faq-item summary { color: #F1F5F9; }
-
-/* Como usar (lista escolar) */
-[data-theme="dark"] .como-usar-card { background: #1E293B; border-color: #334155; }
-[data-theme="dark"] .como-usar-num { background: var(--azul); }
-
-/* Pedido empresa */
-[data-theme="dark"] .pedido-section { background: #1E293B; border-color: #334155; }
-
-/* Kicker dark */
-[data-theme="dark"] .kicker { background: #162040; color: #93C5FD; }
-[data-theme="dark"] .kicker.vermelho { background: #2D0E0E; color: #FCA5A5; }
 
 /* ======================== COMO USAR (Lista Escolar) ======================== */
 .como-usar { padding: 64px 0; }
@@ -1313,3 +1140,124 @@ section { padding: 64px 0; }
 }
 .pedido-add-btn:hover { background: #dce8fb; }
 @media (max-width: 600px) { .pedido-item-row { grid-template-columns: 1fr; } }
+
+/* ======================== CATEGORIAS DE PRODUTOS ======================== */
+.cat-grid {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 28px;
+  margin-top: 32px;
+}
+.cat-card {
+  background: white;
+  border: 1px solid var(--cinza-borda);
+  border-radius: var(--radius);
+  overflow: hidden;
+  transition: all .2s;
+  display: flex;
+  flex-direction: column;
+}
+.cat-card:hover { transform: translateY(-4px); box-shadow: var(--shadow); border-color: var(--azul-claro); }
+.cat-img-placeholder {
+  width: 100%;
+  aspect-ratio: 4/3;
+  background: linear-gradient(145deg, var(--cinza-fundo) 0%, #E6ECF5 100%);
+  border-bottom: 1px solid var(--cinza-borda);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  position: relative;
+  overflow: hidden;
+}
+.cat-img-inner {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 12px;
+}
+.cat-img-initials {
+  width: 64px; height: 64px;
+  background: var(--azul-suave);
+  border-radius: 14px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: .75rem;
+  font-weight: 800;
+  color: var(--azul);
+  letter-spacing: .04em;
+  text-transform: uppercase;
+  text-align: center;
+  line-height: 1.3;
+}
+.cat-img-label {
+  font-size: .7rem;
+  font-weight: 600;
+  color: var(--texto-suave);
+  letter-spacing: .05em;
+  text-transform: uppercase;
+  background: rgba(255,255,255,0.9);
+  padding: 4px 12px;
+  border-radius: 999px;
+  border: 1px solid var(--cinza-borda);
+}
+.cat-body { padding: 24px; flex: 1; display: flex; flex-direction: column; }
+.cat-body h3 { font-size: 1.15rem; margin-bottom: 6px; }
+.cat-body p { font-size: .93rem; flex: 1; margin-bottom: 16px; }
+.cat-body .btn { padding: 10px 18px; font-size: .9rem; width: 100%; }
+@media (max-width: 700px) { .cat-grid { grid-template-columns: 1fr; } }
+
+/* Hero lista escolar — mockup de itens sem emoji */
+.illu-thumb-text {
+  width: 44px; height: 44px;
+  background: var(--azul-suave);
+  border-radius: 8px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: .65rem;
+  font-weight: 800;
+  letter-spacing: .03em;
+  color: var(--azul);
+  flex-shrink: 0;
+  text-transform: uppercase;
+  line-height: 1.2;
+  text-align: center;
+}
+.illu-msg-label {
+  font-size: .68rem;
+  font-weight: 700;
+  color: rgba(255,255,255,0.7);
+  text-transform: uppercase;
+  letter-spacing: .12em;
+  margin-bottom: 10px;
+  text-align: center;
+}
+
+/* Serviço card — badge de destaque */
+.service-badge {
+  display: inline-block;
+  background: var(--azul);
+  color: white;
+  font-size: .63rem;
+  font-weight: 700;
+  letter-spacing: .06em;
+  text-transform: uppercase;
+  padding: 3px 9px;
+  border-radius: 999px;
+  margin-bottom: 10px;
+}
+
+/* Footer digital credit */
+.footer-digital {
+  font-size: .78rem;
+  color: rgba(255,255,255,0.45);
+  margin-top: 6px;
+}
+.footer-digital-link {
+  color: rgba(255,255,255,0.6);
+  text-decoration: none;
+  border-bottom: 1px solid rgba(255,255,255,0.3);
+  transition: color .15s, border-color .15s;
+}
+.footer-digital-link:hover { color: rgba(255,255,255,0.88); border-bottom-color: rgba(255,255,255,0.65); }

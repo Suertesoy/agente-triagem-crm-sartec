@@ -1,12 +1,13 @@
 /* ======================================================
-   SARTEC — JS comum (header, footer, FAB, Dark Mode)
+   SARTEC — JS comum (header, footer, FAB)
+   Site sempre em light mode — dark mode removido.
    ====================================================== */
 
 window.SARTEC = {
-  WPP_PRINCIPAL: '5511999999999',
-  WPP_COPIAS: '551239341666',
-  ENDERECO: 'Rua Exemplo, 123 - Centro - São José dos Campos/SP',
-  HORARIO: 'Seg a Sex: 8h às 18h • Sáb: 8h às 13h',
+  WPP_PRINCIPAL: '551239341666',
+  WPP_COPIAS:    '551239341666',
+  ENDERECO: 'Av. Andrômeda, 1805, Jardim Satélite, São José dos Campos/SP',
+  HORARIO:  'Seg a Sex: 8h às 18h • Sáb: 8h às 13h',
   TELEFONE_DISPLAY: '(12) 3934-1666',
   EMAIL: 'contato@sartec.com.br'
 };
@@ -14,32 +15,6 @@ window.SARTEC = {
 function montarWpp(numero, mensagem) {
   const texto = mensagem ? '?text=' + encodeURIComponent(mensagem) : '';
   return `https://wa.me/${numero}${texto}`;
-}
-
-/* =========================================================
-   DARK MODE
-   ========================================================= */
-function initDarkMode() {
-  const saved = localStorage.getItem('sartec-theme') || 'light';
-  document.documentElement.setAttribute('data-theme', saved);
-}
-
-function toggleDarkMode() {
-  const current = document.documentElement.getAttribute('data-theme');
-  const next = current === 'dark' ? 'light' : 'dark';
-  document.documentElement.setAttribute('data-theme', next);
-  localStorage.setItem('sartec-theme', next);
-  _updateToggleIcon();
-}
-
-function _updateToggleIcon() {
-  const isDark = document.documentElement.getAttribute('data-theme') === 'dark';
-  const btn = document.getElementById('dark-toggle');
-  if (!btn) return;
-  btn.setAttribute('aria-label', isDark ? 'Ativar modo claro' : 'Ativar modo escuro');
-  btn.innerHTML = isDark
-    ? `<svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor"><path d="M12 3a6 6 0 0 0 9 9 9 9 0 1 1-9-9Z"/></svg>`
-    : `<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.93 4.93l1.41 1.41M17.66 17.66l1.41 1.41M2 12h2M20 12h2M6.34 17.66l-1.41 1.41M19.07 4.93l-1.41 1.41"/></svg>`;
 }
 
 /* =========================================================
@@ -70,7 +45,6 @@ function renderHeader(active) {
           <a href="copias.html" ${lk('copias')}>Cópias e Impressão</a>
         </nav>
         <div class="header-actions">
-          <button id="dark-toggle" class="dark-toggle" onclick="toggleDarkMode()" aria-label="Ativar modo escuro"></button>
           <a href="${montarWpp(SARTEC.WPP_PRINCIPAL, 'Olá! Vim pelo site da Sartec.')}"
              target="_blank" rel="noopener" class="btn-wpp-header">
             ${wppSVG}<span>WhatsApp</span>
@@ -88,14 +62,11 @@ function renderHeader(active) {
     </header>
   `;
   document.getElementById('header-mount')?.insertAdjacentHTML('afterbegin', html);
-  _updateToggleIcon();
 
-  // Fechar menu ao clicar em qualquer link do nav (elementos são recriados, sem risco de duplicata)
   document.querySelectorAll('#main-nav a').forEach(a =>
     a.addEventListener('click', closeMenu)
   );
 
-  // Listeners no document — guarda contra duplicatas caso renderHeader seja chamado mais de uma vez
   if (!_menuListenersAdded) {
     document.addEventListener('click', e => {
       if (!document.querySelector('.site-header')?.contains(e.target)) closeMenu();
@@ -181,6 +152,7 @@ function renderFooter() {
         </div>
         <div class="footer-bottom">
           © 2026 Sartec Papelaria e Informática. Todos os direitos reservados.
+          <div class="footer-digital">Tecnologia de atendimento desenvolvida por <a href="#" target="_blank" rel="noopener" class="footer-digital-link"><!-- TODO: substituir pela URL final da Sartec Digital -->Sartec Digital</a>.</div>
         </div>
       </div>
     </footer>
@@ -214,7 +186,6 @@ function renderFab(modo) {
    INIT
    ========================================================= */
 window.SartecInit = function ({ active, fab }) {
-  initDarkMode();
   document.addEventListener('DOMContentLoaded', () => {
     renderHeader(active);
     renderEscolasFaixa();
