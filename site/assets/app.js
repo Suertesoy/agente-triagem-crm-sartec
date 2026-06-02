@@ -32,7 +32,7 @@ function renderHeader(active) {
     <header class="site-header">
       <div class="container">
         <a href="index.html" class="brand">
-          <img src="assets/logo-sartec.png" alt="Sartec Papelaria" />
+          <img src="assets/logo-sartec-header.png" alt="Sartec Papelaria" />
         </a>
         <nav class="main-nav" id="main-nav">
           <a href="index.html" ${lk('home')}>Início</a>
