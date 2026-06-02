@@ -183,6 +183,46 @@ function renderFab(modo) {
 }
 
 /* =========================================================
+   PAGE TRANSITIONS (page-transition)
+   ========================================================= */
+function initPageTransitions() {
+  window.addEventListener('pageshow', (event) => {
+    if (event.persisted) {
+      document.body.classList.remove('is-leaving');
+    }
+  });
+
+  document.addEventListener('click', (e) => {
+    const anchor = e.target.closest('a');
+    if (!anchor) return;
+
+    const href = anchor.getAttribute('href');
+    const target = anchor.getAttribute('target');
+
+    if (e.metaKey || e.ctrlKey || e.shiftKey || e.altKey) return;
+
+    if (!href || 
+        target === '_blank' || 
+        e.defaultPrevented ||
+        href.startsWith('#') || 
+        href.startsWith('mailto:') || 
+        href.startsWith('tel:') || 
+        href.startsWith('javascript:') || 
+        href.includes('wa.me') ||
+        (href.includes('//') && !href.includes(window.location.host))) {
+      return;
+    }
+
+    e.preventDefault();
+    document.body.classList.add('is-leaving');
+
+    setTimeout(() => {
+      window.location.href = href;
+    }, 150);
+  });
+}
+
+/* =========================================================
    INIT
    ========================================================= */
 window.SartecInit = function ({ active, fab }) {
@@ -191,5 +231,6 @@ window.SartecInit = function ({ active, fab }) {
     renderEscolasFaixa();
     renderFooter();
     renderFab(fab || 'principal');
+    initPageTransitions();
   });
 };
