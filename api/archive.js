@@ -63,6 +63,20 @@ async function handleGet(req, res) {
   }
 }
 
+// Remove base64 de mídia antes de arquivar — preserva metadados e texto
+// Evita duplicar blobs pesados (imagens/PDFs) que já foram enviados à Meta
+function stripMediaData(session) {
+  if (!session?.history) return session;
+  return {
+    ...session,
+    history: session.history.map(m => {
+      if (!m.mediaData) return m;
+      const { mediaData: _dropped, ...rest } = m;
+      return rest;
+    }),
+  };
+}
+
 // ── POST /api/archive { phone } ───────────────────────────
 async function handlePost(req, res) {
   const { phone } = req.body || {};
@@ -77,7 +91,7 @@ async function handlePost(req, res) {
     const timestamp = (session.resolvedAt || new Date().toISOString()).replace(/[:.]/g, "-");
     const archiveKey = `sartec:archive:${phone}:${timestamp}`;
 
-    const archive = { ...session, phone, archivedAt: new Date().toISOString() };
+    const archive = { ...stripMediaData(session), phone, archivedAt: new Date().toISOString() };
 
     await redis.set(archiveKey, JSON.stringify(archive), "EX", ARCHIVE_TTL);
 
@@ -101,7 +115,7 @@ export async function archiveSession(phone) {
 
   if (await redis.exists(archiveKey)) return; // já arquivado
 
-  const archive = { ...session, phone, archivedAt: new Date().toISOString() };
+  const archive = { ...stripMediaData(session), phone, archivedAt: new Date().toISOString() };
   await redis.set(archiveKey, JSON.stringify(archive), "EX", ARCHIVE_TTL);
   console.log(`[archive] ✅ interno ${archiveKey}`);
 }

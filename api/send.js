@@ -121,9 +121,10 @@ async function sendText(req, res, body, PHONE_NUMBER_ID, ACCESS_TOKEN) {
   };
   if (replyToMessageId) historyEntry.replyToMsgId = replyToMessageId;
 
-  await saveToHistory(to, historyEntry);
+  const textSaved = await saveToHistory(to, historyEntry);
+  if (!textSaved) console.warn(`[send/text] ⚠️ Mensagem entregue à Meta mas não persistida no Redis (+${to})`);
 
-  return res.status(200).json({ success: true });
+  return res.status(200).json({ success: true, historyPersisted: textSaved });
 }
 
 // ── Envio de imagem ───────────────────────────────────────
@@ -202,24 +203,26 @@ async function sendImage(req, res, body, PHONE_NUMBER_ID, ACCESS_TOKEN) {
   const metaMessageId = metaData?.messages?.[0]?.id || null;
   console.log(`[send/image] ✅ ID: ${metaMessageId}${replyToMessageId ? " (reply)" : ""}`);
 
-  // 3. Salva no histórico com a referência da mídia
+  // 3. Salva no histórico — sem base64 para não estourar Redis
+  // A imagem foi entregue à Meta; o Redis guarda apenas metadados e indicação de mídia
   const imgEntry = {
     role: "assistant",
-    content: caption || "",
-    sentByHuman:     true,
-    mediaType:       "image",
-    mediaData:       mediaBase64,
-    mediaMimeType:   mimeType,
-    attendantId:     body.attendantId   || null,
-    attendantName:   body.attendantName || null,
+    content:          caption || "",
+    sentByHuman:      true,
+    mediaType:        "image",
+    sentMedia:        true,
+    mediaMimeType:    mimeType,
+    attendantId:      body.attendantId   || null,
+    attendantName:    body.attendantName || null,
     metaMessageId,
-    deliveryStatus:  "sent",
+    deliveryStatus:   "sent",
     deliveryStatusAt: new Date().toISOString(),
   };
   if (replyToMessageId) imgEntry.replyToMsgId = replyToMessageId;
-  await saveToHistory(to, imgEntry);
+  const imgSaved = await saveToHistory(to, imgEntry);
+  if (!imgSaved) console.warn(`[send/image] ⚠️ Mensagem entregue à Meta mas não persistida no Redis (+${to})`);
 
-  return res.status(200).json({ success: true });
+  return res.status(200).json({ success: true, historyPersisted: imgSaved });
 }
 
 // ── Envio de documento (PDF) ──────────────────────────────
@@ -298,13 +301,14 @@ async function sendDocument(req, res, body, PHONE_NUMBER_ID, ACCESS_TOKEN) {
   const metaMessageId = metaData?.messages?.[0]?.id || null;
   console.log(`[send/document] ✅ ID: ${metaMessageId}${replyToMessageId ? " (reply)" : ""}`);
 
-  // 3. Salva no histórico com base64 para exibição no painel
+  // 3. Salva no histórico — sem base64 para não estourar Redis
+  // O documento foi entregue à Meta; o Redis guarda apenas metadados e indicação de mídia
   const docEntry = {
     role:             "assistant",
     content:          caption || "",
     sentByHuman:      true,
     mediaType:        "document",
-    mediaData:        mediaBase64,
+    sentMedia:        true,
     mediaMimeType:    mimeType,
     mediaFilename:    filename,
     attendantId:      body.attendantId   || null,
@@ -314,9 +318,10 @@ async function sendDocument(req, res, body, PHONE_NUMBER_ID, ACCESS_TOKEN) {
     deliveryStatusAt: new Date().toISOString(),
   };
   if (replyToMessageId) docEntry.replyToMsgId = replyToMessageId;
-  await saveToHistory(to, docEntry);
+  const docSaved = await saveToHistory(to, docEntry);
+  if (!docSaved) console.warn(`[send/document] ⚠️ Documento entregue à Meta mas não persistido no Redis (+${to})`);
 
-  return res.status(200).json({ success: true });
+  return res.status(200).json({ success: true, historyPersisted: docSaved });
 }
 
 async function withSessionLock(redis, phone, fn) {
@@ -355,16 +360,18 @@ async function applyPendingStatusIfExists(redis, metaMessageId, historyEntry) {
 }
 
 // ── Salvar no Redis ───────────────────────────────────────
+// Retorna true se persistiu com sucesso, false se falhou (ex: OOM)
 async function saveToHistory(phone, message) {
   try {
     const redis = getRedis();
+    let saved = false;
     await withSessionLock(redis, phone, async () => {
       const raw = await redis.get(`sartec:${phone}`);
       if (!raw) return;
 
       const session = JSON.parse(raw);
       if (!message.createdAt) message.createdAt = new Date().toISOString();
-      
+
       // Verifica e aplica status pendente (concorrência com webhook)
       await applyPendingStatusIfExists(redis, message.metaMessageId, message);
 
@@ -399,8 +406,11 @@ async function saveToHistory(phone, message) {
       }
 
       await redis.set(`sartec:${phone}`, JSON.stringify(session), "EX", SESSION_TTL);
+      saved = true;
     });
+    return saved;
   } catch (err) {
     console.error("[send/saveToHistory] ❌", err.message);
+    return false;
   }
 }
