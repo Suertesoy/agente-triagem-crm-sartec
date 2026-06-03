@@ -3481,8 +3481,8 @@
        ≤900px   estreito pré-mobile, compactação final
     ═══════════════════════════════════════════════════════════ */
 
-    /* ── ≤1366px: ajustes leves ──────────────────────────────── */
-    @media (max-width: 1366px) {
+    /* ── Telas compactas de desktop/notebook (769px a 1366px) ── */
+    @media (min-width: 769px) and (max-width: 1366px) {
       /* Header: reduz logo e faixa navy levemente */
       .brand          { height: 50px; }
       .brand-logo     { height: 36px; }
@@ -3490,13 +3490,22 @@
       .header-search-wrap { width: 440px; }
       .tab-btn        { padding: 9px 15px; }
 
-      /* Pipeline: gap e padding reduzidos; colunas ainda flexíveis */
-      .pipeline-wrap  { padding: 16px 16px 90px; }
-      .pipeline       { gap: 10px; }
-      .pipe-col       { flex: 1 1 210px; }
+      /* Pipeline: colunas fixas e rolagem horizontal ativada */
+      .pipeline-wrap  { padding: 16px 16px 90px; overflow-x: auto; }
+      .pipeline       { width: max-content; min-width: 100%; gap: 10px; }
+      .pipe-col       { flex: 0 0 250px; min-width: 250px; max-width: 250px; }
+      .pipe-col-cards { grid-template-columns: 1fr; }
 
       /* Cards: leve compactação sem perder informação */
       .card { padding: 14px 13px 12px; min-height: 235px; border-radius: 16px; }
+    }
+
+    /* ── Telas compactas de desktop com pouca altura ─────────── */
+    @media (min-width: 769px) and (max-height: 780px) {
+      .pipeline-wrap {
+        max-height: calc(100vh - 148px);
+        overflow-y: auto;
+      }
     }
 
     /* ── ≤1200px: scroll controlado no Kanban ────────────────── */
