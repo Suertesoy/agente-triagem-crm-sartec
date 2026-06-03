@@ -10484,6 +10484,9 @@ function renderActiveAttendantNotice(prefix, data) {
   // Se outro atendente tiver assumido:
   if (activeAttendant && isActiveAttendantFresh(activeAttendantAt)) {
     const phone = prefix === "modal" ? openModalPhone : openConvsPhone;
+    // Para renovação própria: o interval desta aba não deve sobrescrever quem assumiu
+    clearInterval(_aaIntervalId);
+    _aaIntervalId = null;
     bar.className = "active-attendant-bar aa-other";
     bar.innerHTML = `<span>⚠ ${esc(activeAttendant.name)} está cuidando desta conversa</span><button class="btn-assume" onclick="event.stopPropagation();confirmAndAssumeAttendant('${esc(phone || "")}','${prefix}','${esc(activeAttendant.name)}')">Assumir mesmo assim</button>`;
     return;
@@ -10527,7 +10530,7 @@ async function touchActiveAttendant(phone) {
     await fetch("/api/active-attendant", {
       method:  "POST",
       headers: { "Content-Type": "application/json" },
-      body:    JSON.stringify({ phone, attendant: att }),
+      body:    JSON.stringify({ action: "touch", phone, attendant: att }),
     });
   } catch {}
 }
@@ -10611,7 +10614,7 @@ async function clearActiveAttendant(phone, prefix) {
     const res = await fetch("/api/active-attendant", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ action: "clear", phone })
+      body: JSON.stringify({ action: "clear", phone, attendant: getCurrentAttendant() })
     });
 
     if (!res.ok) {

@@ -82,7 +82,15 @@ async function handlePost(req, res) {
       const raw   = await redis.get(`sartec:${phone}`);
       if (!raw) return res.status(404).json({ error: "Conversa não encontrada" });
 
-      const session = JSON.parse(raw);
+      const session  = JSON.parse(raw);
+      const reqId    = body.attendant?.id;
+      const ownerId  = session.activeAttendant?.id;
+      // Não limpa se outro atendente for o dono atual
+      if (reqId && ownerId && reqId !== ownerId) {
+        console.log(`[active-attendant] ⛔ clear recusado: solicitante=${reqId} dono=${ownerId} +${phone}`);
+        return res.status(200).json({ success: false, reason: "not_owner" });
+      }
+
       session.activeAttendant   = null;
       session.activeAttendantAt = null;
 
@@ -92,6 +100,45 @@ async function handlePost(req, res) {
     } catch (err) {
       console.error("[active-attendant/clear] ❌", err.message);
       return res.status(500).json({ error: "Erro ao liberar atendimento", detail: err.message });
+    }
+  }
+
+  // ── action: touch (renovação — só renova se ainda for o dono) ─────────────
+  if (body.action === "touch") {
+    const { phone, attendant } = body;
+    if (!phone || !attendant?.id) {
+      return res.status(400).json({ error: "Campos phone e attendant.id obrigatórios" });
+    }
+    try {
+      const redis = getRedis();
+      const raw   = await redis.get(`sartec:${phone}`);
+      if (!raw) return res.status(404).json({ error: "Conversa não encontrada" });
+
+      const session = JSON.parse(raw);
+      const current = session.activeAttendant;
+      const fresh   = current && session.activeAttendantAt &&
+        (Date.now() - new Date(session.activeAttendantAt).getTime()) < 5 * 60 * 1000;
+
+      // Rejeita renovação se outro atendente for o dono atual com posse fresca
+      if (current && fresh && current.id !== attendant.id) {
+        console.log(`[active-attendant] ⛔ touch recusado: solicitante=${attendant.id} dono=${current.id} +${phone}`);
+        return res.status(200).json({ success: false, reason: "owned_by_other" });
+      }
+
+      session.activeAttendant   = {
+        id:       attendant.id,
+        name:     attendant.name,
+        initials: attendant.initials || attendant.name.slice(0, 2).toUpperCase(),
+        color:    attendant.color    || "#3b82f6",
+      };
+      session.activeAttendantAt = new Date().toISOString();
+
+      await redis.set(`sartec:${phone}`, JSON.stringify(session), "EX", SESSION_TTL);
+      console.log(`[active-attendant] 🔄 Renovado +${phone} → ${attendant.name}`);
+      return res.status(200).json({ success: true });
+    } catch (err) {
+      console.error("[active-attendant/touch] ❌", err.message);
+      return res.status(500).json({ error: "Erro ao renovar atendimento", detail: err.message });
     }
   }
 
