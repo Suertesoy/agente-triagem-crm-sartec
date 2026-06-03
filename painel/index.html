@@ -4831,6 +4831,7 @@ let _refreshOkTimer = null;
 let convsPollTimer  = null;
 let resolveCallback = null;   // callback para o confirm modal
 let _dragPhone = null, _dragClientType = null;
+let _dropInFlight = false;
 let _dragInsertAfter = null;
 const _colOrder = {};
 let _priPickerPhone      = null;
@@ -5902,16 +5903,22 @@ function renderPipelineTab(tabId, cols, convs) {
         _dragInsertAfter = null;
         cardsEl.querySelector(".drag-line")?.remove();
         renderPipeline(allConvs);
+        _dropInFlight = true;
         fetch("/api/update-card", {
           method: "PUT",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ action: "updatePipelineOrder", clientType: tabId, columnKey: targetKey, order: newOrder }),
-        }).then(res => {
+        }).then(async res => {
           if (!res.ok) throw new Error("HTTP error");
-        }).catch(() => {
+          await loadQueue();
+        }).catch(async () => {
           showToast(getHumanErrorMsg("reorder_card"), "t-err");
           _colOrder[tabId + ":" + targetKey] = originalOrder;
           renderPipeline(allConvs);
+          await loadQueue();
+        }).finally(() => {
+          _dropInFlight = false;
+          startAutoRefresh();
         });
         return;
       }
@@ -5921,6 +5928,7 @@ function renderPipelineTab(tabId, cols, convs) {
         const originalStatus = conv.pipelineStatus;
         conv.pipelineStatus = targetKey;
         renderPipeline(allConvs);
+        _dropInFlight = true;
         try {
           const res = await fetch("/api/update-status", {
             method: "PUT",
@@ -5929,6 +5937,7 @@ function renderPipelineTab(tabId, cols, convs) {
           });
           if (res.ok) {
             showToast("Status atualizado");
+            await loadQueue();
           } else {
             throw new Error("HTTP error");
           }
@@ -5936,7 +5945,10 @@ function renderPipelineTab(tabId, cols, convs) {
           showToast(getHumanErrorMsg("move_card"), "t-err");
           conv.pipelineStatus = originalStatus;
           renderPipeline(allConvs);
-          loadQueue();
+          await loadQueue();
+        } finally {
+          _dropInFlight = false;
+          startAutoRefresh();
         }
       }
     });
@@ -6209,12 +6221,16 @@ function buildCard(c, col, cols) {
       _dragClientType = c.clientType || "pf";
       e.dataTransfer.effectAllowed = "move";
       setTimeout(() => card.classList.add("dragging"), 0);
+      stopAutoRefresh();
     });
     card.addEventListener("dragend", () => {
       card.classList.remove("dragging");
       _dragPhone = null;
       _dragInsertAfter = null;
       document.querySelectorAll(".drag-line").forEach(el => el.remove());
+      if (!_dropInFlight) {
+        startAutoRefresh();
+      }
     });
   }
 
@@ -6449,6 +6465,7 @@ function quickResolveCard(phone) {
         renderPipeline(allConvs);
         updateHeader(allConvs);
         showToast("Conversa resolvida ✓");
+        await loadQueue();
       } else {
         const err = await res.json().catch(() => ({}));
         showToast(getHumanErrorMsg("resolve_conversation", err), "t-err");
@@ -8576,6 +8593,7 @@ function quickResolveCard(phone) {
         if (c) { c.status = "resolvido"; c.resolvedAt = new Date().toISOString(); }
         renderPipeline(allConvs);
         updateHeader(allConvs);
+        await loadQueue();
       } else {
         const err = await res.json();
         showToast(getHumanErrorMsg("resolve_conversation", err), "t-err");
