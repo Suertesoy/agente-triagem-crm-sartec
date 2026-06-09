@@ -8955,7 +8955,6 @@ async function resendTemplate(prefix, skipCooldown = false) {
       lastTemplateError:          null,
     });
 
-    showToast("Template reenviado. Acompanhe a confirmação de entrega no status da conversa.");
     await ensureAttendantAssumedOnMessage(phone, prefix);
 
     // Recarrega histórico para exibir a nova bolha de template
@@ -8963,6 +8962,12 @@ async function resendTemplate(prefix, skipCooldown = false) {
       await refreshModal();
     } else if (openConvsPhone === phone) {
       await refreshConvsChat(phone, openConvsRedisKey);
+    }
+
+    if (data.historyPersisted === false) {
+      showToast("Template reenviado, mas não consegui registrar no histórico. Atualize a conversa e verifique.", "t-err");
+    } else {
+      showToast("Template reenviado. Acompanhe a confirmação de entrega no status da conversa.");
     }
 
   } catch {
@@ -9194,7 +9199,12 @@ async function submitNewConvo() {
       await loadConversations();
     }
 
-    console.log(`[Nova conversa] ✅ Template "${data.templateName}" → +${phone} (${name})`);
+    // Alerta se a API aceitou mas o Redis não salvou
+    if (data.historyPersisted === false) {
+      showToast("Template enviado, mas não consegui registrar no histórico. Atualize a conversa e verifique.", "t-err");
+    }
+
+    console.log(`[Nova conversa] ✅ Template "${data.templateName}" → +${phone} (${name}) historyPersisted=${data.historyPersisted}`);
 
   } catch (err) {
     showToast(getHumanErrorMsg("start_conversation"), "t-err");
@@ -9331,7 +9341,7 @@ async function submitTemplate() {
       return;
     }
 
-    // Sucesso — fecha modal e atualiza UI sem aguardar próximo poll
+    // Sucesso — fecha modal e atualiza UI
     closeTemplateModal();
     updateWindowUI(prefix, {
       conversationWindowStatus: "waiting_template_reply",
@@ -9341,7 +9351,19 @@ async function submitTemplate() {
     });
     await ensureAttendantAssumedOnMessage(phone, prefix);
 
-    console.log(`[Template] ✅ "${data.templateName}" enviado para +${phone}`);
+    // Recarrega histórico para mostrar o bubble do template imediatamente
+    if (prefix === "modal") {
+      await refreshModal();
+    } else {
+      await refreshConvsChat(phone, openConvsRedisKey);
+    }
+
+    // Alerta se a API aceitou mas o Redis não salvou
+    if (data.historyPersisted === false) {
+      showToast("Template enviado, mas não consegui registrar no histórico. Atualize a conversa e verifique.", "t-err");
+    }
+
+    console.log(`[Template] ✅ "${data.templateName}" enviado para +${phone} historyPersisted=${data.historyPersisted}`);
 
   } catch (err) {
     showToast(getHumanErrorMsg("send_template"), "t-err");

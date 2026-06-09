@@ -36,6 +36,26 @@ function getRedis() {
 
 const SESSION_TTL = 60 * 60 * 24 * 90; // 90 dias — retenção mínima de histórico
 
+// Normaliza telefone: remove tudo que não for dígito
+function normalizePhone(raw) {
+  return String(raw || "").replace(/\D/g, "");
+}
+
+// Lock idêntico ao de webhook.js e resolve.js — evita race condition no Redis
+async function withSessionLock(redis, phone, fn) {
+  const lockKey = `lock:sartec:${phone}`;
+  for (let i = 0; i < 20; i++) {
+    const ok = await redis.set(lockKey, "1", "NX", "EX", 15);
+    if (ok) {
+      try { return await fn(); }
+      finally { await redis.del(lockKey); }
+    }
+    await new Promise((r) => setTimeout(r, 150));
+  }
+  console.warn(`[send-template/lock] ⚠️ Timeout aguardando lock +${phone}`);
+  return fn();
+}
+
 // ── Mapeamento tipo → nome aprovado na Meta ─────────────────────────────────
 // Para trocar o nome do template na Meta sem alterar código: edite as env vars.
 function getTemplateName(templateType) {
@@ -70,6 +90,12 @@ export default async function handler(req, res) {
     });
   }
 
+  // Normaliza o telefone antes de qualquer operação
+  const phoneNorm = normalizePhone(to);
+  if (phoneNorm.length < 10) {
+    return res.status(400).json({ error: "Parâmetro to inválido — deve conter DDI+DDD+número" });
+  }
+
   const templateName = getTemplateName(templateType);
   if (!templateName) {
     return res.status(400).json({
@@ -97,7 +123,7 @@ export default async function handler(req, res) {
   // ── Monta payload do template ────────────────────────────────────────────
   const templatePayload = {
     messaging_product: "whatsapp",
-    to,
+    to: phoneNorm,   // sempre dígitos, sem +
     type: "template",
     template: {
       name:     templateName,
@@ -117,6 +143,8 @@ export default async function handler(req, res) {
       },
     ];
   }
+
+  console.log(`[send-template] POST to=+${phoneNorm} templateType=${templateType} templateName=${templateName}`);
 
   try {
     const metaRes = await fetch(
@@ -145,15 +173,21 @@ export default async function handler(req, res) {
     }
 
     const msgId = metaData?.messages?.[0]?.id;
-    const phoneNorm = String(to).replace(/\D/g, "");
     console.log(
-      `[send-template] ✅ "${templateName}" → +${phoneNorm} | accepted | msg_id: ${msgId}`
+      `[send-template] ✅ Meta accepted | to=+${phoneNorm} | templateType=${templateType} | msg_id=${msgId}`
     );
 
-    // ── Persiste estado de espera na sessão Redis ─────────────────────────
-    await markTemplateSent(to, templateType, { clientName, clientType, variables, msgId, templateName });
+    // ── Persiste estado de espera na sessão Redis (com lock para evitar race condition) ──
+    const historyPersisted = await markTemplateSent(
+      phoneNorm, templateType,
+      { clientName, clientType, variables, msgId, templateName }
+    );
 
-    return res.status(200).json({ success: true, templateName, messageId: msgId });
+    if (!historyPersisted) {
+      console.error(`[send-template] ⚠️ Template aceito pela Meta mas NÃO persistido no Redis para +${phoneNorm}`);
+    }
+
+    return res.status(200).json({ success: true, templateName, messageId: msgId, historyPersisted });
 
   } catch (err) {
     console.error("[send-template] ❌", err.message);
@@ -170,7 +204,7 @@ function buildNewProspectSession(phone, clientName, clientType) {
   const now = new Date();
   return {
     history:              [],
-    handoffDone:          false,
+    handoffDone:          true,   // atendente iniciou a conversa
     postHandoffReplySent: false,
     audioCount:           0,
     lastDate:             now.toISOString().slice(0, 10),
@@ -178,11 +212,12 @@ function buildNewProspectSession(phone, clientName, clientType) {
     clientName:           clientName || "—",
     clientPhone:          phone,
     clientType:           clientType || "pf",
-    status:               "ativo",
+    status:               "aguardando_humano",   // visível no pipeline
+    pipelineStatus:       "novo",
     // Janela fechada até o cliente responder ao template
     lastUserMessageAt:    null,
     windowExpiresAt:      null,
-    // Indica que a conversa foi iniciada proativamente (usada em conversations.js)
+    // Indica que a conversa foi iniciada proativamente
     proactivelySent:      true,
   };
 }
@@ -204,90 +239,104 @@ function buildTemplateText(templateType, variables = []) {
 }
 
 // ── Atualiza (ou cria) sessão Redis após envio bem-sucedido ──────────────────
-// Registra templateSentAt (usado por computeWindowInfo para derivar
-// conversationWindowStatus = "waiting_template_reply" enquanto
-// templateSentAt > lastUserMessageAt).
+// Usa withSessionLock para evitar race condition com o webhook de resposta do
+// cliente — sem lock, markTemplateSent pode sobrescrever a resposta do cliente
+// se ela chegar antes do SET do Redis terminar.
 //
-// Se a sessão não existe (número novo), cria uma sessão inicial.
-// clientName / clientType só sobrescrevem se a sessão for nova ou os campos estiverem vazios.
+// Retorna true se a sessão foi salva com sucesso, false se houve erro.
 async function markTemplateSent(phone, templateType, { clientName, clientType, variables = [], msgId = null, templateName = "" } = {}) {
+  let historyPersisted = false;
   try {
     const redis = getRedis();
-    const raw   = await redis.get(`sartec:${phone}`);
 
-    let session;
-    let isNew = false;
+    await withSessionLock(redis, phone, async () => {
+      const raw = await redis.get(`sartec:${phone}`);
 
-    if (raw) {
-      session = JSON.parse(raw);
-    } else {
-      // Número novo — cria sessão proativa
-      isNew   = true;
-      session = buildNewProspectSession(phone, clientName, clientType);
-      console.log(`[send-template] 🆕 Nova sessão criada para +${phone}`);
-    }
+      let session;
+      let isNew = false;
 
-    // Atualiza clientName / clientType se vieram no request e a sessão era nova ou vazia
-    if (clientName && (isNew || !session.clientName || session.clientName === "—")) {
-      session.clientName = clientName;
-    }
-    if (clientType && (isNew || !session.clientType)) {
-      session.clientType = clientType;
-    }
+      if (raw) {
+        session = JSON.parse(raw);
+      } else {
+        isNew   = true;
+        session = buildNewProspectSession(phone, clientName, clientType);
+        console.log(`[send-template] 🆕 Nova sessão criada para +${phone}`);
+      }
 
-    const now = new Date().toISOString();
+      // Atualiza clientName / clientType se vieram no request e a sessão era nova ou vazia
+      if (clientName && (isNew || !session.clientName || session.clientName === "—")) {
+        session.clientName = clientName;
+      }
+      if (clientType && (isNew || !session.clientType)) {
+        session.clientType = clientType;
+      }
 
-    session.templateSentAt            = now;        // chave para computeWindowInfo
-    session.lastTemplateType          = templateType;
-    session.templateWaitingReply      = true;       // flag de conveniência
-    session.lastActivityAt            = now;
-    // Campos de rastreamento de entrega — atualizados pelo webhook de status da Meta
-    session.lastTemplateMessageId     = msgId    || null;
-    session.lastTemplateName          = templateName;
-    session.lastTemplateDeliveryStatus = "accepted"; // Meta aceitou; confirmação real vem pelo webhook
-    session.lastTemplateStatusAt      = now;
-    session.lastTemplateError         = null;
+      const now = new Date().toISOString();
 
-    // Nota interna visível na aba Conversas antes do cliente responder
-    const templateLabels = {
-      attendance_resume: "Retomar atendimento",
-      budget_update:     "Orçamento",
-      pj_prospecting:    "Prospecção PJ",
-    };
-    session.proactiveNote = `Template enviado: ${templateLabels[templateType] || templateType} — aguardando resposta do cliente`;
+      session.templateSentAt             = now;
+      session.lastTemplateType           = templateType;
+      session.lastActivityAt             = now;
+      session.lastTemplateMessageId      = msgId    || null;
+      session.lastTemplateName           = templateName;
+      session.lastTemplateDeliveryStatus = "accepted";
+      session.lastTemplateStatusAt       = now;
+      session.lastTemplateError          = null;
 
-    // Registra evento de template no histórico do chat
-    if (!Array.isArray(session.history)) session.history = [];
-    const _tmplText  = buildTemplateText(templateType, variables);
-    const _tmplEntry = {
-      role:             "system",
-      content:          `Template enviado: ${templateLabels[templateType] || templateType}`,
-      messageType:      "template",
-      templateType,
-      templateName:     templateName || templateType,
-      templateLabel:    templateLabels[templateType] || templateType,
-      templateText:     _tmplText,
-      sentByTemplate:   true,
-      sentByHuman:      false,
-      createdAt:        now,
-      // Status inicial — atualizado pelo webhook de status da Meta
-      deliveryStatus:   "accepted",
-      deliveryStatusAt: now,
-      deliveryError:    null,
-    };
-    if (msgId) _tmplEntry.metaMessageId = msgId;
-    session.history.push(_tmplEntry);
+      // Só ativa o flag de espera se a conversa ainda não foi reaberta pelo webhook
+      // (evita sobrescrever um estado correto caso a resposta chegou muito rápido)
+      if (session.status !== "aguardando_humano" || !session.lastUserMessageAt) {
+        session.templateWaitingReply = true;
+      }
 
-    await redis.set(
-      `sartec:${phone}`,
-      JSON.stringify(session),
-      "EX",
-      SESSION_TTL
-    );
-    console.log(
-      `[send-template] 💾 +${phone} → ${isNew ? "nova sessão" : "atualizada"} | waiting_template_reply (${templateType})`
-    );
+      const templateLabels = {
+        attendance_resume: "Retomar atendimento",
+        budget_update:     "Orçamento",
+        pj_prospecting:    "Prospecção PJ",
+      };
+      session.proactiveNote = `Template enviado: ${templateLabels[templateType] || templateType} — aguardando resposta do cliente`;
+
+      // Registra evento de template no histórico — evita duplicata se mesmo msgId já estiver
+      if (!Array.isArray(session.history)) session.history = [];
+      const alreadySaved = msgId && session.history.some(m => m.metaMessageId === msgId);
+      if (!alreadySaved) {
+        const _tmplText  = buildTemplateText(templateType, variables);
+        const _tmplEntry = {
+          role:             "system",
+          content:          `Template enviado: ${templateLabels[templateType] || templateType}`,
+          messageType:      "template",
+          templateType,
+          templateName:     templateName || templateType,
+          templateLabel:    templateLabels[templateType] || templateType,
+          templateText:     _tmplText,
+          sentByTemplate:   true,
+          sentByHuman:      false,
+          createdAt:        now,
+          deliveryStatus:   "accepted",
+          deliveryStatusAt: now,
+          deliveryError:    null,
+        };
+        if (msgId) _tmplEntry.metaMessageId = msgId;
+        session.history.push(_tmplEntry);
+      }
+
+      await redis.set(
+        `sartec:${phone}`,
+        JSON.stringify(session),
+        "EX",
+        SESSION_TTL
+      );
+
+      historyPersisted = true;
+      console.log(
+        `[send-template] 💾 sessionKey=sartec:${phone} historyLen=${session.history.length}` +
+        ` lastTemplateMessageId=${msgId || "n/a"} lastTemplateType=${templateType}` +
+        ` lastTemplateDeliveryStatus=accepted templateWaitingReply=${session.templateWaitingReply}` +
+        ` isNew=${isNew}`
+      );
+    });
+
   } catch (err) {
     console.error("[send-template/markTemplateSent] ❌", err.message);
   }
+  return historyPersisted;
 }

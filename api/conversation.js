@@ -69,6 +69,8 @@ export default async function handler(req, res) {
 
     const session = JSON.parse(raw);
 
+    console.log(`[conversation] GET +${resolvedPhone} key=${redisKey} historyLen=${(session.history || []).length}`);
+
     // Normaliza history preservando mídia (imagens e documentos/PDF)
     const history = (session.history || []).map((m) => {
       if (m.messageType === "template_status") {

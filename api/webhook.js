@@ -1072,7 +1072,11 @@ async function handleTemplateResumeReply(session, phone, incomingContent, meta, 
     session.pipelineStatus = "em_atendimento";
   }
   await saveSession(phone, session);
-  console.log(`[template-resume] ✅ resposta recebida — atendimento reaberto +${phone}`);
+  console.log(
+    `[template-resume] ✅ resposta recebida — atendimento reaberto +${phone}` +
+    ` status=aguardando_humano pipeline=${session.pipelineStatus}` +
+    ` historyLen=${session.history?.length} windowExpiresAt=${session.windowExpiresAt}`
+  );
   return null;
 }
 
@@ -1096,6 +1100,15 @@ async function chatWithAgent(phone, userText, mediaPayload = null, name = "", me
 
   return withSessionLock(getRedis(), phone, async () => {
   const session  = await loadSession(phone);
+
+  // Log de diagnóstico — apenas quando há estado de template ativo
+  if (session.templateWaitingReply || session.lastTemplateType) {
+    console.log(
+      `[chatWithAgent] +${phone} templateWaitingReply=${session.templateWaitingReply}` +
+      ` lastTemplateType=${session.lastTemplateType} status=${session.status}` +
+      ` historyLen=${session.history?.length}`
+    );
+  }
 
   // ── Janela de 24h ─────────────────────────────────────────────────────────
   // Toda mensagem vinda do cliente reinicia o contador.
