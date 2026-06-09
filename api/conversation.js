@@ -160,7 +160,7 @@ export default async function handler(req, res) {
       if (mediaType) {
         item.mediaType     = mediaType;
         item.mediaData     = mediaData;
-        item.mediaMimeType = mediaMimeType;
+        item.mediaMimeType = mediaMimeType || (mediaType === "image" ? "image/jpeg" : mediaMimeType);
         if (mediaFilename) item.mediaFilename = mediaFilename;
       }
 

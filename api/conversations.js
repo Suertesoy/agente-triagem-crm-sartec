@@ -96,6 +96,8 @@ export default async function handler(req, res) {
           ? lastMsg.content
           : (session.proactiveNote || "[mídia]");   // nota de template proativo
       if (lastMessage === "[áudio]") lastMessage = "Áudio recebido";
+      if (!lastMessage && lastMsg?.mediaType === "image")    lastMessage = "Imagem";
+      if (!lastMessage && lastMsg?.mediaType === "document") lastMessage = "Documento";
 
       const lastActivity =
         session.lastActivityAt || session.handoffAt || session.lastDate || null;

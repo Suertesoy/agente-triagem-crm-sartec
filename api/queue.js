@@ -197,6 +197,8 @@ export default async function handler(req, res) {
           ? lastUserMsg.content
           : "[mídia]";
       if (lastMessage === "[áudio]") lastMessage = "Áudio recebido";
+      if (!lastMessage && lastUserMsg?.mediaType === "image")    lastMessage = "Imagem";
+      if (!lastMessage && lastUserMsg?.mediaType === "document") lastMessage = "Documento";
 
       const clientType =
         session.clientType ||

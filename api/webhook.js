@@ -720,7 +720,16 @@ function generateCardTitle(session) {
 }
 
 function addMessage(session, role, content, meta = {}) {
-  const item = { role, content, createdAt: new Date().toISOString() };
+  // Strip multipart content array to plain caption text to avoid storing base64 twice.
+  // Binary data lives exclusively in the flat mediaData field; getMessages() rebuilds
+  // the multipart structure for Claude on the fly.
+  let storedContent = content;
+  if (Array.isArray(content) && meta.mediaData) {
+    storedContent = meta.mediaCaption !== undefined
+      ? meta.mediaCaption
+      : (content.find(c => c.type === "text")?.text || "");
+  }
+  const item = { role, content: storedContent, createdAt: new Date().toISOString() };
   if (meta.metaMessageId)      item.metaMessageId      = meta.metaMessageId;
   if (meta.replyToMsgId)       item.replyToMsgId       = meta.replyToMsgId;
   if (meta.replyToFrom)        item.replyToFrom        = meta.replyToFrom;
@@ -813,6 +822,32 @@ function getMessages(session) {
           content: m.transcription
             ? `[Áudio transcrito]: ${m.transcription}`
             : "[Cliente enviou um áudio — transcrição indisponível]",
+        };
+      }
+      // Reconstruct multipart content for Claude from flat fields (avoids double base64 in Redis).
+      // Handles both new format (content=string + mediaData) and old format (content=array + mediaData).
+      if (m.mediaData && (m.mediaType === "image" || m.mediaType === "document")) {
+        const mediaKind = m.mediaType === "document" ? "document" : "image";
+        let textContent = "";
+        if (typeof m.content === "string") {
+          textContent = m.content;
+        } else if (Array.isArray(m.content)) {
+          const tp = m.content.find(c => c.type === "text");
+          textContent = tp?.text || "";
+        }
+        return {
+          role: m.role,
+          content: [
+            {
+              type: mediaKind,
+              source: {
+                type:       "base64",
+                media_type: m.mediaMimeType || (mediaKind === "document" ? "application/pdf" : "image/jpeg"),
+                data:       m.mediaData,
+              },
+            },
+            { type: "text", text: textContent || "O cliente enviou esta mídia." },
+          ],
         };
       }
       return { role: m.role, content: m.content };
@@ -1024,14 +1059,15 @@ async function transcribeAudio(base64, mimeType) {
 // ============================================================
 
 async function chatWithAgent(phone, userText, mediaPayload = null, name = "", meta = {}) {
-  // BUG2 FIX: enrich meta with flat media fields from mediaPayload so ALL addMessage calls
-  // (including early-exit paths) persist mediaType/mediaMimeType/mediaData in history.
+  // Enrich meta with flat media fields so ALL addMessage calls persist mediaType/mediaData.
+  // mediaCaption stores the actual caption (userText) for clean storage without fallback text.
   if (mediaPayload) {
     meta = {
       ...meta,
       mediaType:     mediaPayload.mimeType === "application/pdf" ? "document" : "image",
       mediaMimeType: mediaPayload.mimeType,
       mediaData:     mediaPayload.base64,
+      mediaCaption:  userText || "",
     };
     // mediaFilename may already be set by the caller (PDF path passes it in msgMeta)
   }
@@ -1134,7 +1170,9 @@ async function chatWithAgent(phone, userText, mediaPayload = null, name = "", me
 
   if (decision === "post_handoff_default") {
     const reply = "Nossa equipe já está ciente e vai te atender em breve 🤝";
-    addMessage(session, "user",      textToCheck || "[mensagem]", meta);
+    // For media messages use clean caption (possibly ""); for text use fallback "[mensagem]"
+    const _phContent = meta.mediaData ? textToCheck : (textToCheck || "[mensagem]");
+    addMessage(session, "user",      _phContent, meta);
     addMessage(session, "assistant", reply);
     session.postHandoffReplySent = true;
     await saveSession(phone, session);
@@ -1142,7 +1180,8 @@ async function chatWithAgent(phone, userText, mediaPayload = null, name = "", me
   }
 
   if (decision === false) {
-    addMessage(session, "user", textToCheck || "[mensagem]", meta);
+    const _silContent = meta.mediaData ? textToCheck : (textToCheck || "[mensagem]");
+    addMessage(session, "user", _silContent, meta);
 
     // PJ Almoço — auto-resposta única para PJ já triado em silêncio pós-handoff
     if (session.clientType === "pj" && session.status !== "resolvido") {
@@ -1203,6 +1242,8 @@ async function chatWithAgent(phone, userText, mediaPayload = null, name = "", me
   // ────────────────────────────────────────────────────────────────────────────
 
   addMessage(session, "user", userContent, meta);
+  // Persist user message immediately so it survives even if the AI call fails below.
+  await saveSession(phone, session);
 
   // ── Contexto de contato conhecido + Modo Almoço PJ ───────────────────────
   let _contactNote = null;
@@ -1933,12 +1974,14 @@ async function handleIncomingMessage(req, res) {
             continue;
           }
 
-          // ── IMAGEM — envia para Claude processar ─────────────
+          // ── IMAGEM — baixa, persiste e envia para Claude ─────
           if (type === "image") {
             try {
               const media   = await downloadMedia(message.image.id);
               const caption = message.image.caption || "";
-              const reply   = await chatWithAgent(from, caption || "O cliente enviou uma imagem.", media, name, msgMeta);
+              console.log(`[webhook/media] image received id=${message.image.id} mime=${media.mimeType} base64Length=${media.base64?.length || 0}`);
+              const reply   = await chatWithAgent(from, caption, media, name, msgMeta);
+              console.log(`[webhook/media] image saved phone=${from} hasMediaData=true`);
               if (reply) await sendTextMessage(from, reply);
             } catch (err) {
               console.error("[Imagem] ❌", err.message);
