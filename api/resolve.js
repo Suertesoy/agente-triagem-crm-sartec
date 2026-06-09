@@ -1,10 +1,9 @@
 // ============================================================
-// Sartec Papelaria — Marcar conversa como resolvida + arquivar
+// Sartec Papelaria — Marcar conversa como resolvida
 // POST /api/resolve  { phone }
 // ============================================================
 
 import Redis from "ioredis";
-import { archiveSession } from "./archive.js";
 
 let redisClient = null;
 
@@ -63,11 +62,6 @@ export default async function handler(req, res) {
     });
 
     if (notFound) return res.status(404).json({ error: "Conversa não encontrada" });
-
-    // Arquivar em background — não bloqueia a resposta
-    archiveSession(phone).catch((err) =>
-      console.error("[resolve/archive] ⚠️", err.message)
-    );
 
     console.log(`[resolve] ✅ +${phone} marcado como resolvido`);
     return res.status(200).json({ success: true, resolvedAt });

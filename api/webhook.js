@@ -1055,6 +1055,28 @@ async function transcribeAudio(base64, mimeType) {
 }
 
 // ============================================================
+// TEMPLATE DE RETOMADA — tratamento centralizado
+// ============================================================
+
+async function handleTemplateResumeReply(session, phone, incomingContent, meta, now) {
+  addMessage(session, "user", incomingContent, meta);
+  session.templateWaitingReply = false;
+  session.templateSentAt       = null;
+  session.handoffDone          = true;
+  session.status               = "aguardando_humano";
+  session.resolvedAt           = null;
+  session.postHandoffReplySent = true;
+  session.handoffAt            = now.toISOString();
+  if (!session.pipelineStatus ||
+      ["resolvido", "finalizado", "entregue"].includes(session.pipelineStatus)) {
+    session.pipelineStatus = "em_atendimento";
+  }
+  await saveSession(phone, session);
+  console.log(`[template-resume] ✅ resposta recebida — atendimento reaberto +${phone}`);
+  return null;
+}
+
+// ============================================================
 // AGENTE
 // ============================================================
 
@@ -1081,6 +1103,18 @@ async function chatWithAgent(phone, userText, mediaPayload = null, name = "", me
   const _now = new Date();
   session.lastUserMessageAt = _now.toISOString();
   session.windowExpiresAt   = new Date(_now.getTime() + 24 * 60 * 60 * 1000).toISOString();
+
+  // ── Template de retomada — prioridade máxima, ANTES de qualquer lógica de ciclo ──
+  if (session.templateWaitingReply && session.lastTemplateType === "attendance_resume") {
+    const _resumeContent = mediaPayload
+      ? [
+          { type: mediaPayload.mimeType === "application/pdf" ? "document" : "image",
+            source: { type: "base64", media_type: mediaPayload.mimeType, data: mediaPayload.base64 } },
+          { type: "text", text: userText || "O cliente enviou esta mídia." },
+        ]
+      : (userText || "");
+    return handleTemplateResumeReply(session, phone, _resumeContent, meta, _now);
+  }
 
   // ── Retorno pós-resolução ──────────────────────────────────────────────────
   const _resolvedMode = getResolvedReturnMode(session);
@@ -1834,6 +1868,11 @@ async function handleIncomingMessage(req, res) {
               session.lastUserMessageAt = _audioNow.toISOString();
               session.windowExpiresAt   = new Date(_audioNow.getTime() + 24 * 60 * 60 * 1000).toISOString();
 
+              // ── Template de retomada (áudio) — prioridade máxima, ANTES de qualquer lógica de ciclo ──
+              if (session.templateWaitingReply && session.lastTemplateType === "attendance_resume") {
+                return handleTemplateResumeReply(session, from, "[áudio]", _audioMeta, _audioNow);
+              }
+
               // ── Retorno pós-resolução (áudio) ──────────────────────────────────────
               const _audioResolved = getResolvedReturnMode(session);
               if (_audioResolved === "continuation") {
@@ -2017,6 +2056,12 @@ async function handleIncomingMessage(req, res) {
                 const _docNow = new Date();
                 _docSession.lastUserMessageAt = _docNow.toISOString();
                 _docSession.windowExpiresAt   = new Date(_docNow.getTime() + 24 * 60 * 60 * 1000).toISOString();
+
+                // ── Template de retomada (doc) — prioridade máxima, ANTES de qualquer lógica de ciclo ──
+                if (_docSession.templateWaitingReply && _docSession.lastTemplateType === "attendance_resume") {
+                  await handleTemplateResumeReply(_docSession, from, "[documento]", msgMeta, _docNow);
+                  throw new Error("STOP_FLOW");
+                }
 
                 // ── Retorno pós-resolução (documento não-PDF) ──────────────────────────
                 const _docResolved = getResolvedReturnMode(_docSession);

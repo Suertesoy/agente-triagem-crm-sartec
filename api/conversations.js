@@ -56,7 +56,6 @@ export default async function handler(req, res) {
     const redis = getRedis();
 
     // SCAN — nunca usa KEYS em produção
-    // Inclui chaves de arquivo (sartec:archive:*) para exibir histórico completo
     let cursor = "0";
     const allKeys = [];
     do {
@@ -64,7 +63,13 @@ export default async function handler(req, res) {
         cursor, "MATCH", "sartec:*", "COUNT", 200
       );
       cursor = nextCursor;
-      allKeys.push(...found.filter(k => !k.includes(":contact:") && k !== "sartec:pipelineOrder"));
+      allKeys.push(...found.filter(k =>
+        !k.includes(":archive:")      &&
+        !k.includes(":contact:")      &&
+        !k.includes(":settings:")     &&
+        !k.includes(":pending_status:") &&
+        k !== "sartec:pipelineOrder"
+      ));
     } while (cursor !== "0");
 
     if (!allKeys.length) {

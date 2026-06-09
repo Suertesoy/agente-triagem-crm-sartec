@@ -81,41 +81,16 @@ function stripMediaData(session) {
 async function handlePost(req, res) {
   const { phone } = req.body || {};
   if (!phone) return res.status(400).json({ error: "Campo phone obrigatório" });
-
-  try {
-    const redis = getRedis();
-    const raw   = await redis.get(`sartec:${phone}`);
-    if (!raw) return res.status(404).json({ error: "Conversa não encontrada" });
-
-    const session   = JSON.parse(raw);
-    const timestamp = (session.resolvedAt || new Date().toISOString()).replace(/[:.]/g, "-");
-    const archiveKey = `sartec:archive:${phone}:${timestamp}`;
-
-    const archive = { ...stripMediaData(session), phone, archivedAt: new Date().toISOString() };
-
-    await redis.set(archiveKey, JSON.stringify(archive), "EX", ARCHIVE_TTL);
-
-    console.log(`[archive] ✅ ${archiveKey}`);
-    return res.status(200).json({ success: true, archiveKey });
-  } catch (err) {
-    console.error("[archive/post] ❌", err.message);
-    return res.status(500).json({ error: "Erro ao arquivar conversa", detail: err.message });
-  }
+  // Arquivamento desativado: histórico preservado na sessão principal por 90 dias.
+  console.log(`[archive/post] ℹ️ arquivamento desativado para +${phone}`);
+  return res.status(200).json({
+    success: true,
+    message: "Arquivamento desativado. Histórico preservado na sessão principal por 90 dias.",
+  });
 }
 
-// ── Exportado para uso interno pelo resolve.js ─────────────
+// ── Exportado para compatibilidade — arquivamento desativado ─
 export async function archiveSession(phone) {
-  const redis = getRedis();
-  const raw   = await redis.get(`sartec:${phone}`);
-  if (!raw) return;
-
-  const session   = JSON.parse(raw);
-  const timestamp = (session.resolvedAt || new Date().toISOString()).replace(/[:.]/g, "-");
-  const archiveKey = `sartec:archive:${phone}:${timestamp}`;
-
-  if (await redis.exists(archiveKey)) return; // já arquivado
-
-  const archive = { ...stripMediaData(session), phone, archivedAt: new Date().toISOString() };
-  await redis.set(archiveKey, JSON.stringify(archive), "EX", ARCHIVE_TTL);
-  console.log(`[archive] ✅ interno ${archiveKey}`);
+  // Não cria mais chaves sartec:archive:*. Histórico permanece na sessão principal por 90 dias.
+  console.log(`[archive] ℹ️ arquivamento automático desativado para +${phone}`);
 }
