@@ -51,13 +51,13 @@ let _s3Client = null;
 
 function getS3() {
   if (!_s3Client) {
-    const configured = Boolean(
-      process.env.R2_ENDPOINT &&
-      process.env.R2_ACCESS_KEY_ID &&
-      process.env.R2_SECRET_ACCESS_KEY &&
-      process.env.R2_BUCKET
-    );
-    if (!configured) {
+    const ep       = Boolean(process.env.R2_ENDPOINT);
+    const key      = Boolean(process.env.R2_ACCESS_KEY_ID);
+    const secret   = Boolean(process.env.R2_SECRET_ACCESS_KEY);
+    const bucket   = Boolean(process.env.R2_BUCKET);
+    const disabled = process.env.R2_DISABLED === "true";
+    if (!ep || !key || !secret || !bucket) {
+      console.error(`[R2] config missing endpoint=${ep} accessKey=${key} secret=${secret} bucket=${bucket} disabled=${disabled}`);
       throw new Error("R2 não configurado — verifique R2_ENDPOINT, R2_ACCESS_KEY_ID, R2_SECRET_ACCESS_KEY, R2_BUCKET na Vercel");
     }
     _s3Client = new S3Client({
