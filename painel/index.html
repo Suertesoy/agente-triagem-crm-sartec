@@ -229,6 +229,7 @@
 
     .mob-new-fab { display:none; position:fixed; bottom:68px; right:16px; width:48px; height:48px; border-radius:50%; background:var(--accent,#2563eb); color:#fff; border:none; box-shadow:0 4px 16px rgba(15,23,42,.30); font-size:1.35rem; align-items:center; justify-content:center; cursor:pointer; z-index:390; transition:background .15s,box-shadow .15s; }
     .mob-new-fab:active { background:var(--accent-dark,#1d4ed8); }
+    .mob-stage-mover { display:none; }
 
     /* ── Modal de aviso: reply + anexo + texto ───────────────── */
     .reply-warn-box { background:#fff; border-radius:14px; padding:24px; width:360px; max-width:calc(100vw - 32px); box-shadow:0 16px 48px rgba(15,23,42,.18); }
@@ -3706,13 +3707,18 @@
       /* ── Composer: padding seguro para barra home do iOS ── */
       .modal-box .composer { padding-bottom:calc(8px + env(safe-area-inset-bottom, 0px)); }
 
-      /* ── Cards Kanban: restaurar aparência próxima ao desktop ──────────────────────
-         Breakpoints max-width:1200px e max-width:1024px reduzem font-size/padding sem
-         override mobile → cards ficam menores que o desktop. Corrigir aqui. */
-      .card { padding:14px 14px 12px; min-height:240px; border-radius:16px; }
+      /* ── Cards Kanban mobile: conteúdo completo, sem corte ──────────────────────── */
+      /* overflow:visible libera card-status-dot; min-height:0 deixa o card crescer */
+      .card { padding:14px 14px 16px; min-height:0; overflow:visible; border-radius:16px; }
       .card-name { font-size:.88rem; }
       .card-title { font-size:.9rem; }
       .btn-open { font-size:.78rem; padding:8px 12px; }
+      /* Padding inferior: garante que o rodapé do último card não fique atrás do FAB (≈68px+48px=116px) */
+      #mob-stage-cards-pf, #mob-stage-cards-pj { padding-bottom:calc(120px + env(safe-area-inset-bottom, 0px)); }
+      /* Controle de mudança de etapa — visível apenas no mobile */
+      .mob-stage-mover { display:flex; align-items:center; gap:8px; padding:9px 0 3px; border-top:1px solid rgba(0,0,0,.07); margin-top:6px; }
+      .mob-stage-label { font-size:.68rem; font-weight:700; color:var(--text-secondary); white-space:nowrap; flex-shrink:0; }
+      .mob-stage-select { flex:1; font-size:1rem; border:1px solid var(--border); border-radius:7px; padding:6px 8px; background:#fff; color:var(--text-primary); outline:none; font-family:inherit; }
     }
 
     /* ══════════════════════════════════════════════════
@@ -6201,6 +6207,12 @@ function buildCard(c, col, cols) {
       </div>
       ${buildExpandBody(c, clientType)}
       ${isResolved && c.resolvedAt ? `<div style="font-size:.61rem;color:var(--text-muted);text-align:center;padding-top:4px">Resolvido ${relTime(c.resolvedAt)}</div>` : ""}
+      ${!isResolved ? `<div class="mob-stage-mover" onclick="event.stopPropagation()">
+        <span class="mob-stage-label">Etapa:</span>
+        <select class="mob-stage-select" onclick="event.stopPropagation()" onchange="mobChangeStage('${esc(c.phone)}','${clientType}',this)">
+          ${statusOptions}
+        </select>
+      </div>` : ""}
     </div>
   `;
 
@@ -6334,6 +6346,37 @@ async function changeStatus(select, phone, clientType) {
     });
     showToast("Status atualizado");
   } catch (e) { console.error("[changeStatus]", e); }
+}
+
+async function mobChangeStage(phone, clientType, select) {
+  const newStatus = select.value;
+  const conv = allConvs.find(c => c.phone === phone);
+  if (!conv) return;
+  const TERMINAL = ["finalizado", "entregue"];
+  if (TERMINAL.includes(newStatus)) {
+    const label = select.options[select.selectedIndex]?.text || newStatus;
+    if (!window.confirm(`Mover "${conv.clientName || phone}" para "${label}"?`)) {
+      select.value = conv.pipelineStatus || "novo";
+      return;
+    }
+  }
+  const oldStatus = conv.pipelineStatus || "novo";
+  conv.pipelineStatus = newStatus;
+  const tabId = clientType || conv.clientType || "pf";
+  renderMobStageCards(tabId, _mobActiveStage[tabId] || "novo");
+  try {
+    await fetch("/api/update-status", {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ phone, pipelineStatus: newStatus, clientType }),
+    });
+    showToast("Etapa atualizada");
+  } catch (e) {
+    console.error("[mobChangeStage]", e);
+    conv.pipelineStatus = oldStatus;
+    renderMobStageCards(tabId, _mobActiveStage[tabId] || "novo");
+    showToast("Não foi possível mover a etapa. Tente novamente.", "t-err");
+  }
 }
 
 let _pfpjPendingPhone = null;
