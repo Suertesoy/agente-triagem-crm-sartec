@@ -4,6 +4,7 @@
 // ============================================================
 
 import Redis from "ioredis";
+import { getMediaUrl } from "./media-storage.js";
 
 let redisClient = null;
 
@@ -72,7 +73,8 @@ export default async function handler(req, res) {
     console.log(`[conversation] GET +${resolvedPhone} key=${redisKey} historyLen=${(session.history || []).length}`);
 
     // Normaliza history preservando mídia (imagens e documentos/PDF)
-    const history = (session.history || []).map((m) => {
+    // Usa Promise.all + async para suportar geração de URL presigned R2
+    const history = await Promise.all((session.history || []).map(async (m) => {
       if (m.messageType === "template_status") {
         return {
           role:             m.role,
@@ -159,7 +161,24 @@ export default async function handler(req, res) {
       if (m.templateText)   item.templateText   = m.templateText;
       if (m.sentByTemplate) item.sentByTemplate = m.sentByTemplate;
 
-      if (mediaType) {
+      // Estado 3 — R2: gera URL presigned (TTL 24h); sem base64 na resposta
+      if (m.mediaStorageKey) {
+        item.mediaType     = mediaType || m.mediaType;
+        item.mediaMimeType = mediaMimeType;
+        if (mediaFilename) item.mediaFilename = mediaFilename;
+        try {
+          item.mediaUrl = await getMediaUrl(m.mediaStorageKey, 86400);
+        } catch (_presignErr) {
+          console.error(`[R2] presign failed key=${m.mediaStorageKey} reason=${_presignErr.message}`);
+          item.mediaUnavailable = true;
+        }
+      // Estado 2 — stripped pelo script de limpeza: indica indisponibilidade
+      } else if (m.mediaDataRemoved) {
+        if (mediaType)     item.mediaType     = mediaType;
+        if (mediaMimeType) item.mediaMimeType = mediaMimeType;
+        item.mediaUnavailable = true;
+      // Estado 1 — legado base64 inline: repassa como antes (fallback)
+      } else if (mediaType) {
         item.mediaType     = mediaType;
         item.mediaData     = mediaData;
         item.mediaMimeType = mediaMimeType || (mediaType === "image" ? "image/jpeg" : mediaMimeType);
@@ -171,7 +190,7 @@ export default async function handler(req, res) {
       if (m.pjLunchAutoReply)   item.pjLunchAutoReply   = true;
 
       return item;
-    });
+    }));
 
     const windowInfo = computeWindowInfo(session);
 

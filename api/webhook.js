@@ -12,6 +12,7 @@
 
 import Anthropic from "@anthropic-ai/sdk";
 import Redis from "ioredis";
+import { uploadMedia, getMediaUrl } from "./media-storage.js";
 
 // ============================================================
 // REDIS
@@ -721,25 +722,31 @@ function generateCardTitle(session) {
 
 function addMessage(session, role, content, meta = {}) {
   // Strip multipart content array to plain caption text to avoid storing base64 twice.
-  // Binary data lives exclusively in the flat mediaData field; getMessages() rebuilds
-  // the multipart structure for Claude on the fly.
+  // Binary data lives exclusively in mediaData (legacy) or mediaStorageKey (R2);
+  // getMessages() rebuilds the multipart structure for Claude on the fly.
   let storedContent = content;
-  if (Array.isArray(content) && meta.mediaData) {
+  if (Array.isArray(content) && (meta.mediaData || meta.mediaStorageKey)) {
     storedContent = meta.mediaCaption !== undefined
       ? meta.mediaCaption
       : (content.find(c => c.type === "text")?.text || "");
   }
   const item = { role, content: storedContent, createdAt: new Date().toISOString() };
-  if (meta.metaMessageId)      item.metaMessageId      = meta.metaMessageId;
-  if (meta.replyToMsgId)       item.replyToMsgId       = meta.replyToMsgId;
-  if (meta.replyToFrom)        item.replyToFrom        = meta.replyToFrom;
-  if (meta.mediaType)          item.mediaType          = meta.mediaType;
-  if (meta.mediaMimeType)      item.mediaMimeType      = meta.mediaMimeType;
-  if (meta.mediaData)          item.mediaData          = meta.mediaData;
-  if (meta.mediaFilename)      item.mediaFilename      = meta.mediaFilename;  // BUG2 FIX
-  if (meta.transcription)      item.transcription      = meta.transcription;
-  if (meta.transcriptionError) item.transcriptionError = meta.transcriptionError;
-  if (meta.pjLunchAutoReply)   item.pjLunchAutoReply   = true;
+  if (meta.metaMessageId)           item.metaMessageId           = meta.metaMessageId;
+  if (meta.replyToMsgId)            item.replyToMsgId            = meta.replyToMsgId;
+  if (meta.replyToFrom)             item.replyToFrom             = meta.replyToFrom;
+  if (meta.mediaType)               item.mediaType               = meta.mediaType;
+  if (meta.mediaMimeType)           item.mediaMimeType           = meta.mediaMimeType;
+  // R2: salvar storage key em vez de base64 — guarda tamanho mas nunca o binário
+  if (meta.mediaStorageKey)         item.mediaStorageKey         = meta.mediaStorageKey;
+  if (meta.mediaStorageProvider)    item.mediaStorageProvider    = meta.mediaStorageProvider;
+  if (meta.mediaSize)               item.mediaSize               = meta.mediaSize;
+  if (meta.mediaStorageFailed)      item.mediaStorageFailed      = true;
+  // Fallback legado: só salva base64 se não há storage key (R2 falhou ou R2_DISABLED)
+  if (!meta.mediaStorageKey && meta.mediaData) item.mediaData    = meta.mediaData;
+  if (meta.mediaFilename)           item.mediaFilename           = meta.mediaFilename;  // BUG2 FIX
+  if (meta.transcription)           item.transcription           = meta.transcription;
+  if (meta.transcriptionError)      item.transcriptionError      = meta.transcriptionError;
+  if (meta.pjLunchAutoReply)        item.pjLunchAutoReply        = true;
   session.history.push(item);
 
   if (role === "assistant" && isHandoff(content)) {
@@ -822,6 +829,22 @@ function getMessages(session) {
           content: m.transcription
             ? `[Áudio transcrito]: ${m.transcription}`
             : "[Cliente enviou um áudio — transcrição indisponível]",
+        };
+      }
+      // R2: mensagem com storage key — passa apenas o texto (base64 foi usado em memória na ingestão)
+      if (m.mediaStorageKey && (m.mediaType === "image" || m.mediaType === "document")) {
+        const textContent = typeof m.content === "string" ? m.content : "";
+        return {
+          role: m.role,
+          content: textContent || `[Cliente enviou ${m.mediaType === "image" ? "uma imagem" : "um documento"}]`,
+        };
+      }
+      // Legado stripped: mediaData removido pelo script de limpeza
+      if (m.mediaDataRemoved && (m.mediaType === "image" || m.mediaType === "document")) {
+        const textContent = typeof m.content === "string" ? m.content : "";
+        return {
+          role: m.role,
+          content: textContent || `[Cliente enviou ${m.mediaType === "image" ? "uma imagem" : "um documento"} — mídia não disponível]`,
         };
       }
       // Reconstruct multipart content for Claude from flat fields (avoids double base64 in Redis).
@@ -1004,12 +1027,13 @@ async function downloadMedia(mediaId) {
   });
   if (!fileRes.ok) throw new Error(`Meta media download ${fileRes.status}`);
 
-  const buffer = await fileRes.arrayBuffer();
-  const base64 = Buffer.from(buffer).toString("base64");
+  const arrayBuf = await fileRes.arrayBuffer();
+  const buffer   = Buffer.from(arrayBuf);
+  const base64   = buffer.toString("base64");
 
   console.log(`[Media] ✅ mimeType=${mime_type} size=${buffer.byteLength}B`);
 
-  return { base64, mimeType: mime_type };
+  return { buffer, base64, mimeType: mime_type };
 }
 
 // ============================================================
@@ -1085,15 +1109,31 @@ async function handleTemplateResumeReply(session, phone, incomingContent, meta, 
 // ============================================================
 
 async function chatWithAgent(phone, userText, mediaPayload = null, name = "", meta = {}) {
-  // Enrich meta with flat media fields so ALL addMessage calls persist mediaType/mediaData.
+  // Enrich meta with flat media fields so ALL addMessage calls persist mediaType + storage info.
+  // R2 path: usa mediaStorageKey (sem base64 no Redis).
+  // Fallback: usa mediaData (base64) quando R2 falhou ou está desabilitado.
   // mediaCaption stores the actual caption (userText) for clean storage without fallback text.
   if (mediaPayload) {
+    const _mediaType = mediaPayload.mimeType === "application/pdf" ? "document" : "image";
     meta = {
       ...meta,
-      mediaType:     mediaPayload.mimeType === "application/pdf" ? "document" : "image",
+      mediaType:    _mediaType,
       mediaMimeType: mediaPayload.mimeType,
-      mediaData:     mediaPayload.base64,
-      mediaCaption:  userText || "",
+      ...(mediaPayload.storageKey
+        ? {
+            mediaStorageKey:      mediaPayload.storageKey,
+            mediaStorageProvider: "cloudflare-r2",
+            ...(mediaPayload.size && { mediaSize: mediaPayload.size }),
+          }
+        : {
+            mediaData: mediaPayload.base64,
+            ...(mediaPayload.storageFailed && {
+              mediaStorageProvider: "redis-fallback",
+              mediaStorageFailed:   true,
+            }),
+          }
+      ),
+      mediaCaption: userText || "",
     };
     // mediaFilename may already be set by the caller (PDF path passes it in msgMeta)
   }
@@ -1218,7 +1258,7 @@ async function chatWithAgent(phone, userText, mediaPayload = null, name = "", me
   if (decision === "post_handoff_default") {
     const reply = "Nossa equipe já está ciente e vai te atender em breve 🤝";
     // For media messages use clean caption (possibly ""); for text use fallback "[mensagem]"
-    const _phContent = meta.mediaData ? textToCheck : (textToCheck || "[mensagem]");
+    const _phContent = (meta.mediaData || meta.mediaStorageKey) ? textToCheck : (textToCheck || "[mensagem]");
     addMessage(session, "user",      _phContent, meta);
     addMessage(session, "assistant", reply);
     session.postHandoffReplySent = true;
@@ -1227,7 +1267,7 @@ async function chatWithAgent(phone, userText, mediaPayload = null, name = "", me
   }
 
   if (decision === false) {
-    const _silContent = meta.mediaData ? textToCheck : (textToCheck || "[mensagem]");
+    const _silContent = (meta.mediaData || meta.mediaStorageKey) ? textToCheck : (textToCheck || "[mensagem]");
     addMessage(session, "user", _silContent, meta);
 
     // PJ Almoço — auto-resposta única para PJ já triado em silêncio pós-handoff
@@ -1841,12 +1881,14 @@ async function handleIncomingMessage(req, res) {
             let _audioTranscription  = null;
             let _audioMimeType       = null;
             let _audioBase64         = null;
+            let _audioBuffer         = null;
             let _transcriptionFailed = false;
             let _transcriptionSkipped = !_needsTranscription;
             try {
               const _audioMedia = await downloadMedia(message.audio.id);
               _audioMimeType    = _audioMedia.mimeType;
               _audioBase64      = _audioMedia.base64;
+              _audioBuffer      = _audioMedia.buffer;
             } catch (_dlErr) {
               console.error("[Audio] ❌ Download falhou:", _dlErr.message);
               _transcriptionFailed = true; // download falhou → agente pede texto como antes
@@ -1863,12 +1905,37 @@ async function handleIncomingMessage(req, res) {
               }
             }
 
+            // Fase 1c: R2 upload para áudio
+            let _audioStorageKey    = null;
+            let _audioStorageFailed = false;
+            if (_audioBuffer) {
+              try {
+                const _r2Audio = await uploadMedia(_audioBuffer, _audioMimeType || "audio/ogg", from, message.audio.id);
+                if (_r2Audio) {
+                  _audioStorageKey = _r2Audio.storageKey;
+                } else {
+                  _audioStorageFailed = true; // R2_DISABLED
+                }
+              } catch (_r2Err) {
+                console.error(`[R2] upload failed type=audio reason=${_r2Err.message}`);
+                _audioStorageFailed = true;
+              }
+            }
+
             // Fase 2: atualiza sessão e responde (dentro do lock)
             const _audioMeta = {
               ...msgMeta,
               mediaType:    "audio",
               mediaMimeType: _audioMimeType || undefined,
-              ...(_audioBase64               && { mediaData:          _audioBase64 }),
+              ...(_audioStorageKey
+                ? { mediaStorageKey: _audioStorageKey, mediaStorageProvider: "cloudflare-r2" }
+                : _audioBase64
+                  ? {
+                      mediaData: _audioBase64,
+                      ...(_audioStorageFailed && { mediaStorageProvider: "redis-fallback", mediaStorageFailed: true }),
+                    }
+                  : {}
+              ),
               ...((_audioTranscription)      && { transcription:      _audioTranscription }),
               ...(_transcriptionFailed       && { transcriptionError: true }),
             };
@@ -2026,14 +2093,21 @@ async function handleIncomingMessage(req, res) {
             continue;
           }
 
-          // ── IMAGEM — baixa, persiste e envia para Claude ─────
+          // ── IMAGEM — baixa, sobe para R2 e envia para Claude ─
           if (type === "image") {
             try {
               const media   = await downloadMedia(message.image.id);
               const caption = message.image.caption || "";
-              console.log(`[webhook/media] image received id=${message.image.id} mime=${media.mimeType} base64Length=${media.base64?.length || 0}`);
-              const reply   = await chatWithAgent(from, caption, media, name, msgMeta);
-              console.log(`[webhook/media] image saved phone=${from} hasMediaData=true`);
+              console.log(`[webhook/media] image received id=${message.image.id} mime=${media.mimeType} size=${media.buffer.byteLength}`);
+              try {
+                const _r2Img = await uploadMedia(media.buffer, media.mimeType, from, message.image.id);
+                if (_r2Img) { media.storageKey = _r2Img.storageKey; media.size = _r2Img.size; }
+                else          media.storageFailed = true; // R2_DISABLED
+              } catch (_r2Err) {
+                console.error(`[R2] upload failed type=image reason=${_r2Err.message}`);
+                media.storageFailed = true;
+              }
+              const reply = await chatWithAgent(from, caption, media, name, msgMeta);
               if (reply) await sendTextMessage(from, reply);
             } catch (err) {
               console.error("[Imagem] ❌", err.message);
@@ -2042,7 +2116,7 @@ async function handleIncomingMessage(req, res) {
             continue;
           }
 
-          // ── PDF — envia para Claude processar ────────────────
+          // ── PDF — sobe para R2 e envia para Claude processar ─
           if (type === "document" && message.document?.mime_type === "application/pdf") {
             try {
               const media = await downloadMedia(message.document.id);
@@ -2051,6 +2125,14 @@ async function handleIncomingMessage(req, res) {
                 ...msgMeta,
                 mediaFilename: message.document?.filename || "documento.pdf",
               };
+              try {
+                const _r2Pdf = await uploadMedia(media.buffer, media.mimeType, from, message.document.id);
+                if (_r2Pdf) { media.storageKey = _r2Pdf.storageKey; media.size = _r2Pdf.size; }
+                else          media.storageFailed = true; // R2_DISABLED
+              } catch (_r2Err) {
+                console.error(`[R2] upload failed type=document reason=${_r2Err.message}`);
+                media.storageFailed = true;
+              }
               const reply = await chatWithAgent(from, "O cliente enviou um PDF.", media, name, pdfMeta);
               if (reply) await sendTextMessage(from, reply);
             } catch (err) {

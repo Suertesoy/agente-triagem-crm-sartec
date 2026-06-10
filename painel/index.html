@@ -4842,6 +4842,7 @@ const reopeningCards = new Set(); // phones com card sendo reaberto no kanban
 // mídia modal
 let mediaModalBase64 = null;
 let mediaModalMime   = null;
+let mediaModalUrl    = null;
 
 // tracking para notificação de novos cards
 let knownPhones = new Set();
@@ -7350,8 +7351,9 @@ function getQuotedPreview(msg, history) {
   const result = { replyToMsgId: msg.replyToMsgId };
 
   // BUG3 FIX: carry media info from the quoted message so the quote block can render it
-  if (quoted.mediaType) result.mediaType = quoted.mediaType;
-  if (quoted.mediaData) result.mediaData = quoted.mediaData;
+  if (quoted.mediaType)     result.mediaType     = quoted.mediaType;
+  if (quoted.mediaUrl)      result.mediaUrl      = quoted.mediaUrl;   // R2
+  if (quoted.mediaData)     result.mediaData     = quoted.mediaData;  // legado
   if (quoted.mediaMimeType) result.mediaMimeType = quoted.mediaMimeType;
   if (quoted.mediaFilename) result.mediaFilename = quoted.mediaFilename;
 
@@ -7386,6 +7388,7 @@ function getQuotedPreview(msg, history) {
 
 function appendBubble(container, msg, optimistic = false, history = null) {
   const { role, content, sentByHuman, mediaType, mediaData, mediaMimeType, mediaFilename,
+          mediaUrl, mediaUnavailable,
           attendantId, attendantName, transcription, transcriptionError } = msg;
 
   // ── Evento de falha no template ──
@@ -7450,9 +7453,9 @@ function appendBubble(container, msg, optimistic = false, history = null) {
     _quoteEl.title = "Clique para ir à mensagem original";
 
     // BUG3 FIX: show thumbnail for quoted image, icon+name for quoted document
-    if (_quoteInfo.mediaType === "image" && _quoteInfo.mediaData) {
+    if (_quoteInfo.mediaType === "image" && (_quoteInfo.mediaUrl || _quoteInfo.mediaData)) {
       const _qImg = document.createElement("img");
-      _qImg.src = `data:${_quoteInfo.mediaMimeType || "image/jpeg"};base64,${_quoteInfo.mediaData}`;
+      _qImg.src = _quoteInfo.mediaUrl || `data:${_quoteInfo.mediaMimeType || "image/jpeg"};base64,${_quoteInfo.mediaData}`;
       _qImg.style.cssText = "height:36px;width:auto;max-width:60px;border-radius:3px;object-fit:cover;vertical-align:middle;margin-right:5px;";
       _qImg.alt = "imagem citada";
       _quoteEl.appendChild(_qImg);
@@ -7487,14 +7490,27 @@ function appendBubble(container, msg, optimistic = false, history = null) {
     bubble.appendChild(_quoteEl);
   }
 
+  // ── Mídia indisponível (removida do armazenamento) ──
+  if (mediaUnavailable) {
+    const _unavDiv = document.createElement("div");
+    _unavDiv.style.cssText = "font-size:.82rem;font-style:italic;color:#8a8a8a;padding:4px 0;";
+    _unavDiv.textContent = "Mídia antiga removida do armazenamento";
+    bubble.appendChild(_unavDiv);
+    if (content) {
+      const txt = document.createElement("div");
+      txt.style.marginTop = "4px";
+      txt.textContent = content;
+      bubble.appendChild(txt);
+    }
+
   // ── Imagem ──
-  if (mediaType === "image" && mediaData) {
+  } else if (mediaType === "image" && (mediaUrl || mediaData)) {
     const img       = document.createElement("img");
     img.className   = "bubble-img";
-    img.src         = `data:${mediaMimeType || "image/jpeg"};base64,${mediaData}`;
+    img.src         = mediaUrl || `data:${mediaMimeType || "image/jpeg"};base64,${mediaData}`;
     img.alt         = "imagem";
     img.title       = "Clique para ampliar";
-    img.onclick     = () => openMediaModal(mediaData, mediaMimeType || "image/jpeg");
+    img.onclick     = () => openMediaModal(mediaUrl, mediaData, mediaMimeType || "image/jpeg");
     bubble.appendChild(img);
     if (content) {
       const txt = document.createElement("div");
@@ -7504,9 +7520,9 @@ function appendBubble(container, msg, optimistic = false, history = null) {
     }
 
   // ── PDF / Documento ──
-  } else if ((mediaType === "document" || mediaMimeType === "application/pdf") && mediaData) {
+  } else if ((mediaType === "document" || mediaMimeType === "application/pdf") && (mediaUrl || mediaData)) {
     const fname = mediaFilename || "Documento PDF";
-    const card = buildMediaCard("📄", fname, mediaData, mediaMimeType || "application/pdf", true);
+    const card = buildMediaCard("📄", fname, mediaData, mediaMimeType || "application/pdf", true, mediaUrl);
     bubble.appendChild(card);
     if (content) {
       const txt = document.createElement("div");
@@ -7516,19 +7532,19 @@ function appendBubble(container, msg, optimistic = false, history = null) {
     }
 
   // ── Planilha ──
-  } else if (mediaData && (
+  } else if ((mediaUrl || mediaData) && (
     mediaMimeType?.includes("spreadsheet") ||
     mediaMimeType?.includes("excel") ||
     mediaMimeType?.includes("xlsx") ||
     mediaMimeType?.includes("xls")
   )) {
-    const card = buildMediaCard("📊", "Planilha", mediaData, mediaMimeType, false);
+    const card = buildMediaCard("📊", "Planilha", mediaData, mediaMimeType, false, mediaUrl);
     bubble.appendChild(card);
 
   // ── Áudio ──
   } else if (mediaType === "audio") {
-    if (mediaData) {
-      bubble.appendChild(createAudioPlayer(mediaData, mediaMimeType));
+    if (mediaUrl || mediaData) {
+      bubble.appendChild(createAudioPlayer(mediaUrl, mediaData, mediaMimeType));
     } else {
       const _fbDiv = document.createElement("div");
       _fbDiv.style.cssText = "font-size:.82rem;font-style:italic;opacity:.82";
@@ -7664,14 +7680,14 @@ function clearReplyTarget(prefix) {
   if (bar) bar.style.display = "none";
 }
 
-function storeMedia(base64, mimeType) {
+function storeMedia(base64, mimeType, mediaUrl) {
   const key = `m_${mediaStoreIdx++}`;
-  mediaStore[key] = { base64, mimeType };
+  mediaStore[key] = { base64, mimeType, mediaUrl: mediaUrl || null };
   return key;
 }
 
-function buildMediaCard(icon, name, base64, mimeType, canView) {
-  const key  = storeMedia(base64, mimeType);
+function buildMediaCard(icon, name, base64, mimeType, canView, mediaUrl) {
+  const key  = storeMedia(base64, mimeType, mediaUrl);
   const card = document.createElement("div");
   card.className = "media-doc-card";
 
@@ -7690,8 +7706,9 @@ function buildMediaCard(icon, name, base64, mimeType, canView) {
   return card;
 }
 
-function createAudioPlayer(base64, mimeType) {
-  const audio = new Audio(`data:${mimeType || "audio/ogg"};base64,${base64}`);
+function createAudioPlayer(mediaUrl, base64, mimeType) {
+  const src   = mediaUrl || `data:${mimeType || "audio/ogg"};base64,${base64}`;
+  const audio = new Audio(src);
 
   const wrap = document.createElement("div");
   wrap.className = "audio-player";
@@ -7790,20 +7807,37 @@ function viewMedia(key) {
   const m = mediaStore[key];
   if (!m) return;
   if (m.mimeType === "application/pdf") {
-    openPdfModal(m.base64);
+    if (m.mediaUrl) {
+      document.getElementById("pdf-iframe").src = m.mediaUrl;
+      document.getElementById("pdf-modal").classList.remove("hidden");
+    } else {
+      openPdfModal(m.base64);
+    }
   } else {
-    const url = base64ToBlobUrl(m.base64, m.mimeType);
-    if (url) window.open(url, "_blank");
+    if (m.mediaUrl) {
+      window.open(m.mediaUrl, "_blank");
+    } else {
+      const url = base64ToBlobUrl(m.base64, m.mimeType);
+      if (url) window.open(url, "_blank");
+    }
   }
 }
 
 function dlMedia(key, name) {
   const m = mediaStore[key];
   if (!m) return;
+  if (m.mediaUrl) {
+    const a = document.createElement("a");
+    a.href = m.mediaUrl;
+    a.download = name || "arquivo";
+    a.target = "_blank";
+    a.click();
+    return;
+  }
   const url = base64ToBlobUrl(m.base64, m.mimeType);
   if (!url) return;
-  const a   = document.createElement("a");
-  a.href    = url;
+  const a = document.createElement("a");
+  a.href = url;
   a.download = name || "arquivo";
   a.click();
 }
@@ -7815,12 +7849,13 @@ function scrollToBottom(el) { el.scrollTop = el.scrollHeight; }
 // ╚══════════════════════════════════════════════════════════════╝
 let imgZoom = 1;
 
-function openMediaModal(base64, mimeType) {
-  mediaModalBase64 = base64;
-  mediaModalMime   = mimeType;
+function openMediaModal(mediaUrl, base64, mimeType) {
+  mediaModalBase64 = base64   || null;
+  mediaModalMime   = mimeType || null;
+  mediaModalUrl    = mediaUrl || null;
   imgZoom = 1;
   const img = document.getElementById("media-modal-img");
-  img.src   = `data:${mimeType};base64,${base64}`;
+  img.src   = mediaUrl || `data:${mimeType};base64,${base64}`;
   img.style.transform = "scale(1)";
   img.onclick = () => {
     imgZoom = imgZoom >= 3 ? 1 : imgZoom + 0.5;
@@ -7834,15 +7869,24 @@ function closeMediaModal() {
   document.getElementById("media-modal").classList.add("hidden");
   mediaModalBase64 = null;
   mediaModalMime   = null;
+  mediaModalUrl    = null;
 }
 
 function downloadMediaModal() {
+  const ext = (mediaModalMime || "image/jpeg").split("/")[1] || "jpg";
+  if (mediaModalUrl) {
+    const a = document.createElement("a");
+    a.href = mediaModalUrl;
+    a.download = `imagem.${ext}`;
+    a.target = "_blank";
+    a.click();
+    return;
+  }
   if (!mediaModalBase64) return;
-  const url  = base64ToBlobUrl(mediaModalBase64, mediaModalMime || "image/jpeg");
+  const url = base64ToBlobUrl(mediaModalBase64, mediaModalMime || "image/jpeg");
   if (!url) return;
-  const ext  = (mediaModalMime || "image/jpeg").split("/")[1] || "jpg";
-  const a    = document.createElement("a");
-  a.href     = url;
+  const a = document.createElement("a");
+  a.href = url;
   a.download = `imagem.${ext}`;
   a.click();
 }
