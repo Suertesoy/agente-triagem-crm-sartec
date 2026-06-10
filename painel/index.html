@@ -6877,7 +6877,7 @@ function renderModal(data) {
 
   container.innerHTML = "";
   for (let i = 0; i < prevCount && i < history.length; i++) {
-    appendBubble(container, history[i], false, history);
+    appendBubble(container, history[i], false, history, i);
   }
   if (hasNewFromOther && !atBottom && newMsgs.length > 0) {
     const divider = document.createElement("div");
@@ -6887,7 +6887,7 @@ function renderModal(data) {
     container.appendChild(divider);
   }
   for (let i = prevCount; i < history.length; i++) {
-    appendBubble(container, history[i], false, history);
+    appendBubble(container, history[i], false, history, i);
     if (hasNewFromOther && history[i].sentByHuman &&
         history[i].attendantId && history[i].attendantId !== currentAtt?.id) {
       const lastBubble = container.querySelector(".bubble-wrap:last-child .bubble");
@@ -7232,7 +7232,7 @@ function renderConvsChat(data) {
     const optimistic = Array.from(container.querySelectorAll(".optimistic"))
       .map(el => ({ content: el.dataset.content, mediaType: el.dataset.mediaType || null }));
     container.innerHTML = "";
-    for (const msg of history) appendBubble(container, msg, false, history);
+    history.forEach((msg, i) => appendBubble(container, msg, false, history, i));
     const serverContents = new Set(history.filter(m => m.sentByHuman).map(m => m.content));
     for (const o of optimistic) {
       if (!serverContents.has(o.content)) {
@@ -7243,7 +7243,7 @@ function renderConvsChat(data) {
   } else if (newCount > prevCount) {
     // Apenas mensagens novas — sem pisca, sem limpar tudo
     for (let i = prevCount; i < newCount; i++) {
-      appendBubble(container, history[i], false, history);
+      appendBubble(container, history[i], false, history, i);
     }
   } else {
     // Count igual — atualiza apenas status de entrega nas bolhas existentes
@@ -7386,9 +7386,9 @@ function getQuotedPreview(msg, history) {
   return result;
 }
 
-function appendBubble(container, msg, optimistic = false, history = null) {
+function appendBubble(container, msg, optimistic = false, history = null, historyIndex = null) {
   const { role, content, sentByHuman, mediaType, mediaData, mediaMimeType, mediaFilename,
-          mediaUrl, mediaUnavailable,
+          mediaUrl, mediaUnavailable, mediaDeleted,
           attendantId, attendantName, transcription, transcriptionError } = msg;
 
   // ── Evento de falha no template ──
@@ -7490,11 +7490,11 @@ function appendBubble(container, msg, optimistic = false, history = null) {
     bubble.appendChild(_quoteEl);
   }
 
-  // ── Mídia indisponível (removida do armazenamento) ──
-  if (mediaUnavailable) {
+  // ── Mídia indisponível (removida do armazenamento ou deletada pelo painel) ──
+  if (mediaUnavailable || mediaDeleted) {
     const _unavDiv = document.createElement("div");
     _unavDiv.style.cssText = "font-size:.82rem;font-style:italic;color:#8a8a8a;padding:4px 0;";
-    _unavDiv.textContent = "Mídia antiga removida do armazenamento";
+    _unavDiv.textContent = mediaDeleted ? "Mídia removida do armazenamento" : "Mídia antiga removida do armazenamento";
     bubble.appendChild(_unavDiv);
     if (content) {
       const txt = document.createElement("div");
@@ -7557,6 +7557,20 @@ function appendBubble(container, msg, optimistic = false, history = null) {
     const _textNode = document.createElement("span");
     _textNode.textContent = content || "[mídia]";
     bubble.appendChild(_textNode);
+  }
+
+  // ── Botão "Remover mídia" ────────────────────────────────────────────────────
+  if (!optimistic && historyIndex !== null && !mediaDeleted && !mediaUnavailable &&
+      (mediaType || mediaUrl || mediaData)) {
+    const _rmPhone = container.id === "modal-messages" ? openModalPhone : openConvsPhone;
+    if (_rmPhone) {
+      const _rmBtn = document.createElement("button");
+      _rmBtn.textContent = "🗑 Remover mídia";
+      _rmBtn.style.cssText = "display:block;margin:6px 0 2px;padding:2px 8px;font-size:.72rem;color:#999;background:transparent;border:1px solid #ddd;border-radius:4px;cursor:pointer;";
+      _rmBtn.title = "Remover o arquivo do armazenamento (a mensagem permanece no histórico)";
+      _rmBtn.onclick = (e) => { e.stopPropagation(); removeMedia(_rmPhone, historyIndex, _rmBtn); };
+      bubble.appendChild(_rmBtn);
+    }
   }
 
   wrap.appendChild(bubble);
@@ -7678,6 +7692,32 @@ function clearReplyTarget(prefix) {
   _replyTarget[prefix] = null;
   const bar = document.getElementById(`${prefix}-reply-bar`);
   if (bar) bar.style.display = "none";
+}
+
+async function removeMedia(phone, historyIndex, btnEl) {
+  if (!confirm("Remover esta mídia do armazenamento?\n\nA mensagem continuará no histórico, mas o arquivo não poderá ser aberto pelo painel.")) return;
+  if (btnEl) { btnEl.disabled = true; btnEl.textContent = "Removendo..."; }
+  try {
+    const att = getCurrentAttendant();
+    const res = await fetch("/api/delete-media", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        phone,
+        historyIndex,
+        reason: "manual_panel_cleanup",
+        attendantName: att?.name || "painel",
+      }),
+    });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.error || "Erro desconhecido");
+    showToast("Mídia removida do armazenamento.");
+    if (openModalPhone === phone) { await refreshModal(); }
+    else if (openConvsPhone === phone) { await refreshConvsChat(phone, openConvsRedisKey); }
+  } catch (err) {
+    if (btnEl) { btnEl.disabled = false; btnEl.textContent = "🗑 Remover mídia"; }
+    showToast("Não consegui remover a mídia agora. Tente novamente ou avise Lucas.", "t-err");
+  }
 }
 
 function storeMedia(base64, mimeType, mediaUrl) {

@@ -161,8 +161,15 @@ export default async function handler(req, res) {
       if (m.templateText)   item.templateText   = m.templateText;
       if (m.sentByTemplate) item.sentByTemplate = m.sentByTemplate;
 
+      // Estado 0 — mídia deletada manualmente pelo painel: não tentar presign
+      if (m.mediaDeleted) {
+        if (mediaType || m.mediaType) item.mediaType = mediaType || m.mediaType;
+        if (mediaMimeType)            item.mediaMimeType = mediaMimeType;
+        if (mediaFilename)            item.mediaFilename = mediaFilename;
+        item.mediaUnavailable = true;
+        item.mediaDeleted     = true;
       // Estado 3 — R2: gera URL presigned (TTL 24h); sem base64 na resposta
-      if (m.mediaStorageKey) {
+      } else if (m.mediaStorageKey) {
         item.mediaType     = mediaType || m.mediaType;
         item.mediaMimeType = mediaMimeType;
         if (mediaFilename) item.mediaFilename = mediaFilename;

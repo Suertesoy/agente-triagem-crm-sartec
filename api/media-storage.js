@@ -13,7 +13,7 @@
 //           → webhook cai no fallback base64 no Redis (comportamento anterior)
 // ============================================================
 
-import { S3Client, PutObjectCommand, GetObjectCommand } from "@aws-sdk/client-s3";
+import { S3Client, PutObjectCommand, GetObjectCommand, DeleteObjectCommand } from "@aws-sdk/client-s3";
 import { getSignedUrl } from "@aws-sdk/s3-request-presigner";
 
 // Mapa de mimeType → extensão de arquivo
@@ -123,4 +123,25 @@ export async function getMediaUrl(storageKey, expiresIn = 3600) {
     Key:    storageKey,
   });
   return getSignedUrl(getS3(), command, { expiresIn });
+}
+
+/**
+ * Apaga um objeto do Cloudflare R2.
+ *
+ * @param {string} storageKey  chave do objeto (deve começar com "media/")
+ * @returns {Promise<{deleted: true, storageKey: string}>}
+ */
+export async function deleteMedia(storageKey) {
+  if (process.env.R2_DISABLED === "true") {
+    throw new Error("R2_DISABLED — operação de deleção não disponível");
+  }
+  if (!storageKey || !String(storageKey).startsWith("media/")) {
+    throw new Error("storageKey inválida — deve começar com media/");
+  }
+  await getS3().send(new DeleteObjectCommand({
+    Bucket: process.env.R2_BUCKET,
+    Key:    storageKey,
+  }));
+  console.log(`[R2] deleted key=${storageKey}`);
+  return { deleted: true, storageKey };
 }
