@@ -7,6 +7,7 @@
 // ============================================================
 
 import Redis from "ioredis";
+import { uploadMedia } from "./media-storage.js";
 
 let redisClient = null;
 
@@ -203,8 +204,15 @@ async function sendImage(req, res, body, PHONE_NUMBER_ID, ACCESS_TOKEN) {
   const metaMessageId = metaData?.messages?.[0]?.id || null;
   console.log(`[send/image] ✅ ID: ${metaMessageId}${replyToMessageId ? " (reply)" : ""}`);
 
-  // 3. Salva no histórico — sem base64 para não estourar Redis
-  // A imagem foi entregue à Meta; o Redis guarda apenas metadados e indicação de mídia
+  // 3. Upload para R2 (best-effort; falha não cancela envio já realizado)
+  let r2Result = null;
+  try {
+    r2Result = await uploadMedia(binaryData, mimeType, to, metaMessageId || `img_${Date.now()}`);
+  } catch (r2Err) {
+    console.warn(`[send/image] ⚠️ R2 upload falhou: ${String(r2Err.message || "").substring(0, 80)}`);
+  }
+
+  // 4. Salva no histórico — sem base64 para não estourar Redis
   const imgEntry = {
     role: "assistant",
     content:          caption || "",
@@ -218,6 +226,12 @@ async function sendImage(req, res, body, PHONE_NUMBER_ID, ACCESS_TOKEN) {
     deliveryStatus:   "sent",
     deliveryStatusAt: new Date().toISOString(),
   };
+  if (r2Result) {
+    imgEntry.mediaStorageKey      = r2Result.storageKey;
+    imgEntry.mediaStorageProvider = "cloudflare-r2";
+  } else {
+    imgEntry.mediaStorageFailed   = true;
+  }
   if (replyToMessageId) imgEntry.replyToMsgId = replyToMessageId;
   const imgSaved = await saveToHistory(to, imgEntry);
   if (!imgSaved) console.warn(`[send/image] ⚠️ Mensagem entregue à Meta mas não persistida no Redis (+${to})`);
@@ -301,8 +315,15 @@ async function sendDocument(req, res, body, PHONE_NUMBER_ID, ACCESS_TOKEN) {
   const metaMessageId = metaData?.messages?.[0]?.id || null;
   console.log(`[send/document] ✅ ID: ${metaMessageId}${replyToMessageId ? " (reply)" : ""}`);
 
-  // 3. Salva no histórico — sem base64 para não estourar Redis
-  // O documento foi entregue à Meta; o Redis guarda apenas metadados e indicação de mídia
+  // 3. Upload para R2 (best-effort; falha não cancela envio já realizado)
+  let r2DocResult = null;
+  try {
+    r2DocResult = await uploadMedia(binaryData, mimeType, to, metaMessageId || `doc_${Date.now()}`);
+  } catch (r2Err) {
+    console.warn(`[send/document] ⚠️ R2 upload falhou: ${String(r2Err.message || "").substring(0, 80)}`);
+  }
+
+  // 4. Salva no histórico — sem base64 para não estourar Redis
   const docEntry = {
     role:             "assistant",
     content:          caption || "",
@@ -317,6 +338,12 @@ async function sendDocument(req, res, body, PHONE_NUMBER_ID, ACCESS_TOKEN) {
     deliveryStatus:   "sent",
     deliveryStatusAt: new Date().toISOString(),
   };
+  if (r2DocResult) {
+    docEntry.mediaStorageKey      = r2DocResult.storageKey;
+    docEntry.mediaStorageProvider = "cloudflare-r2";
+  } else {
+    docEntry.mediaStorageFailed   = true;
+  }
   if (replyToMessageId) docEntry.replyToMsgId = replyToMessageId;
   const docSaved = await saveToHistory(to, docEntry);
   if (!docSaved) console.warn(`[send/document] ⚠️ Documento entregue à Meta mas não persistido no Redis (+${to})`);

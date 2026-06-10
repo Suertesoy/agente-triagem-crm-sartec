@@ -3595,8 +3595,8 @@
       .convs-empty { display:none; }
       .mob-back-btn { display:flex;align-items:center;gap:5px;background:rgba(255,255,255,.15);border:none;color:#fff;padding:5px 10px;border-radius:7px;font-size:.78rem;font-weight:600;cursor:pointer;flex-shrink:0;white-space:nowrap; }
       .mob-back-btn:active { background:rgba(255,255,255,.28); }
-      .modal-overlay { padding:0;align-items:flex-end; }
-      .modal-box { width:100%;height:96dvh;max-width:100%;max-height:96dvh;border-radius:16px 16px 0 0; }
+      .modal-overlay { padding:0;align-items:stretch; }
+      .modal-box { width:100%;height:100dvh;height:100vh;max-width:100%;max-height:100%;border-radius:0; }
       .card { min-height:250px;padding:13px 15px 11px; }
       #ob-wrap { display:none !important; }
       .mob-nav { display:flex;position:fixed;bottom:0;left:0;right:0;z-index:400;background:var(--brand-navy);border-top:1px solid rgba(255,255,255,.12);height:56px;align-items:stretch; }
@@ -7388,7 +7388,7 @@ function getQuotedPreview(msg, history) {
 
 function appendBubble(container, msg, optimistic = false, history = null, historyIndex = null) {
   const { role, content, sentByHuman, mediaType, mediaData, mediaMimeType, mediaFilename,
-          mediaUrl, mediaUnavailable, mediaDeleted,
+          mediaUrl, mediaUnavailable, mediaDeleted, sentMedia, mediaStorageFailed,
           attendantId, attendantName, transcription, transcriptionError } = msg;
 
   // ── Evento de falha no template ──
@@ -7552,16 +7552,30 @@ function appendBubble(container, msg, optimistic = false, history = null, histor
       bubble.appendChild(_fbDiv);
     }
 
+  // ── Mídia enviada pelo atendente sem preview disponível ──
+  } else if (sentMedia && mediaType && !mediaUrl && !mediaData) {
+    const _icons = { image: "📷", document: "📄", video: "🎥", audio: "🎙" };
+    const _labels = { image: "Imagem", document: "Documento", video: "Vídeo", audio: "Áudio" };
+    const _smDiv = document.createElement("div");
+    _smDiv.style.cssText = "font-size:.82rem;font-style:italic;color:#8a8a8a;padding:4px 0;";
+    _smDiv.textContent = `${_icons[mediaType] || "📎"} ${_labels[mediaType] || "Mídia"} enviada — preview indisponível`;
+    bubble.appendChild(_smDiv);
+    if (content) {
+      const txt = document.createElement("span");
+      txt.textContent = content;
+      bubble.appendChild(txt);
+    }
+
   // ── Texto ──
   } else {
     const _textNode = document.createElement("span");
-    _textNode.textContent = content || "[mídia]";
+    _textNode.textContent = content || "";
     bubble.appendChild(_textNode);
   }
 
   // ── Botão "Remover mídia" ────────────────────────────────────────────────────
   if (!optimistic && historyIndex !== null && !mediaDeleted && !mediaUnavailable &&
-      (mediaType || mediaUrl || mediaData)) {
+      (mediaUrl || mediaData)) {
     const _rmPhone = container.id === "modal-messages" ? openModalPhone : openConvsPhone;
     if (_rmPhone) {
       const _rmBtn = document.createElement("button");

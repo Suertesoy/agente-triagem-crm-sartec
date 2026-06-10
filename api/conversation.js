@@ -150,9 +150,11 @@ export default async function handler(req, res) {
         deliveryError:    m.deliveryError    || null,
       };
 
-      if (m.metaMessageId) item.metaMessageId = m.metaMessageId;
-      if (m.replyToMsgId)  item.replyToMsgId  = m.replyToMsgId;
-      if (m.replyToFrom)   item.replyToFrom   = m.replyToFrom;
+      if (m.metaMessageId)      item.metaMessageId      = m.metaMessageId;
+      if (m.replyToMsgId)       item.replyToMsgId       = m.replyToMsgId;
+      if (m.replyToFrom)        item.replyToFrom        = m.replyToFrom;
+      if (m.sentMedia)          item.sentMedia          = m.sentMedia;
+      if (m.mediaStorageFailed) item.mediaStorageFailed = m.mediaStorageFailed;
       // Campos de template — necessários para renderização e status no painel
       if (m.messageType)    item.messageType    = m.messageType;
       if (m.templateType)   item.templateType   = m.templateType;
