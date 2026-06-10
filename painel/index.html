@@ -3684,6 +3684,35 @@
          bug de ordem de pintura no WebKit, fazendo botão e rodapé aparecerem encobertos. */
       .card-window-closed::after { display:none; }
       .card-window-closed > *:not(.card-status-dot) { position:static; z-index:auto; }
+
+      /* ── Modal Kanban: ocultar bottom nav enquanto chat estiver aberto ──────────────
+         body.modal-open é adicionado por openChat() e removido por closeModal().
+         Sem isso, mob-nav (z-index:500, após modal no DOM) pinta sobre o composer. */
+      body.modal-open .mob-nav { display:none !important; }
+
+      /* ── Modal header: compacto no mobile ── */
+      .modal-header { padding:8px 10px; }
+      .modal-header h2 { font-size:.9rem; }
+      .modal-hdr-btn { padding:4px 8px; font-size:.72rem; }
+      .btn-contact-modal { padding:4px 8px !important; font-size:.72rem !important; margin-right:4px !important; }
+
+      /* ── Barras de status/atendente: mais compactas no mobile ── */
+      .window-status-bar { padding:4px 12px; font-size:.75rem; }
+      .active-attendant-bar { padding:3px 10px; font-size:.68rem; }
+
+      /* ── Resumo do atendente: altura limitada (colapsado por JS no mobile) ── */
+      #modal-summary-block { max-height:200px; overflow-y:auto; }
+
+      /* ── Composer: padding seguro para barra home do iOS ── */
+      .modal-box .composer { padding-bottom:calc(8px + env(safe-area-inset-bottom, 0px)); }
+
+      /* ── Cards Kanban: restaurar aparência próxima ao desktop ──────────────────────
+         Breakpoints max-width:1200px e max-width:1024px reduzem font-size/padding sem
+         override mobile → cards ficam menores que o desktop. Corrigir aqui. */
+      .card { padding:14px 14px 12px; min-height:240px; border-radius:16px; }
+      .card-name { font-size:.88rem; }
+      .card-title { font-size:.9rem; }
+      .btn-open { font-size:.78rem; padding:8px 12px; }
     }
 
     /* ══════════════════════════════════════════════════
@@ -6854,7 +6883,7 @@ function renderModal(data) {
   }
   if (data.status === "aguardando_humano" || data.status === "triagem_incompleta") {
     summaryBlock.style.display = "";
-    summaryBlock.open = true;
+    summaryBlock.open = window.innerWidth >= 900;
     summaryBlock.innerHTML = buildSummaryHTML(data);
   } else {
     summaryBlock.style.display = "none";
