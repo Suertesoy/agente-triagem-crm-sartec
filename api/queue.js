@@ -20,7 +20,7 @@ function getRedis() {
 }
 
 const SESSION_TTL = 60 * 60 * 24 * 90; // 90 dias — retenção mínima de histórico
-const INATIVO_MS  = 30 * 60 * 1000;  // 30min sem atividade
+const INATIVO_MS  = 15 * 60 * 1000;  // 15min sem atividade — triagem sem resposta cai para pendente no CRM
 
 // ── Gera resumo operacional derivado do histórico (sem chamar IA) ────────────
 const _QUEUE_USELESS = /^(olá?|ola|oi+|hey|hi|bom\s+dia|boa\s+tarde|boa\s+noite|jurídica|juridica|pessoa\s+jurídica|pessoa\s+juridica|ainda\s+não|ainda\s+nao|só|so|somente\s+isso|ok|obrigad|valeu|sim|não|nao|pode|certo|entendi|por\s+favor)[\s!.,?]*$/i;
@@ -170,7 +170,7 @@ export default async function handler(req, res) {
       const status     = session.status || "ativo";
 
       // ── Marcação lazy de triagem_incompleta ──
-      // Sessões ativas (sem handoff, sem resolução) paradas há >30min
+      // Sessões ativas (sem handoff, sem resolução) paradas há >15min
       if (status === "ativo" && !session.handoffDone) {
         const lastAct = session.lastActivityAt
           ? new Date(session.lastActivityAt).getTime()
