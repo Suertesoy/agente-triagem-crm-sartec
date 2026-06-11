@@ -3838,6 +3838,100 @@
       color: var(--brand-navy);
       box-shadow: 0 1px 3px rgba(0,0,0,0.1);
     }
+
+    /* Barra de filtros de segmento (PF/PJ, Atendente, Categoria) */
+    .metrics-filter-bar {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 16px;
+      align-items: center;
+      padding: 10px 0 6px;
+      border-bottom: 1px solid var(--border);
+      margin-bottom: 4px;
+    }
+    .metrics-filter-group {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+    .metrics-filter-label {
+      font-size: 0.7rem;
+      font-weight: 700;
+      color: var(--text-muted);
+      text-transform: uppercase;
+      letter-spacing: .05em;
+      white-space: nowrap;
+    }
+    .filter-chip-group {
+      display: flex;
+      gap: 3px;
+      background: #e2e6f0;
+      padding: 3px;
+      border-radius: 7px;
+    }
+    .filter-chip {
+      border: none;
+      background: none;
+      padding: 4px 12px;
+      font-size: 0.78rem;
+      font-weight: 600;
+      color: var(--text-secondary);
+      border-radius: 5px;
+      cursor: pointer;
+      transition: background .15s, color .15s;
+    }
+    .filter-chip.active {
+      background: #fff;
+      color: var(--brand-navy);
+      box-shadow: 0 1px 3px rgba(0,0,0,.1);
+    }
+    .metrics-filter-select {
+      font-size: 0.8rem;
+      font-weight: 500;
+      color: var(--text-primary);
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      padding: 4px 8px;
+      background: #fff;
+      cursor: pointer;
+      outline: none;
+      max-width: 160px;
+    }
+
+    /* Comparativo PF vs PJ */
+    .pfvspj-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 16px;
+    }
+    @media (max-width: 600px) { .pfvspj-grid { grid-template-columns: 1fr; } }
+    .pfvspj-col {
+      background: #f8f9fc;
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      padding: 14px;
+    }
+    .pfvspj-col-title {
+      font-size: 0.8rem;
+      font-weight: 800;
+      color: var(--brand-navy);
+      text-transform: uppercase;
+      letter-spacing: .05em;
+      margin: 0 0 10px 0;
+      border-bottom: 2px solid var(--brand-navy);
+      padding-bottom: 6px;
+    }
+    .pfvspj-stat {
+      display: flex;
+      justify-content: space-between;
+      align-items: baseline;
+      padding: 5px 0;
+      border-bottom: 1px solid rgba(0,0,0,.05);
+      font-size: 0.8rem;
+    }
+    .pfvspj-stat:last-child { border-bottom: none; }
+    .pfvspj-stat-label { color: var(--text-secondary); }
+    .pfvspj-stat-val { font-weight: 700; color: var(--text-primary); }
     
     /* Loading e Erro Discretos */
     .metrics-loading-state {
@@ -4374,7 +4468,37 @@
         <button class="filter-btn" data-period="tudo">Tudo</button>
       </div>
     </div>
-    
+
+    <!-- Filtros de segmento -->
+    <div class="metrics-filter-bar">
+      <div class="metrics-filter-group">
+        <span class="metrics-filter-label">Tipo</span>
+        <div class="filter-chip-group" id="metrics-ct-filter">
+          <button class="filter-chip active" data-ct="all">Todos</button>
+          <button class="filter-chip" data-ct="pf">PF</button>
+          <button class="filter-chip" data-ct="pj">PJ</button>
+        </div>
+      </div>
+      <div class="metrics-filter-group">
+        <span class="metrics-filter-label">Atendente</span>
+        <select id="metrics-att-filter" class="metrics-filter-select">
+          <option value="all">Todos</option>
+        </select>
+      </div>
+      <div class="metrics-filter-group">
+        <span class="metrics-filter-label">Categoria</span>
+        <select id="metrics-cat-filter" class="metrics-filter-select">
+          <option value="all">Todas</option>
+          <option value="lista">Lista Escolar</option>
+          <option value="cotacao_pj">Cotação PJ</option>
+          <option value="xerox">Xerox/Impressão</option>
+          <option value="produto">Produtos</option>
+          <option value="duvida">Dúvida</option>
+          <option value="outro">Outro</option>
+        </select>
+      </div>
+    </div>
+
     <!-- Loading discreto interno -->
     <div class="metrics-loading-state" id="metrics-loading" style="display: none;">
       <div class="metrics-spinner"></div>
@@ -4421,9 +4545,24 @@
           <span class="metric-label">Templates com falha</span>
           <p class="metric-desc">Mensagens ativas rejeitadas pela Meta</p>
         </div>
+        <div class="metric-card">
+          <span class="metric-val" id="metric-triage-incomplete">-</span>
+          <span class="metric-label">Triagens incompletas</span>
+          <p class="metric-desc">Clientes em triagem que pararam de responder</p>
+        </div>
       </div>
       
       <!-- Linha Secundária: Gráficos e Tabelas -->
+      <!-- Comparativo PF vs PJ -->
+      <div class="metrics-row full-width">
+        <div class="metrics-block">
+          <h3>Comparativo PF vs PJ</h3>
+          <div id="pfvspj-comparison" class="pfvspj-grid">
+            <!-- Renderizado dinamicamente -->
+          </div>
+        </div>
+      </div>
+
       <div class="metrics-row">
         <!-- Produtividade por Atendente -->
         <div class="metrics-block">
@@ -4489,6 +4628,18 @@
             <div class="alert-summary-card">
               <span id="alert-missing-name" class="alert-summary-val">0</span>
               <span class="alert-summary-label">Sem nome definido</span>
+            </div>
+            <div class="alert-summary-card">
+              <span id="alert-triage-incomplete" class="alert-summary-val">0</span>
+              <span class="alert-summary-label">Triagem incompleta</span>
+            </div>
+            <div class="alert-summary-card">
+              <span id="alert-triage-15m" class="alert-summary-val">0</span>
+              <span class="alert-summary-label">Triagem parada &gt;15m</span>
+            </div>
+            <div class="alert-summary-card">
+              <span id="alert-no-attendant" class="alert-summary-val">0</span>
+              <span class="alert-summary-label">Sem atendente</span>
             </div>
           </div>
           
@@ -5383,8 +5534,11 @@ function switchTab(tab) {
 // ╔══════════════════════════════════════════════════════════════╗
 // ║  MÉTRICAS DASHBOARD CONTROLLER                               ║
 // ╚══════════════════════════════════════════════════════════════╝
-let metricsPeriod = "30d";
-let _metricsInitialized = false;
+let metricsPeriod        = "30d";
+let metricsCustomerType  = "all";
+let metricsAttendant     = "all";
+let metricsCategory      = "all";
+let _metricsInitialized  = false;
 
 function checkMetricsAccess() {
   const current = getCurrentAttendant();
@@ -5408,15 +5562,37 @@ function initMetricsView() {
   if (_metricsInitialized) return;
   const container = document.getElementById("view-metrics");
   if (!container) return;
-  const filterBtns = container.querySelectorAll(".metrics-period-filter .filter-btn");
-  filterBtns.forEach(btn => {
+
+  // Filtro de período
+  const periodBtns = container.querySelectorAll(".metrics-period-filter .filter-btn");
+  periodBtns.forEach(btn => {
     btn.onclick = (e) => {
-      filterBtns.forEach(b => b.classList.remove("active"));
+      periodBtns.forEach(b => b.classList.remove("active"));
       e.target.classList.add("active");
       metricsPeriod = e.target.dataset.period;
       loadMetrics();
     };
   });
+
+  // Filtro de tipo de cliente (PF/PJ/Todos)
+  const ctBtns = container.querySelectorAll("#metrics-ct-filter .filter-chip");
+  ctBtns.forEach(btn => {
+    btn.onclick = (e) => {
+      ctBtns.forEach(b => b.classList.remove("active"));
+      e.target.classList.add("active");
+      metricsCustomerType = e.target.dataset.ct;
+      loadMetrics();
+    };
+  });
+
+  // Filtro de atendente
+  const attSel = document.getElementById("metrics-att-filter");
+  if (attSel) attSel.onchange = () => { metricsAttendant = attSel.value; loadMetrics(); };
+
+  // Filtro de categoria
+  const catSel = document.getElementById("metrics-cat-filter");
+  if (catSel) catSel.onchange = () => { metricsCategory = catSel.value; loadMetrics(); };
+
   _metricsInitialized = true;
 }
 
@@ -5440,7 +5616,13 @@ function loadMetrics() {
   if (contentEl) contentEl.style.display = "none";
   if (errorEl) errorEl.style.display = "none";
   
-  fetch(`/api/metrics?period=${metricsPeriod}`)
+  const _mParams = new URLSearchParams({
+    period:       metricsPeriod,
+    customerType: metricsCustomerType,
+    attendant:    metricsAttendant,
+    category:     metricsCategory
+  });
+  fetch(`/api/metrics?${_mParams}`)
     .then(res => {
       if (!res.ok) throw new Error("Erro de resposta da rede");
       return res.json();
@@ -5448,6 +5630,7 @@ function loadMetrics() {
     .then(data => {
       if (loadingEl) loadingEl.style.display = "none";
       if (contentEl) contentEl.style.display = "block";
+      updateAttendantSelect(data.attendants || []);
       renderMetricsData(data);
     })
     .catch(err => {
@@ -5482,12 +5665,15 @@ function renderMetricsData(data) {
   const avgRespEl = document.getElementById("metric-avg-resp-time");
   const failedEl = document.getElementById("metric-failed-templates");
 
-  if (totalEl) totalEl.textContent = sum.totalChats !== null && sum.totalChats !== undefined ? sum.totalChats : "Sem dados suficientes";
-  if (waitingEl) waitingEl.textContent = sum.waitingChats !== null && sum.waitingChats !== undefined ? sum.waitingChats : "Sem dados suficientes";
-  if (resolvedEl) resolvedEl.textContent = sum.resolvedChats !== null && sum.resolvedChats !== undefined ? sum.resolvedChats : "Sem dados suficientes";
-  if (avgResEl) avgResEl.textContent = formatDuration(sum.avgResolutionTimeMs);
+  const _n = (v) => v !== null && v !== undefined ? v : "—";
+  if (totalEl)   totalEl.textContent   = _n(sum.totalChats);
+  if (waitingEl) waitingEl.textContent = _n(sum.waitingChats);
+  if (resolvedEl) resolvedEl.textContent = _n(sum.resolvedChats);
+  if (avgResEl)  avgResEl.textContent  = formatDuration(sum.avgResolutionTimeMs);
   if (avgRespEl) avgRespEl.textContent = formatDuration(sum.avgFirstResponseTimeMs);
-  if (failedEl) failedEl.textContent = sum.failedTemplatesCount !== null && sum.failedTemplatesCount !== undefined ? sum.failedTemplatesCount : "Sem dados suficientes";
+  if (failedEl)  failedEl.textContent  = _n(sum.failedTemplatesCount);
+  const triageEl = document.getElementById("metric-triage-incomplete");
+  if (triageEl) triageEl.textContent = _n(sum.triageIncompleteCount);
   
   // Produtividade por Atendente
   const attsList = document.getElementById("metrics-attendants-list");
@@ -5500,7 +5686,7 @@ function renderMetricsData(data) {
           <div class="attendant-rank-badge">${index + 1}</div>
           <div class="attendant-rank-info">
             <div class="attendant-rank-name">${esc(att.name)}</div>
-            <div class="attendant-rank-meta">Conversas atuadas: ${att.conversationsActed}</div>
+            <div class="attendant-rank-meta">Atuadas: ${att.conversationsActed} &nbsp;·&nbsp; Resolvidas: ${att.resolvedCount || 0}</div>
           </div>
           <div class="attendant-rank-score">${att.messagesSent} msgs</div>
         </div>
@@ -5532,9 +5718,12 @@ function renderMetricsData(data) {
     }
   }
   
+  // Comparativo PF vs PJ
+  renderPfVsPj(data.pfvspj || {});
+
   // Funil do Pipeline
   renderFunnel(data.funnel || {});
-  
+
   // Tipos de Demanda
   renderDemands(data.demands || {});
   
@@ -5546,11 +5735,18 @@ function renderMetricsData(data) {
   const aFailed = document.getElementById("alert-failed-template");
   const aMissing = document.getElementById("alert-missing-name");
 
-  if (aIdle) aIdle.textContent = alerts.idle30m !== undefined ? alerts.idle30m : 0;
-  if (aClosed) aClosed.textContent = alerts.windowClosed !== undefined ? alerts.windowClosed : 0;
-  if (aWaiting) aWaiting.textContent = alerts.waitingTemplate !== undefined ? alerts.waitingTemplate : 0;
-  if (aFailed) aFailed.textContent = alerts.failedTemplate !== undefined ? alerts.failedTemplate : 0;
-  if (aMissing) aMissing.textContent = alerts.missingName !== undefined ? alerts.missingName : 0;
+  const _a = (v) => v !== undefined ? v : 0;
+  if (aIdle)    aIdle.textContent    = _a(alerts.idle30m);
+  if (aClosed)  aClosed.textContent  = _a(alerts.windowClosed);
+  if (aWaiting) aWaiting.textContent = _a(alerts.waitingTemplate);
+  if (aFailed)  aFailed.textContent  = _a(alerts.failedTemplate);
+  if (aMissing) aMissing.textContent = _a(alerts.missingName);
+  const aTriage    = document.getElementById("alert-triage-incomplete");
+  const aTriage15m = document.getElementById("alert-triage-15m");
+  const aNoAtt     = document.getElementById("alert-no-attendant");
+  if (aTriage)    aTriage.textContent    = _a(alerts.triageIncomplete);
+  if (aTriage15m) aTriage15m.textContent = _a(alerts.triageIncomplete15m);
+  if (aNoAtt)     aNoAtt.textContent     = _a(alerts.noAttendant);
   
   // Tabela de Alertas
   const tableBody = document.getElementById("alerts-table-body");
@@ -5668,6 +5864,51 @@ function renderDemands(demandsData) {
           <div class="demand-bar-fill" style="width: ${widthPct}%"></div>
         </div>
         <div class="demand-count">${d.count}</div>
+      </div>
+    `;
+  }).join("");
+}
+
+function updateAttendantSelect(attendants) {
+  const sel = document.getElementById("metrics-att-filter");
+  if (!sel) return;
+  const cur = sel.value;
+  sel.innerHTML = '<option value="all">Todos</option>';
+  attendants.forEach(att => {
+    const opt = document.createElement("option");
+    opt.value = att.id;
+    opt.textContent = att.name;
+    if (att.id === cur) opt.selected = true;
+    sel.appendChild(opt);
+  });
+  if (cur && cur !== "all") sel.value = cur;
+}
+
+function renderPfVsPj(pfvspj) {
+  const el = document.getElementById("pfvspj-comparison");
+  if (!el) return;
+  const cols = [
+    { key: "pf", label: "Pessoa Física (PF)" },
+    { key: "pj", label: "Pessoa Jurídica (PJ)" }
+  ];
+  el.innerHTML = cols.map(col => {
+    const d = (pfvspj[col.key] || {});
+    const rows = [
+      { label: "Total no período",            val: d.total            !== undefined ? d.total            : "—" },
+      { label: "Resolvidas",                  val: d.resolved         !== undefined ? d.resolved         : "—" },
+      { label: "Triagens incompletas",         val: d.triageIncomplete !== undefined ? d.triageIncomplete : "—" },
+      { label: "Tempo médio de resolução",    val: formatDuration(d.avgResolutionMs)    },
+      { label: "Primeira resposta humana",    val: formatDuration(d.avgFirstResponseMs) }
+    ];
+    return `
+      <div class="pfvspj-col">
+        <div class="pfvspj-col-title">${col.label}</div>
+        ${rows.map(r => `
+          <div class="pfvspj-stat">
+            <span class="pfvspj-stat-label">${r.label}</span>
+            <span class="pfvspj-stat-val">${r.val}</span>
+          </div>
+        `).join("")}
       </div>
     `;
   }).join("");
