@@ -230,6 +230,7 @@
     .mob-new-fab { display:none; position:fixed; bottom:68px; right:16px; width:48px; height:48px; border-radius:50%; background:var(--accent,#2563eb); color:#fff; border:none; box-shadow:0 4px 16px rgba(15,23,42,.30); font-size:1.35rem; align-items:center; justify-content:center; cursor:pointer; z-index:390; transition:background .15s,box-shadow .15s; }
     .mob-new-fab:active { background:var(--accent-dark,#1d4ed8); }
     .mob-stage-mover { display:none; }
+    .card-footer-timer { display:none; }
 
     /* ── Modal de aviso: reply + anexo + texto ───────────────── */
     .reply-warn-box { background:#fff; border-radius:14px; padding:24px; width:360px; max-width:calc(100vw - 32px); box-shadow:0 16px 48px rgba(15,23,42,.18); }
@@ -3719,6 +3720,15 @@
       .mob-stage-mover { display:flex; align-items:center; gap:8px; padding:9px 0 3px; border-top:1px solid rgba(0,0,0,.07); margin-top:6px; }
       .mob-stage-label { font-size:.68rem; font-weight:700; color:var(--text-secondary); white-space:nowrap; flex-shrink:0; }
       .mob-stage-select { flex:1; font-size:1rem; border:1px solid var(--border); border-radius:7px; padding:6px 8px; background:#fff; color:var(--text-primary); outline:none; font-family:inherit; }
+      /* Timer no rodapé mobile: fica no centro da linha de ações (col 2 do grid 1fr auto 1fr) */
+      .card-footer-timer { display:block; justify-self:center; font-size:.72rem; font-weight:700; color:var(--text-secondary); background:rgba(0,0,0,.05); border-radius:10px; padding:2px 7px; white-space:nowrap; }
+      /* Categoria: esconde timer de cat-row (movido para footer) e limita largura do chip */
+      .card-cat-row .card-win-time { display:none; }
+      .card-cat-row .demand-select { flex:0 1 auto; max-width:160px; }
+      /* Finalizar à direita no footer mobile (col 3 do grid) */
+      .card-footer-row .btn-resolve-inline { justify-self:end; }
+      /* Priority dot: menor e menos dominante no mobile */
+      .card-status-dot { width:18px; height:18px; top:10px; right:10px; }
     }
 
     /* ══════════════════════════════════════════════════
@@ -6198,12 +6208,10 @@ function buildCard(c, col, cols) {
             onclick="event.stopPropagation();changeClientTypeToggle('${esc(c.phone)}','pj')"
             title="Pessoa Jurídica">PJ</button>
         </div>
+        <span class="card-footer-timer" onclick="event.stopPropagation()">${cardWindowTimeText(c)}</span>
         ${!isResolved ? `<button class="btn-resolve-inline"
             onclick="event.stopPropagation();quickResolveCard('${esc(c.phone)}')"
-            title="Resolver atendimento">✓ Finalizar</button>` : "<span></span>"}
-        <button class="card-expand-btn"
-          onclick="event.stopPropagation();toggleCardExpand(event,'${esc(c.phone)}')"
-          title="${_expandedCards.has(c.phone) ? 'Ocultar detalhes' : 'Ver detalhes'}">${_expandedCards.has(c.phone) ? "▲" : "▼"}</button>
+            title="Resolver atendimento">✓ Finalizar</button>` : ""}
       </div>
       ${buildExpandBody(c, clientType)}
       ${isResolved && c.resolvedAt ? `<div style="font-size:.61rem;color:var(--text-muted);text-align:center;padding-top:4px">Resolvido ${relTime(c.resolvedAt)}</div>` : ""}
