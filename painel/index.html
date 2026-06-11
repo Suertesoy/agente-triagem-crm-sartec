@@ -4329,6 +4329,25 @@
       margin-right: 4px;
       margin-bottom: 2px;
     }
+    .metrics-alerts-top-block {
+      margin-bottom: 0;
+    }
+    .metrics-operational-note {
+      font-size: 0.78rem;
+      color: var(--text-muted);
+      background: #f8f9fc;
+      border: 1px solid var(--border);
+      border-left: 3px solid var(--brand-navy);
+      border-radius: 6px;
+      padding: 9px 14px;
+      line-height: 1.6;
+    }
+    .alerts-table tbody tr.alert-row-link {
+      cursor: pointer;
+    }
+    .alerts-table tbody tr.alert-row-link:hover td {
+      background: #fdf8f8;
+    }
   </style>
 </head>
 <body>
@@ -4513,12 +4532,52 @@
     
     <!-- Conteúdo principal -->
     <div class="metrics-content" id="metrics-content-area">
-      <!-- Grid de Cards de Métricas Principais -->
+
+      <!-- 1. Alertas Operacionais — topo para ação imediata -->
+      <div class="metrics-block metrics-alerts-top-block">
+        <h3>Alertas Operacionais</h3>
+        <div class="alerts-summary-grid">
+          <div class="alert-summary-card">
+            <span id="alert-idle30m" class="alert-summary-val">0</span>
+            <span class="alert-summary-label">Paradas &gt; 30m</span>
+          </div>
+          <div class="alert-summary-card">
+            <span id="alert-window-closed" class="alert-summary-val">0</span>
+            <span class="alert-summary-label">Janela fechada</span>
+          </div>
+          <div class="alert-summary-card">
+            <span id="alert-waiting-template" class="alert-summary-val">0</span>
+            <span class="alert-summary-label">Aguardando template</span>
+          </div>
+          <div class="alert-summary-card">
+            <span id="alert-failed-template" class="alert-summary-val">0</span>
+            <span class="alert-summary-label">Template com falha</span>
+          </div>
+          <div class="alert-summary-card">
+            <span id="alert-triage-incomplete" class="alert-summary-val">0</span>
+            <span class="alert-summary-label">Triagem incompleta</span>
+          </div>
+          <div class="alert-summary-card">
+            <span id="alert-triage-15m" class="alert-summary-val">0</span>
+            <span class="alert-summary-label">Triagem parada &gt;15m</span>
+          </div>
+          <div class="alert-summary-card">
+            <span id="alert-missing-name" class="alert-summary-val">0</span>
+            <span class="alert-summary-label">Sem nome definido</span>
+          </div>
+          <div class="alert-summary-card">
+            <span id="alert-no-attendant" class="alert-summary-val">0</span>
+            <span class="alert-summary-label">Sem atendente</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- 2. KPIs Principais -->
       <div class="metrics-grid">
         <div class="metric-card">
           <span class="metric-val" id="metric-total-chats">-</span>
           <span class="metric-label">Conversas no período</span>
-          <p class="metric-desc">Volume total de atendimentos ativos e arquivados</p>
+          <p class="metric-desc">Volume total no filtro selecionado</p>
         </div>
         <div class="metric-card">
           <span class="metric-val" id="metric-waiting-chats">-</span>
@@ -4532,28 +4591,48 @@
         </div>
         <div class="metric-card">
           <span class="metric-val" id="metric-avg-res-time">-</span>
-          <span class="metric-label">Tempo médio de resolução</span>
-          <p class="metric-desc">Intervalo entre handoff/mensagem e resolução</p>
+          <span class="metric-label">Resolução bruta (média)</span>
+          <p class="metric-desc">Handoff/entrada até resolução · inclui períodos fora da operação</p>
         </div>
         <div class="metric-card">
           <span class="metric-val" id="metric-avg-resp-time">-</span>
-          <span class="metric-label">Primeira resposta humana</span>
-          <p class="metric-desc">Tempo médio até o primeiro retorno do atendente</p>
-        </div>
-        <div class="metric-card">
-          <span class="metric-val" id="metric-failed-templates">-</span>
-          <span class="metric-label">Templates com falha</span>
-          <p class="metric-desc">Mensagens ativas rejeitadas pela Meta</p>
+          <span class="metric-label">1ª resposta bruta (média)</span>
+          <p class="metric-desc">Entrada até 1ª msg do atendente · inclui períodos fora da operação</p>
         </div>
         <div class="metric-card">
           <span class="metric-val" id="metric-triage-incomplete">-</span>
           <span class="metric-label">Triagens incompletas</span>
           <p class="metric-desc">Clientes em triagem que pararam de responder</p>
         </div>
+        <div class="metric-card">
+          <span class="metric-val" id="metric-failed-templates">-</span>
+          <span class="metric-label">Templates com falha</span>
+          <p class="metric-desc">Mensagens ativas rejeitadas pela Meta</p>
+        </div>
       </div>
-      
-      <!-- Linha Secundária: Gráficos e Tabelas -->
-      <!-- Comparativo PF vs PJ -->
+
+      <!-- Nota de tempo operacional -->
+      <div class="metrics-operational-note">
+        <strong>Tempo operacional em preparação:</strong> os tempos acima são brutos e incluem períodos sem atendentes ativos. O cálculo com desconto de pausas será disponibilizado quando o registro de presença por atendente for instrumentado.
+      </div>
+
+      <!-- 3. Produtividade por Atendente + Volume por Dia -->
+      <div class="metrics-row">
+        <div class="metrics-block">
+          <h3>Produtividade por Atendente</h3>
+          <div id="metrics-attendants-list" class="metrics-list-card">
+            <!-- Renderizado dinamicamente -->
+          </div>
+        </div>
+        <div class="metrics-block">
+          <h3>Volume de Conversas por Dia</h3>
+          <div class="chart-container" id="metrics-volume-chart">
+            <!-- Gráfico de barras verticais em CSS puro renderizado dinamicamente -->
+          </div>
+        </div>
+      </div>
+
+      <!-- 4. Comparativo PF vs PJ -->
       <div class="metrics-row full-width">
         <div class="metrics-block">
           <h3>Comparativo PF vs PJ</h3>
@@ -4563,26 +4642,8 @@
         </div>
       </div>
 
+      <!-- 5. Funil do Pipeline + Tipos de Demanda -->
       <div class="metrics-row">
-        <!-- Produtividade por Atendente -->
-        <div class="metrics-block">
-          <h3>Produtividade por Atendente</h3>
-          <div id="metrics-attendants-list" class="metrics-list-card">
-            <!-- Renderizado dinamicamente -->
-          </div>
-        </div>
-        
-        <!-- Volume por Dia -->
-        <div class="metrics-block">
-          <h3>Volume de Conversas por Dia</h3>
-          <div class="chart-container" id="metrics-volume-chart">
-            <!-- Gráfico de barras verticais em CSS puro renderizado dinamicamente -->
-          </div>
-        </div>
-      </div>
-      
-      <div class="metrics-row">
-        <!-- Funil do Pipeline (PF vs PJ) -->
         <div class="metrics-block">
           <h3>Funil do Pipeline</h3>
           <div class="funnel-container">
@@ -4596,59 +4657,22 @@
             </div>
           </div>
         </div>
-        
-        <!-- Distribuição por Tipo de Demanda -->
         <div class="metrics-block">
           <h3>Tipos de Demanda</h3>
           <div id="demand-distribution" class="demand-list"></div>
         </div>
       </div>
-      
+
+      <!-- 6. Lista de Conversas em Alerta (clicável) -->
       <div class="metrics-row full-width">
-        <!-- Alertas de Saúde da Operação -->
         <div class="metrics-block">
-          <h3>Saúde da Operação (Alertas)</h3>
-          <div class="alerts-summary-grid">
-            <div class="alert-summary-card">
-              <span id="alert-idle30m" class="alert-summary-val">0</span>
-              <span class="alert-summary-label">Paradas > 30m</span>
-            </div>
-            <div class="alert-summary-card">
-              <span id="alert-window-closed" class="alert-summary-val">0</span>
-              <span class="alert-summary-label">Janela fechada</span>
-            </div>
-            <div class="alert-summary-card">
-              <span id="alert-waiting-template" class="alert-summary-val">0</span>
-              <span class="alert-summary-label">Aguardando template</span>
-            </div>
-            <div class="alert-summary-card">
-              <span id="alert-failed-template" class="alert-summary-val">0</span>
-              <span class="alert-summary-label">Template com falha</span>
-            </div>
-            <div class="alert-summary-card">
-              <span id="alert-missing-name" class="alert-summary-val">0</span>
-              <span class="alert-summary-label">Sem nome definido</span>
-            </div>
-            <div class="alert-summary-card">
-              <span id="alert-triage-incomplete" class="alert-summary-val">0</span>
-              <span class="alert-summary-label">Triagem incompleta</span>
-            </div>
-            <div class="alert-summary-card">
-              <span id="alert-triage-15m" class="alert-summary-val">0</span>
-              <span class="alert-summary-label">Triagem parada &gt;15m</span>
-            </div>
-            <div class="alert-summary-card">
-              <span id="alert-no-attendant" class="alert-summary-val">0</span>
-              <span class="alert-summary-label">Sem atendente</span>
-            </div>
-          </div>
-          
-          <h4 style="margin-top: 20px; font-size: 0.9rem; color: var(--text-primary);">Lista de Conversas em Alerta</h4>
+          <h3>Lista de Conversas em Alerta <span style="font-size:.75rem;font-weight:500;color:var(--text-muted);">— clique para abrir</span></h3>
           <div class="alerts-table-wrap">
             <table class="alerts-table">
               <thead>
                 <tr>
                   <th>Cliente</th>
+                  <th>Tipo</th>
                   <th>Telefone</th>
                   <th>Motivos do Alerta</th>
                   <th>Última Atividade</th>
@@ -4661,6 +4685,7 @@
           </div>
         </div>
       </div>
+
     </div>
   </div>
 </div>
@@ -5642,7 +5667,7 @@ function loadMetrics() {
 }
 
 function formatDuration(ms) {
-  if (ms === null || ms === undefined || isNaN(ms)) return "Sem dados suficientes";
+  if (ms === null || ms === undefined || isNaN(ms)) return "—";
   const sec = Math.round(ms / 1000);
   if (sec < 60) return `${sec}s`;
   const min = Math.round(sec / 60);
@@ -5679,7 +5704,7 @@ function renderMetricsData(data) {
   const attsList = document.getElementById("metrics-attendants-list");
   if (attsList) {
     if (!data.attendants || data.attendants.length === 0) {
-      attsList.innerHTML = `<div style="text-align:center; padding:16px; color:var(--text-secondary); font-size:0.8rem;">Sem dados suficientes</div>`;
+      attsList.innerHTML = `<div style="text-align:center;padding:24px 0;color:var(--text-secondary);font-size:.8rem;">Sem registros para este atendente</div>`;
     } else {
       attsList.innerHTML = data.attendants.map((att, index) => `
         <div class="attendant-rank-item">
@@ -5698,7 +5723,7 @@ function renderMetricsData(data) {
   const chartContainer = document.getElementById("metrics-volume-chart");
   if (chartContainer) {
     if (!data.volumeByDay || data.volumeByDay.length === 0) {
-      chartContainer.innerHTML = `<div style="text-align:center; width:100%; padding:48px 0; color:var(--text-secondary); font-size:0.8rem;">Sem dados suficientes</div>`;
+      chartContainer.innerHTML = `<div style="text-align:center;width:100%;padding:48px 0;color:var(--text-secondary);font-size:.8rem;">Sem conversas neste período</div>`;
     } else {
       const maxCount = Math.max(...data.volumeByDay.map(d => d.count), 1);
       chartContainer.innerHTML = data.volumeByDay.map(day => {
@@ -5752,7 +5777,7 @@ function renderMetricsData(data) {
   const tableBody = document.getElementById("alerts-table-body");
   if (tableBody) {
     if (!data.alertsList || data.alertsList.length === 0) {
-      tableBody.innerHTML = `<tr><td colspan="4" style="text-align:center; color:var(--text-secondary); padding:20px;">Nenhum alerta operacional detectado</td></tr>`;
+      tableBody.innerHTML = `<tr><td colspan="5" style="text-align:center; color:var(--text-secondary); padding:20px;">Sem alertas agora</td></tr>`;
     } else {
       tableBody.innerHTML = data.alertsList.map(item => {
         const reasonsHtml = item.reasons.map(r => `<span class="alert-badge">${esc(r)}</span>`).join("");
@@ -5767,12 +5792,15 @@ function renderMetricsData(data) {
             });
           }
         } catch {}
+        const tipoLabel = item.clientType === "pj" ? "PJ" : "PF";
+        const phone = String(item.phone || "");
         return `
-          <tr>
-            <td style="font-weight: 600; color: var(--text-primary);">${esc(item.clientName)}</td>
-            <td>+${esc(item.phone)}</td>
+          <tr class="alert-row-link" onclick="openChat('${esc(phone)}')" title="Abrir conversa">
+            <td style="font-weight:600;color:var(--text-primary);">${esc(item.clientName)}</td>
+            <td style="font-size:.72rem;font-weight:700;color:var(--text-secondary);">${tipoLabel}</td>
+            <td>+${esc(phone)}</td>
             <td>${reasonsHtml}</td>
-            <td style="color: var(--text-secondary); font-variant-numeric: tabular-nums;">${esc(formattedTime)}</td>
+            <td style="color:var(--text-secondary);font-variant-numeric:tabular-nums;">${esc(formattedTime)}</td>
           </tr>
         `;
       }).join("");
@@ -5782,6 +5810,17 @@ function renderMetricsData(data) {
 
 function renderFunnel(funnelData) {
   const pf = funnelData.pf || {};
+  const pj = funnelData.pj || {};
+  const pfEl = document.getElementById("funnel-pf");
+  const pjEl = document.getElementById("funnel-pj");
+  const pfTotal = Object.values(pf).reduce((a, b) => a + (b || 0), 0);
+  const pjTotal = Object.values(pj).reduce((a, b) => a + (b || 0), 0);
+  if (pfTotal === 0 && pjTotal === 0) {
+    const empty = `<div style="text-align:center;padding:16px;color:var(--text-secondary);font-size:.8rem;">Sem conversas neste período</div>`;
+    if (pfEl) pfEl.innerHTML = empty;
+    if (pjEl) pjEl.innerHTML = empty;
+    return;
+  }
   const pfStages = [
     { key: "novo", label: "Novo", cls: "pf-novo" },
     { key: "em_atendimento", label: "Em Atendimento", cls: "pf-em_atendimento" },
@@ -5806,10 +5845,8 @@ function renderFunnel(funnelData) {
       </div>
     `;
   }).join("");
-  const pfEl = document.getElementById("funnel-pf");
   if (pfEl) pfEl.innerHTML = pfHtml;
 
-  const pj = funnelData.pj || {};
   const pjStages = [
     { key: "novo", label: "Novo", cls: "pj-novo" },
     { key: "em_cotacao", label: "Em Cotação", cls: "pj-em_cotacao" },
@@ -5834,7 +5871,6 @@ function renderFunnel(funnelData) {
       </div>
     `;
   }).join("");
-  const pjEl = document.getElementById("funnel-pj");
   if (pjEl) pjEl.innerHTML = pjHtml;
 }
 
@@ -5854,6 +5890,11 @@ function renderDemands(demandsData) {
     label: labelsMap[key],
     count: demandsData[key] || 0
   }));
+  const total = demands.reduce((a, d) => a + d.count, 0);
+  if (total === 0) {
+    container.innerHTML = `<div style="text-align:center;padding:24px 0;color:var(--text-secondary);font-size:.8rem;">Sem dados para este filtro</div>`;
+    return;
+  }
   const maxCount = Math.max(...demands.map(d => d.count), 1);
   container.innerHTML = demands.map(d => {
     const widthPct = Math.round((d.count / maxCount) * 100);
@@ -5887,6 +5928,12 @@ function updateAttendantSelect(attendants) {
 function renderPfVsPj(pfvspj) {
   const el = document.getElementById("pfvspj-comparison");
   if (!el) return;
+  const pfData = pfvspj.pf || {};
+  const pjData = pfvspj.pj || {};
+  if ((pfData.total || 0) === 0 && (pjData.total || 0) === 0) {
+    el.innerHTML = `<div style="text-align:center;padding:24px 0;color:var(--text-secondary);font-size:.8rem;grid-column:1/-1;">Sem conversas neste período</div>`;
+    return;
+  }
   const cols = [
     { key: "pf", label: "Pessoa Física (PF)" },
     { key: "pj", label: "Pessoa Jurídica (PJ)" }
@@ -5894,11 +5941,11 @@ function renderPfVsPj(pfvspj) {
   el.innerHTML = cols.map(col => {
     const d = (pfvspj[col.key] || {});
     const rows = [
-      { label: "Total no período",            val: d.total            !== undefined ? d.total            : "—" },
-      { label: "Resolvidas",                  val: d.resolved         !== undefined ? d.resolved         : "—" },
-      { label: "Triagens incompletas",         val: d.triageIncomplete !== undefined ? d.triageIncomplete : "—" },
-      { label: "Tempo médio de resolução",    val: formatDuration(d.avgResolutionMs)    },
-      { label: "Primeira resposta humana",    val: formatDuration(d.avgFirstResponseMs) }
+      { label: "Total no período",         val: d.total            !== undefined ? d.total            : "—" },
+      { label: "Resolvidas",               val: d.resolved         !== undefined ? d.resolved         : "—" },
+      { label: "Triagens incompletas",     val: d.triageIncomplete !== undefined ? d.triageIncomplete : "—" },
+      { label: "Resolução bruta (média)",  val: formatDuration(d.avgResolutionMs)    },
+      { label: "1ª resposta bruta (média)",val: formatDuration(d.avgFirstResponseMs) }
     ];
     return `
       <div class="pfvspj-col">
