@@ -230,7 +230,7 @@
     .mob-new-fab { display:none; position:fixed; bottom:68px; right:16px; width:48px; height:48px; border-radius:50%; background:var(--accent,#2563eb); color:#fff; border:none; box-shadow:0 4px 16px rgba(15,23,42,.30); font-size:1.35rem; align-items:center; justify-content:center; cursor:pointer; z-index:390; transition:background .15s,box-shadow .15s; }
     .mob-new-fab:active { background:var(--accent-dark,#1d4ed8); }
     .mob-stage-mover { display:none; }
-    .card-footer-timer { display:none; }
+    .card-footer-timer { display:block; font-size:.58rem; font-weight:700; color:var(--text-secondary); white-space:nowrap; background:rgba(0,0,0,.05); border-radius:10px; padding:2px 7px; }
 
     /* ── Modal de aviso: reply + anexo + texto ───────────────── */
     .reply-warn-box { background:#fff; border-radius:14px; padding:24px; width:360px; max-width:calc(100vw - 32px); box-shadow:0 16px 48px rgba(15,23,42,.18); }
@@ -3183,8 +3183,8 @@
       position: absolute;
       top: 12px;
       right: 13px;
-      width: 28px;
-      height: 28px;
+      width: 24px;
+      height: 24px;
       border-radius: 50%;
       background: #d1d5db;
       border: 2px solid rgba(0,0,0,.12);
@@ -3288,7 +3288,9 @@
       padding-top: 7px;
       border-top: 1px solid rgba(0,0,0,.07);
     }
-    .card-footer-row .btn-resolve-inline { justify-self: center; }
+    .card-footer-row .pf-pj-toggle   { justify-self: start; }
+    .card-footer-row .card-footer-timer { justify-self: center; }
+    .card-footer-row .btn-resolve-inline { justify-self: end; }
     .card-footer-row .card-expand-btn {
       justify-self: end;
       font-size: .84rem;
@@ -3708,26 +3710,20 @@
       /* ── Composer: padding seguro para barra home do iOS ── */
       .modal-box .composer { padding-bottom:calc(8px + env(safe-area-inset-bottom, 0px)); }
 
-      /* ── Cards Kanban mobile: conteúdo completo, sem corte ──────────────────────── */
-      /* overflow:visible libera card-status-dot; min-height:0 deixa o card crescer */
-      .card { padding:14px 14px 16px; min-height:0; overflow:visible; border-radius:16px; }
+      /* ── Cards Kanban mobile: respiro e sem corte ───────────────────────────────── */
+      /* min-height:200px evita cards colapsados; overflow:hidden limpa a pintura */
+      .card { padding:14px 14px 16px; min-height:200px; overflow:hidden; border-radius:16px; }
       .card-name { font-size:.88rem; }
       .card-title { font-size:.9rem; }
-      .btn-open { font-size:.78rem; padding:8px 12px; }
-      /* Padding inferior: garante que o rodapé do último card não fique atrás do FAB (≈68px+48px=116px) */
-      #mob-stage-cards-pf, #mob-stage-cards-pj { padding-bottom:calc(120px + env(safe-area-inset-bottom, 0px)); }
+      /* gap:14px entre cards; padding-bottom garante que o último card não fique atrás do FAB */
+      #mob-stage-cards-pf, #mob-stage-cards-pj { padding-bottom:calc(120px + env(safe-area-inset-bottom, 0px)); gap:14px; }
       /* Controle de mudança de etapa — visível apenas no mobile */
       .mob-stage-mover { display:flex; align-items:center; gap:8px; padding:9px 0 3px; border-top:1px solid rgba(0,0,0,.07); margin-top:6px; }
       .mob-stage-label { font-size:.68rem; font-weight:700; color:var(--text-secondary); white-space:nowrap; flex-shrink:0; }
       .mob-stage-select { flex:1; font-size:1rem; border:1px solid var(--border); border-radius:7px; padding:6px 8px; background:#fff; color:var(--text-primary); outline:none; font-family:inherit; }
-      /* Timer no rodapé mobile: fica no centro da linha de ações (col 2 do grid 1fr auto 1fr) */
-      .card-footer-timer { display:block; justify-self:center; font-size:.72rem; font-weight:700; color:var(--text-secondary); background:rgba(0,0,0,.05); border-radius:10px; padding:2px 7px; white-space:nowrap; }
-      /* Categoria: esconde timer de cat-row (movido para footer) e limita largura do chip */
-      .card-cat-row .card-win-time { display:none; }
+      /* Categoria: chip proporcional, sem esticar */
       .card-cat-row .demand-select { flex:0 1 auto; max-width:160px; }
-      /* Finalizar à direita no footer mobile (col 3 do grid) */
-      .card-footer-row .btn-resolve-inline { justify-self:end; }
-      /* Priority dot: menor e menos dominante no mobile */
+      /* Priority dot menor no mobile */
       .card-status-dot { width:18px; height:18px; top:10px; right:10px; }
     }
 
@@ -6176,7 +6172,6 @@ function buildCard(c, col, cols) {
         ).join("")}
       </select>
       <button class="btn-cat-mgr" onclick="event.stopPropagation();openCatManager()" title="Gerenciar categorias">⚙️</button>
-      <span class="card-win-time">${cardWindowTimeText(c)}</span>
     </div>
 
     ${isTemplateFailed
