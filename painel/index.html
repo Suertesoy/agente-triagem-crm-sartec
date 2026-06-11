@@ -561,7 +561,6 @@
       box-sizing: border-box;
       display: flex;
       flex-direction: column;
-      min-height: 250px;
       cursor: pointer;
       user-select: none;
       -webkit-user-select: none;
@@ -809,10 +808,8 @@
       display: block;        /* remove clamp no foco */
       overflow: visible;
     }
-    .card.card-summary-expanded .card-title {
+    .card.card-summary-expanded .card-zone-mid {
       display: block;
-      -webkit-line-clamp: unset;
-      overflow: visible;
     }
     .card-title:empty::before {
       content: attr(data-placeholder);
@@ -3080,6 +3077,7 @@
       margin: 7px 0;
       min-height: 50px;
       flex: 1;
+      display: none;
     }
     .card.pri-alta .card-zone-mid        { background: rgba(255,255,255,.68); }
     .card.pri-media .card-zone-mid       { background: rgba(255,255,255,.68); }
@@ -3527,7 +3525,7 @@
       .pipe-col-cards { grid-template-columns: 1fr; }
 
       /* Cards: leve compactação sem perder informação */
-      .card { padding: 14px 13px 12px; min-height: 235px; border-radius: 16px; }
+      .card { padding: 14px 13px 12px; border-radius: 16px; }
     }
 
     /* ── Telas compactas de desktop com pouca altura ─────────── */
@@ -3555,7 +3553,7 @@
       .pipe-col-cards { padding: 4px 6px 10px; grid-template-columns: 1fr; }
 
       /* Cards */
-      .card       { padding: 13px 12px 11px; min-height: 215px; border-radius: 14px; }
+      .card       { padding: 13px 12px 11px; border-radius: 14px; }
       .card-name  { font-size: .84rem; }
       .card-title { font-size: .88rem; }
     }
@@ -3574,7 +3572,7 @@
       .pipe-col-cards  { grid-template-columns: 1fr; }
 
       /* Cards */
-      .card       { padding: 12px 11px 10px; min-height: 200px; }
+      .card       { padding: 12px 11px 10px; }
       .card-title { font-size: .86rem; }
       .card-time  { font-size: .59rem; }
       .btn-open   { padding: 6px 10px; font-size: .72rem; }
@@ -3591,7 +3589,7 @@
       .pipeline-wrap  { padding: 10px 8px 56px; }
 
       /* Cards */
-      .card       { padding: 11px 10px 10px; min-height: 190px; border-radius: 12px; }
+      .card       { padding: 11px 10px 10px; border-radius: 12px; }
       .card-name  { font-size: .82rem; }
       .card-title { font-size: .84rem; }
       .card-time  { font-size: .58rem; }
@@ -3627,7 +3625,7 @@
       .mob-back-btn:active { background:rgba(255,255,255,.28); }
       .modal-overlay { padding:0;align-items:stretch; }
       .modal-box { width:100%;height:100dvh;height:100vh;max-width:100%;max-height:100%;border-radius:0; }
-      .card { min-height:250px;padding:13px 15px 11px; }
+      .card { padding:13px 15px 11px; }
       #ob-wrap { display:none !important; }
       .mob-nav { display:flex;position:fixed;bottom:0;left:0;right:0;z-index:400;background:var(--brand-navy);border-top:1px solid rgba(255,255,255,.12);height:56px;align-items:stretch; }
       .mob-nav-btn { flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:3px;background:none;border:none;color:rgba(255,255,255,.55);cursor:pointer;font-size:.6rem;font-weight:600;padding:0;transition:color .15s,background .15s;-webkit-tap-highlight-color:transparent; }
@@ -3741,7 +3739,7 @@
          para caberem no container. Sem isso, colunas com muitos cards (ex: Em atendimento)
          encolhem cada card até min-height:200px, cortando footer e seletor Etapa com overflow:hidden.
          Com flex-shrink:0 o container #mob-stage-cards rola (overflow-y:auto) sem cortar cards. */
-      .card { padding:14px 14px 16px; min-height:200px; overflow:hidden; border-radius:16px; flex-shrink:0; }
+      .card { padding:14px 14px 16px; overflow:hidden; border-radius:16px; flex-shrink:0; }
       .card-name { font-size:.88rem; }
       .card-title { font-size:.9rem; }
       /* gap:14px entre cards; padding-bottom garante que o último card não fique atrás do FAB */
