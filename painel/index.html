@@ -809,6 +809,11 @@
       display: block;        /* remove clamp no foco */
       overflow: visible;
     }
+    .card.card-summary-expanded .card-title {
+      display: block;
+      -webkit-line-clamp: unset;
+      overflow: visible;
+    }
     .card-title:empty::before {
       content: attr(data-placeholder);
       color: var(--text-muted);
@@ -2612,6 +2617,27 @@
       border-color: var(--brand-navy);
       box-shadow: 0 0 0 2px rgba(26, 42, 94, 0.15);
       outline: none;
+    }
+    .card-summary-toggle {
+      font-size: .7rem;
+      font-weight: 500;
+      color: var(--text-muted);
+      background: transparent;
+      border: 1px solid transparent;
+      cursor: pointer;
+      padding: 2px 5px;
+      border-radius: 5px;
+      transition: all .15s;
+      flex-shrink: 0;
+      opacity: .65;
+      margin-left: auto;
+      line-height: 1;
+    }
+    .card-summary-toggle:hover {
+      background: rgba(26,42,94,.06);
+      color: var(--brand-navy);
+      border-color: rgba(26,42,94,.15);
+      opacity: 1;
     }
 
     /* ── Botão Nova conversa ── */
@@ -4883,6 +4909,20 @@ let _priPickerPhone      = null;
 let _lastClientTypeChange = null; // { phone, oldType, oldPipelineStatus }
 const _expandedCards = new Set(); // phones com card expandido no kanban
 const reopeningCards = new Set(); // phones com card sendo reaberto no kanban
+const _summaryExpanded = new Set(); // phones com resumo expandido no kanban
+
+function toggleCardSummary(event, phone) {
+  event.stopPropagation();
+  if (_summaryExpanded.has(phone)) _summaryExpanded.delete(phone);
+  else _summaryExpanded.add(phone);
+  if (window.innerWidth <= 768) {
+    const conv = allConvs.find(c => c.phone === phone);
+    const tabId = conv?.clientType || "pf";
+    renderMobStageCards(tabId, _mobActiveStage[tabId] || "novo");
+  } else {
+    renderPipeline(allConvs);
+  }
+}
 
 // mídia modal
 let mediaModalBase64 = null;
@@ -6099,6 +6139,7 @@ function buildCard(c, col, cols) {
   const isTemplateFailed = !isResolved && c.lastTemplateDeliveryStatus === "failed";
   if (isTemplateFailed) cls += " template-failed";
   if (reopeningCards.has(c.phone)) cls += " card-reopening";
+  if (_summaryExpanded.has(c.phone)) cls += " card-summary-expanded";
   card.className = cls;
 
   const unreadCount = !isResolved ? processCardNewMsg(c.phone, c.lastUserMessageAt) : 0;
@@ -6176,6 +6217,7 @@ function buildCard(c, col, cols) {
         ).join("")}
       </select>
       <button class="btn-cat-mgr" onclick="event.stopPropagation();openCatManager()" title="Gerenciar categorias">⚙️</button>
+      <button class="card-summary-toggle" onclick="event.stopPropagation();toggleCardSummary(event,'${esc(c.phone)}')" title="${_summaryExpanded.has(c.phone)?'Retrair resumo':'Expandir resumo'}">${_summaryExpanded.has(c.phone)?'▲':'▼'}</button>
     </div>
 
     ${isTemplateFailed
