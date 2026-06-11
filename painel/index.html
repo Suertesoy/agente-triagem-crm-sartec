@@ -3711,12 +3711,16 @@
       .modal-box .composer { padding-bottom:calc(8px + env(safe-area-inset-bottom, 0px)); }
 
       /* ── Cards Kanban mobile: respiro e sem corte ───────────────────────────────── */
-      /* min-height:200px evita cards colapsados; overflow:hidden limpa a pintura */
-      .card { padding:14px 14px 16px; min-height:200px; overflow:hidden; border-radius:16px; }
+      /* flex-shrink:0 é a correção principal: impede que o flexbox encolha os cards
+         para caberem no container. Sem isso, colunas com muitos cards (ex: Em atendimento)
+         encolhem cada card até min-height:200px, cortando footer e seletor Etapa com overflow:hidden.
+         Com flex-shrink:0 o container #mob-stage-cards rola (overflow-y:auto) sem cortar cards. */
+      .card { padding:14px 14px 16px; min-height:200px; overflow:hidden; border-radius:16px; flex-shrink:0; }
       .card-name { font-size:.88rem; }
       .card-title { font-size:.9rem; }
       /* gap:14px entre cards; padding-bottom garante que o último card não fique atrás do FAB */
-      #mob-stage-cards-pf, #mob-stage-cards-pj { padding-bottom:calc(120px + env(safe-area-inset-bottom, 0px)); gap:14px; }
+      /* -webkit-overflow-scrolling:touch ativa momentum scroll no iOS */
+      #mob-stage-cards-pf, #mob-stage-cards-pj { padding-bottom:calc(120px + env(safe-area-inset-bottom, 0px)); gap:14px; -webkit-overflow-scrolling:touch; }
       /* Controle de mudança de etapa — visível apenas no mobile */
       .mob-stage-mover { display:flex; align-items:center; gap:8px; padding:9px 0 3px; border-top:1px solid rgba(0,0,0,.07); margin-top:6px; }
       .mob-stage-label { font-size:.68rem; font-weight:700; color:var(--text-secondary); white-space:nowrap; flex-shrink:0; }
