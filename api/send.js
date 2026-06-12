@@ -24,6 +24,85 @@ function getRedis() {
 
 const SESSION_TTL = 60 * 60 * 24 * 90; // 90 dias — retenção mínima de histórico
 
+// ── Meta API retry helpers ────────────────────────────────
+const TRANSIENT_CODES = new Set([1, 2, 4, 17, 131000]);
+const RETRY_DELAYS_MS = [400, 1200, 2500];
+
+const wait = (ms) => new Promise((r) => setTimeout(r, ms));
+
+function isTransientMetaError(httpStatus, data) {
+  if (httpStatus != null && [500, 502, 503, 504].includes(httpStatus)) return true;
+  const err = data?.error;
+  if (!err) return false;
+  if (err.is_transient === true) return true;
+  return TRANSIENT_CODES.has(err.code);
+}
+
+/**
+ * Chama a Meta API com retry automático para erros transitórios.
+ * optionsOrFactory: objeto (body JSON reutilizável) ou função (necessário para FormData).
+ */
+async function callMetaWithRetry(url, optionsOrFactory, context) {
+  const getOpts = typeof optionsOrFactory === "function" ? optionsOrFactory : () => optionsOrFactory;
+  let lastStatus = null;
+  let lastData   = null;
+  let lastError  = null;
+
+  for (let attempt = 1; attempt <= 3; attempt++) {
+    try {
+      const fetchRes = await fetch(url, getOpts());
+      lastStatus = fetchRes.status;
+
+      let data;
+      try { data = await fetchRes.json(); } catch { data = null; }
+      lastData = data;
+
+      if (fetchRes.ok) {
+        return { ok: true, status: lastStatus, data, attempts: attempt, transient: false };
+      }
+
+      const transient = isTransientMetaError(lastStatus, data);
+      const e = data?.error || {};
+      console.error(
+        `[${context}] ❌ Meta erro — attempt=${attempt} http=${lastStatus}` +
+        ` code=${e.code} subcode=${e.error_subcode} type=${e.type}` +
+        ` is_transient=${e.is_transient ?? transient} fbtrace_id=${e.fbtrace_id}` +
+        ` message="${e.message}"`
+      );
+
+      if (!transient || attempt === 3) {
+        return { ok: false, status: lastStatus, data, attempts: attempt, transient };
+      }
+    } catch (networkErr) {
+      lastError = networkErr.message;
+      console.error(`[${context}] ❌ Network error — attempt=${attempt}: ${networkErr.message}`);
+      if (attempt === 3) {
+        return { ok: false, status: null, data: null, attempts: attempt, transient: true, lastError };
+      }
+    }
+
+    await wait(RETRY_DELAYS_MS[attempt - 1]);
+  }
+
+  return { ok: false, status: lastStatus, data: lastData, attempts: 3, transient: false };
+}
+
+function metaErrRes(res, errorLabel, result) {
+  const e      = result.data?.error || {};
+  const detail = result.transient
+    ? "A Meta/WhatsApp retornou uma falha temporária no envio. Tente novamente em instantes."
+    : (e.message || "Erro desconhecido da Meta API");
+  return res.status(502).json({
+    error:        errorLabel,
+    detail,
+    code:         e.code          ?? null,
+    subcode:      e.error_subcode ?? null,
+    fbtrace_id:   e.fbtrace_id    ?? null,
+    is_transient: result.transient ?? false,
+    attempts:     result.attempts  ?? 1,
+  });
+}
+
 // Vercel: aceita body até 10 MB para suportar imagens em base64
 export const config = {
   api: {
@@ -85,7 +164,7 @@ async function sendText(req, res, body, PHONE_NUMBER_ID, ACCESS_TOKEN) {
     msgPayload.context = { message_id: replyToMessageId };
   }
 
-  const metaRes = await fetch(
+  const result = await callMetaWithRetry(
     `https://graph.facebook.com/v19.0/${PHONE_NUMBER_ID}/messages`,
     {
       method: "POST",
@@ -94,21 +173,16 @@ async function sendText(req, res, body, PHONE_NUMBER_ID, ACCESS_TOKEN) {
         Authorization: `Bearer ${ACCESS_TOKEN}`,
       },
       body: JSON.stringify(msgPayload),
-    }
+    },
+    "send/text"
   );
 
-  const metaData = await metaRes.json();
-
-  if (!metaRes.ok) {
-    console.error(`[send/text] ❌ Meta erro ${metaData?.error?.code}: ${metaData?.error?.message}`);
-    return res.status(502).json({
-      error: "Erro ao enviar mensagem pela Meta API",
-      detail: metaData?.error?.message,
-    });
+  if (!result.ok) {
+    return metaErrRes(res, "Erro ao enviar mensagem pela Meta API", result);
   }
 
-  const metaMessageId = metaData?.messages?.[0]?.id || null;
-  console.log(`[send/text] ✅ ID: ${metaMessageId}${replyToMessageId ? " (reply)" : ""}`);
+  const metaMessageId = result.data?.messages?.[0]?.id || null;
+  console.log(`[send/text] ✅ ID: ${metaMessageId}${replyToMessageId ? " (reply)" : ""} attempts=${result.attempts}`);
 
   const historyEntry = {
     role: "assistant",
@@ -138,33 +212,25 @@ async function sendImage(req, res, body, PHONE_NUMBER_ID, ACCESS_TOKEN) {
 
   // 1. Faz upload da imagem para a Meta (necessário antes de enviar)
   const binaryData = Buffer.from(mediaBase64, "base64");
-  const blob       = new Blob([binaryData], { type: mimeType });
-  const uploadForm = new FormData();
-  uploadForm.append("messaging_product", "whatsapp");
-  uploadForm.append("type", mimeType);
-  uploadForm.append("file", blob, "image");
 
-  const uploadRes = await fetch(
+  const uploadResult = await callMetaWithRetry(
     `https://graph.facebook.com/v19.0/${PHONE_NUMBER_ID}/media`,
-    {
-      method: "POST",
-      headers: { Authorization: `Bearer ${ACCESS_TOKEN}` },
-      body: uploadForm,
-    }
+    () => {
+      const form = new FormData();
+      form.append("messaging_product", "whatsapp");
+      form.append("type", mimeType);
+      form.append("file", new Blob([binaryData], { type: mimeType }), "image");
+      return { method: "POST", headers: { Authorization: `Bearer ${ACCESS_TOKEN}` }, body: form };
+    },
+    "send/image-upload"
   );
 
-  const uploadData = await uploadRes.json();
-
-  if (!uploadRes.ok) {
-    console.error(`[send/image] ❌ Upload falhou: ${uploadData?.error?.message}`);
-    return res.status(502).json({
-      error: "Erro ao fazer upload da imagem para a Meta API",
-      detail: uploadData?.error?.message,
-    });
+  if (!uploadResult.ok) {
+    return metaErrRes(res, "Erro ao fazer upload da imagem para a Meta API", uploadResult);
   }
 
-  const mediaId = uploadData.id;
-  console.log(`[send/image] ✅ Upload OK — media_id: ${mediaId}`);
+  const mediaId = uploadResult.data.id;
+  console.log(`[send/image] ✅ Upload OK — media_id: ${mediaId} attempts=${uploadResult.attempts}`);
 
   // 2. Envia a imagem para o cliente usando o media_id
   const msgPayload = {
@@ -179,7 +245,7 @@ async function sendImage(req, res, body, PHONE_NUMBER_ID, ACCESS_TOKEN) {
     msgPayload.context = { message_id: replyToMessageId };
   }
 
-  const metaRes = await fetch(
+  const metaResult = await callMetaWithRetry(
     `https://graph.facebook.com/v19.0/${PHONE_NUMBER_ID}/messages`,
     {
       method: "POST",
@@ -188,21 +254,16 @@ async function sendImage(req, res, body, PHONE_NUMBER_ID, ACCESS_TOKEN) {
         Authorization: `Bearer ${ACCESS_TOKEN}`,
       },
       body: JSON.stringify(msgPayload),
-    }
+    },
+    "send/image"
   );
 
-  const metaData = await metaRes.json();
-
-  if (!metaRes.ok) {
-    console.error(`[send/image] ❌ Meta erro ${metaData?.error?.code}: ${metaData?.error?.message}`);
-    return res.status(502).json({
-      error: "Erro ao enviar imagem pela Meta API",
-      detail: metaData?.error?.message,
-    });
+  if (!metaResult.ok) {
+    return metaErrRes(res, "Erro ao enviar imagem pela Meta API", metaResult);
   }
 
-  const metaMessageId = metaData?.messages?.[0]?.id || null;
-  console.log(`[send/image] ✅ ID: ${metaMessageId}${replyToMessageId ? " (reply)" : ""}`);
+  const metaMessageId = metaResult.data?.messages?.[0]?.id || null;
+  console.log(`[send/image] ✅ ID: ${metaMessageId}${replyToMessageId ? " (reply)" : ""} attempts=${metaResult.attempts}`);
 
   // 3. Upload para R2 (best-effort; falha não cancela envio já realizado)
   let r2Result = null;
@@ -249,33 +310,25 @@ async function sendDocument(req, res, body, PHONE_NUMBER_ID, ACCESS_TOKEN) {
 
   // 1. Upload para a Meta
   const binaryData = Buffer.from(mediaBase64, "base64");
-  const blob       = new Blob([binaryData], { type: mimeType });
-  const uploadForm = new FormData();
-  uploadForm.append("messaging_product", "whatsapp");
-  uploadForm.append("type", mimeType);
-  uploadForm.append("file", blob, filename);
 
-  const uploadRes = await fetch(
+  const uploadResult = await callMetaWithRetry(
     `https://graph.facebook.com/v19.0/${PHONE_NUMBER_ID}/media`,
-    {
-      method: "POST",
-      headers: { Authorization: `Bearer ${ACCESS_TOKEN}` },
-      body: uploadForm,
-    }
+    () => {
+      const form = new FormData();
+      form.append("messaging_product", "whatsapp");
+      form.append("type", mimeType);
+      form.append("file", new Blob([binaryData], { type: mimeType }), filename);
+      return { method: "POST", headers: { Authorization: `Bearer ${ACCESS_TOKEN}` }, body: form };
+    },
+    "send/document-upload"
   );
 
-  const uploadData = await uploadRes.json();
-
-  if (!uploadRes.ok) {
-    console.error(`[send/document] ❌ Upload falhou: ${uploadData?.error?.message}`);
-    return res.status(502).json({
-      error: "Erro ao fazer upload do documento para a Meta API",
-      detail: uploadData?.error?.message,
-    });
+  if (!uploadResult.ok) {
+    return metaErrRes(res, "Erro ao fazer upload do documento para a Meta API", uploadResult);
   }
 
-  const mediaId = uploadData.id;
-  console.log(`[send/document] ✅ Upload OK — media_id: ${mediaId}`);
+  const mediaId = uploadResult.data.id;
+  console.log(`[send/document] ✅ Upload OK — media_id: ${mediaId} attempts=${uploadResult.attempts}`);
 
   // 2. Envia o documento via media_id
   const msgPayload = {
@@ -290,7 +343,7 @@ async function sendDocument(req, res, body, PHONE_NUMBER_ID, ACCESS_TOKEN) {
     msgPayload.context = { message_id: replyToMessageId };
   }
 
-  const metaRes = await fetch(
+  const metaResult = await callMetaWithRetry(
     `https://graph.facebook.com/v19.0/${PHONE_NUMBER_ID}/messages`,
     {
       method: "POST",
@@ -299,21 +352,16 @@ async function sendDocument(req, res, body, PHONE_NUMBER_ID, ACCESS_TOKEN) {
         Authorization: `Bearer ${ACCESS_TOKEN}`,
       },
       body: JSON.stringify(msgPayload),
-    }
+    },
+    "send/document"
   );
 
-  const metaData = await metaRes.json();
-
-  if (!metaRes.ok) {
-    console.error(`[send/document] ❌ Meta erro ${metaData?.error?.code}: ${metaData?.error?.message}`);
-    return res.status(502).json({
-      error: "Erro ao enviar documento pela Meta API",
-      detail: metaData?.error?.message,
-    });
+  if (!metaResult.ok) {
+    return metaErrRes(res, "Erro ao enviar documento pela Meta API", metaResult);
   }
 
-  const metaMessageId = metaData?.messages?.[0]?.id || null;
-  console.log(`[send/document] ✅ ID: ${metaMessageId}${replyToMessageId ? " (reply)" : ""}`);
+  const metaMessageId = metaResult.data?.messages?.[0]?.id || null;
+  console.log(`[send/document] ✅ ID: ${metaMessageId}${replyToMessageId ? " (reply)" : ""} attempts=${metaResult.attempts}`);
 
   // 3. Upload para R2 (best-effort; falha não cancela envio já realizado)
   let r2DocResult = null;
