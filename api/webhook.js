@@ -611,48 +611,59 @@ function inferDemandType(history) {
 function detectPJSignals(text) {
   if (!text) return false;
   const lower = text.toLowerCase();
+  // Cada entrada: [matcher, label] — label usado no log [PJ detect]
   const signals = [
-    /\b\d{2}\.?\d{3}\.?\d{3}\/?\d{4}-?\d{2}\b/,   // CNPJ
-    /\bcnpj\b/,
-    /\bnf\b/,
-    /\bnfe\b/,
-    /\bempresa\s+\w+/,
-    /\bgrupo\s+\w+/,
-    /\bsetor\s+\w+/,
-    /\bdepto\s+\w+/,
-    /\bdepartamento\s+\w+/,
-    "para a empresa",
-    "para o escritório",
-    "para minha firma",
-    "em nome de",
-    "prefeitura",
-    "secretaria",
-    "câmara municipal",
-    "camara municipal",
-    "escola estadual",
-    "escola municipal",
-    "hospital público",
-    "hospital publico",
-    "razão social",
-    "razao social",
-    "nota fiscal",
-    "faturamento",
-    "danfe",
-    "compras",
-    "financeiro",
-    "fiscal",
-    "controladoria",
-    "sou da",
-    "falo pela",
-    // Respostas diretas à pergunta PF/PJ
-    "pessoa jurídica",
-    "pessoa juridica",
-    /\bjurídica\b/,
-    /\bjuridica\b/,
+    [/\b\d{2}\.?\d{3}\.?\d{3}\/?\d{4}-?\d{2}\b/, "cnpj-numero"],
+    [/\bcnpj\b/,                "cnpj"],
+    [/\bpj\b/,                  "pj"],
+    [/\bnf\b/,                  "nf"],
+    [/\bnfe\b/,                 "nfe"],
+    [/\bempresas?\b/,           "empresa"],
+    [/\bgrupo\s+\w+/,           "grupo"],
+    [/\bsetor\s+\w+/,           "setor"],
+    [/\bdepto\s+\w+/,           "depto"],
+    [/\bdepartamento\s+\w+/,    "departamento"],
+    ["ana do pj",               "ana-do-pj"],
+    ["falar com a ana",         "falar-ana"],
+    ["setor pj",                "setor-pj"],
+    ["atendimento pj",          "atendimento-pj"],
+    ["falar com o pj",          "falar-pj"],
+    ["setor de pessoa",         "setor-pessoa"],
+    ["setor empresas",          "setor-empresas"],
+    ["falar com empresas",      "falar-empresas"],
+    ["atendimento empresas",    "atendimento-empresas"],
+    ["para a empresa",          "para-empresa"],
+    ["para o escritório",       "escritorio"],
+    ["para minha firma",        "firma"],
+    ["em nome de",              "em-nome-de"],
+    ["prefeitura",              "prefeitura"],
+    ["secretaria",              "secretaria"],
+    ["câmara municipal",        "camara"],
+    ["camara municipal",        "camara"],
+    ["escola estadual",         "escola-est"],
+    ["escola municipal",        "escola-mun"],
+    ["hospital público",        "hospital"],
+    ["hospital publico",        "hospital"],
+    ["razão social",            "razao-social"],
+    ["razao social",            "razao-social"],
+    ["nota fiscal",             "nota-fiscal"],
+    ["faturamento",             "faturamento"],
+    ["danfe",                   "danfe"],
+    ["compras",                 "compras"],
+    ["financeiro",              "financeiro"],
+    ["fiscal",                  "fiscal"],
+    ["controladoria",           "controladoria"],
+    ["sou da",                  "sou-da"],
+    ["falo pela",               "falo-pela"],
+    ["pessoa jurídica",         "pessoa-juridica"],
+    ["pessoa juridica",         "pessoa-juridica"],
+    [/\bjurídica\b/,            "juridica"],
+    [/\bjuridica\b/,            "juridica"],
   ];
-  return signals.some((s) =>
-    typeof s === "string" ? lower.includes(s) : s.test(lower)
-  );
+  for (const [s, label] of signals) {
+    if (typeof s === "string" ? lower.includes(s) : s.test(lower)) return label;
+  }
+  return false;
 }
 
 /**
@@ -761,12 +772,14 @@ function addMessage(session, role, content, meta = {}) {
       const allUserText = session.history
         .filter(m => m.role === "user" && typeof m.content === "string")
         .map(m => m.content).join(" ");
-      if (detectPJSignals(allUserText)) {
+      const _pjHandoffSignal = detectPJSignals(allUserText);
+      if (_pjHandoffSignal) {
         session.clientType = "pj";
         if (!session.demandType || session.demandType === "produto" || session.demandType === "outro") {
           session.demandType = "cotacao_pj";
         }
-        console.log("[Agente] 🏢 clientType=pj inferido do histórico no handoff");
+        if (!session.pipelineStatus) session.pipelineStatus = "novo";
+        console.log(`[PJ detect] +${phone} motivo=${_pjHandoffSignal} (handoff)`);
       }
     }
 
@@ -1247,10 +1260,12 @@ async function chatWithAgent(phone, userText, mediaPayload = null, name = "", me
 
   // Detecta sinais PJ imediatamente, antes de chamar Claude
   const textToCheck = userText || "";
-  if (!session.clientType && detectPJSignals(textToCheck)) {
+  const _pjEarlySignal = detectPJSignals(textToCheck);
+  if (!session.clientType && _pjEarlySignal) {
     session.clientType  = "pj";
     session.demandType  = "cotacao_pj";
-    console.log(`[Agente] 🏢 PJ detectado em +${phone}`);
+    if (!session.pipelineStatus) session.pipelineStatus = "novo";
+    console.log(`[PJ detect] +${phone} motivo=${_pjEarlySignal}`);
   }
 
   const decision = shouldRespond(session, textToCheck);

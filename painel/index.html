@@ -6640,17 +6640,38 @@ async function saveCardField(el, field) {
   const value = el.textContent.trim();
   if (!phone || !value) return;
 
+  const conv    = allConvs.find(c => c.phone === phone);
+  const prevVal = conv ? conv[field] : null;
+
+  // Atualização otimista — re-renderiza imediatamente sem esperar a rede
+  if (conv) { conv[field] = value; renderPipeline(allConvs); }
+
   try {
-    await fetch("/api/update-card", {
+    const resp = await fetch("/api/update-card", {
       method: "PUT",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ phone, [field]: value }),
     });
-    // Atualiza allConvs localmente
-    const conv = allConvs.find(c => c.phone === phone);
-    if (conv) conv[field] = value;
-    showToast("Card atualizado");
-  } catch (e) { console.error("[saveCardField]", e); }
+    if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
+    const data = await resp.json();
+    // Sincroniza todos os campos retornados pela API para manter allConvs consistente
+    if (conv && data) {
+      if (data.clientName     !== undefined) conv.clientName     = data.clientName;
+      if (data.cardTitle      !== undefined) conv.cardTitle      = data.cardTitle;
+      if (data.demandType     !== undefined) conv.demandType     = data.demandType;
+      if (data.clientType     !== undefined) conv.clientType     = data.clientType;
+      if (data.pipelineStatus !== undefined) conv.pipelineStatus = data.pipelineStatus;
+    }
+    renderPipeline(allConvs);
+    if (typeof updateHeader === "function") updateHeader(allConvs);
+    const label = field === "clientName" ? "Nome atualizado" : field === "cardTitle" ? "Resumo atualizado" : "Card atualizado";
+    showToast(label);
+  } catch (e) {
+    // Rollback se a API falhar
+    if (conv && prevVal !== null) { conv[field] = prevVal; renderPipeline(allConvs); }
+    showToast("Erro ao salvar. Tente novamente.", "t-err");
+    console.error("[saveCardField]", e);
+  }
 }
 
 async function saveDemandType(select) {
