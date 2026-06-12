@@ -2209,11 +2209,17 @@ async function handleIncomingMessage(req, res) {
                     _docSession._stopFlow = true; // Flag temporária para o handler
                   }
                 }
+                addMessage(_docSession, "user", "[documento]", {
+                  ...msgMeta,
+                  mediaType:    "document",
+                  mediaFilename: message.document?.filename || "documento",
+                  mediaMimeType: message.document?.mime_type || undefined,
+                });
                 await saveSession(from, _docSession);
                 if (_docSession._stopFlow) {
                   // Limpa a flag temporária e sinaliza para o handler não enviar mensagem
                   delete _docSession._stopFlow;
-                  throw new Error("STOP_FLOW"); 
+                  throw new Error("STOP_FLOW");
                 }
               });
             } catch (_e) { 

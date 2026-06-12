@@ -165,6 +165,7 @@ export default async function handler(req, res) {
 
       let session;
       try { session = JSON.parse(values[i]); } catch { continue; }
+      if (!session.history?.length) continue;
 
       const phone      = allKeys[i].replace("sartec:", "");
       const status     = session.status || "ativo";
