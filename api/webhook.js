@@ -775,7 +775,7 @@ function addMessage(session, role, content, meta = {}) {
       const _pjHandoffSignal = detectPJSignals(allUserText);
       if (_pjHandoffSignal) {
         session.clientType = "pj";
-        if (!session.demandType || session.demandType === "produto" || session.demandType === "outro") {
+        if (!session.demandType || ["produto", "outro", "duvida"].includes(session.demandType)) {
           session.demandType = "cotacao_pj";
         }
         if (!session.pipelineStatus) session.pipelineStatus = "novo";
