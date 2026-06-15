@@ -1019,6 +1019,87 @@ function sanitizeAgentReply(text) {
 }
 
 // ============================================================
+// DETECÇÃO E ROTEAMENTO — Lista Escolar via Site
+// ============================================================
+
+/**
+ * Retorna true quando a mensagem contém o marcador enviado pelo site.
+ * Case-insensitive e tolerante a espaços extras ao redor do marcador.
+ */
+function isSiteSchoolListMessage(text) {
+  if (!text) return false;
+  return /\[\s*SITE_LISTA_ESCOLAR\s*\]/i.test(text);
+}
+
+/**
+ * Processa listas escolares recebidas via site sem passar pelo fluxo de triagem.
+ * - clientType  → "pj" (roteamento interno; nunca exposto ao cliente)
+ * - demandType  → "lista"
+ * - status      → "aguardando_humano"
+ * Preserva a mensagem completa no histórico e envia resposta única ao cliente.
+ */
+async function handleSiteSchoolList(from, text, name, msgMeta) {
+  return withSessionLock(getRedis(), from, async () => {
+    const session = await loadSession(from);
+
+    // Atualiza janela de 24h
+    const now = new Date();
+    session.lastUserMessageAt = now.toISOString();
+    session.windowExpiresAt   = new Date(now.getTime() + 24 * 60 * 60 * 1000).toISOString();
+
+    if (name) session.clientName = name;
+    session.clientPhone = from;
+
+    // Roteamento interno: PJ operacional / lista escolar
+    session.clientType  = "pj";
+    session.demandType  = "lista";
+    session.handoffDone = true;
+    session.status      = "aguardando_humano";
+    if (!session.pipelineStatus) session.pipelineStatus = "novo";
+    if (!session.handoffAt)      session.handoffAt      = now.toISOString();
+
+    // Tenta extrair escola e série da estrutura do site para enriquecer o card
+    const _escolaM = text.match(/Escola:\s*(.+?)(?:\n|$)/i);
+    const _serieM  = text.match(/Ano\/S[eé]rie:\s*(.+?)(?:\n|$)/i);
+    if (_escolaM) session.escola = _escolaM[1].trim();
+    if (_serieM)  session.serie  = _serieM[1].trim();
+
+    // Preserva a mensagem completa no histórico
+    addMessage(session, "user", text, msgMeta);
+
+    // Gera título do card
+    if (!session.cardTitle) session.cardTitle = generateCardTitle(session);
+
+    // Nota interna visível apenas no painel (role "system" é filtrado do contexto Claude)
+    session.history.push({
+      role:        "system",
+      content:     "Lista escolar enviada pelo site. Encaminhar para orçamento de listas escolares.",
+      messageType: "internal_note",
+      origin:      "site",
+      createdAt:   now.toISOString(),
+    });
+
+    // Resposta única ao cliente — sem mencionar PJ, sem refazer triagem
+    const reply =
+      "Recebemos sua lista escolar pelo site da Sartec. " +
+      "Vou encaminhar para a equipe responsável por orçamentos de listas escolares. " +
+      "A equipe confirma disponibilidade, marcas/modelos e valores por aqui.";
+
+    addMessage(session, "assistant", reply);
+    session.postHandoffReplySent = true;
+
+    await saveSession(from, session);
+
+    console.log(
+      `[SiteList] 📋 Lista escolar do site — roteado para fila PJ +${from}` +
+      ` escola=${session.escola || "—"} série=${session.serie || "—"}`
+    );
+
+    return reply;
+  });
+}
+
+// ============================================================
 // DOWNLOAD DE MÍDIA DA META
 // ============================================================
 
@@ -2237,7 +2318,11 @@ async function handleIncomingMessage(req, res) {
 
             let reply;
             try {
-              reply = await chatWithAgent(from, text, null, name, msgMeta);
+              if (isSiteSchoolListMessage(text)) {
+                reply = await handleSiteSchoolList(from, text, name, msgMeta);
+              } else {
+                reply = await chatWithAgent(from, text, null, name, msgMeta);
+              }
             } catch (err) {
               console.error("[Agente] ❌", err.message);
               reply = "Desculpe, tive um problema técnico. Nossa equipe vai te atender em breve 🤝";
