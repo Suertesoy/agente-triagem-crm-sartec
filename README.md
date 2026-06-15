@@ -52,9 +52,15 @@ api/archive.js
 api/active-attendant.js
 ```
 
-### 3. Site público
+### 3. Site público (pasta `/site` — LEGADA)
 
-Responsável por apresentar a loja, funcionar como vitrine de produtos, gerar leads para WhatsApp e futuramente permitir o envio estruturado de listas escolares.
+> **Atenção:** A pasta `/site` é uma versão legada. O site oficial atual está em:
+> - Repositório: https://github.com/Suertesoy/sartecpapelaria
+> - Deploy: https://sartec.vercel.app
+>
+> Novas funcionalidades do site — incluindo leitura de lista escolar com IA — devem ser implementadas no repositório isolado, não em `/site`.
+
+A pasta `/site` existe neste monorepo porque o `vercel.json` ainda roteia o domínio para ela. Não alterar seu conteúdo sem coordenar com a migração das rotas.
 
 Arquivos principais:
 
@@ -63,8 +69,6 @@ site/
 logos/
 vercel.json
 ```
-
-O site não é um e-commerce. Ele deve atuar como vitrine, canal de entrada e ponte para o atendimento via WhatsApp/CRM.
 
 ## Stack técnica
 

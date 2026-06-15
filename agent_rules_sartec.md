@@ -11,6 +11,26 @@ agent_rules_sartec.md
 
 ---
 
+## AVISO — Site público oficial
+
+A pasta `/site` neste repositório é **legada**. O site oficial atual da Sartec está em:
+
+```text
+Repositório: github.com/Suertesoy/sartecpapelaria
+Deploy:      https://sartec.vercel.app
+```
+
+Regras obrigatórias:
+
+```text
+Não implementar features do site público em /site deste monorepo.
+Não criar páginas, estilos ou lógica nova em site/ aqui.
+Usar o repositório isolado sartecpapelaria para o site oficial.
+Funcionalidades de lista escolar com IA devem ir no repo isolado.
+```
+
+---
+
 ## 1. Identidade do projeto
 
 Este é o projeto Sartec, um ecossistema digital integrado para atendimento, triagem, CRM e site público da Sartec Papelaria.
