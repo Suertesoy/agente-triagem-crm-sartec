@@ -1067,8 +1067,13 @@ async function handleSiteSchoolList(from, text, name, msgMeta) {
     // Preserva a mensagem completa no histórico
     addMessage(session, "user", text, msgMeta);
 
-    // Gera título do card
-    if (!session.cardTitle) session.cardTitle = generateCardTitle(session);
+    // Gera título do card sem expor "PJ" — o roteamento interno continua como pj
+    if (!session.cardTitle) {
+      const _serie = session.serie ? ` ${session.serie}` : "";
+      session.cardTitle = session.escola
+        ? `Lista Escolar — ${session.escola}${_serie}`
+        : "Lista Escolar";
+    }
 
     // Nota interna visível apenas no painel (role "system" é filtrado do contexto Claude)
     session.history.push({
