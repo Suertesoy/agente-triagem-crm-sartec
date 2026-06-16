@@ -2173,6 +2173,71 @@
     }
     .btn-emoji:hover { border-color: var(--brand-navy); color: var(--brand-navy); }
 
+    /* ══════ LISTA ESCOLAR — IMPRESSÃO ══════ */
+    .btn-print-lista {
+      display: inline-flex; align-items: center; gap: 5px;
+      margin-top: 10px; padding: 6px 13px;
+      background: #eef2ff; border: 1px solid #c7d2ee;
+      color: #2d3a8c; border-radius: 7px;
+      font-size: .78rem; font-weight: 600; cursor: pointer;
+      transition: background .15s, border-color .15s;
+    }
+    .btn-print-lista:hover { background: #dde5ff; border-color: #a5b4e0; }
+
+    .print-overlay {
+      position: fixed; inset: 0; background: rgba(0,0,0,.58);
+      z-index: 9900; display: flex; flex-direction: column;
+      align-items: center; padding: 18px 12px; overflow-y: auto;
+    }
+    .print-overlay-toolbar {
+      display: flex; gap: 10px; margin-bottom: 16px; flex-shrink: 0;
+    }
+    .print-overlay-toolbar button {
+      padding: 8px 22px; border-radius: 7px; border: none;
+      font-size: .9rem; font-weight: 600; cursor: pointer;
+    }
+    .btn-do-print  { background: #1a1a2e; color: #fff; }
+    .btn-do-print:hover  { background: #2d2d5e; }
+    .btn-close-print { background: #e5e7eb; color: #374151; }
+    .btn-close-print:hover { background: #d1d5db; }
+
+    .print-sheet-wrap {
+      background: #fff; box-shadow: 0 4px 24px rgba(0,0,0,.18);
+      width: 210mm; padding: 14mm 14mm 12mm;
+      box-sizing: border-box; margin-bottom: 18px;
+      font-family: Arial, Helvetica, sans-serif;
+      font-size: 11pt; color: #111; line-height: 1.4;
+    }
+    .ps-hdr { text-align: center; border-bottom: 2px solid #1a1a2e; padding-bottom: 8px; margin-bottom: 14px; }
+    .ps-hdr-name  { font-size: 16pt; font-weight: 700; color: #1a1a2e; }
+    .ps-hdr-sub   { font-size: 10pt; color: #555; margin-top: 2px; }
+    .ps-hdr-badge { display: inline-block; margin-top: 5px; padding: 2px 11px; background: #e0e7ff; color: #1a1a2e; border-radius: 20px; font-size: 9pt; font-weight: 600; }
+    .ps-fields { display: grid; grid-template-columns: 1fr 1fr; gap: 4px 20px; margin-bottom: 12px; font-size: 10pt; }
+    .ps-field {} .ps-field-full { grid-column: 1 / -1; }
+    .ps-lbl { font-weight: 700; color: #333; }
+    .ps-orient { background: #f0f4ff; border: 1px solid #c7d2ee; border-left: 3px solid #2d3a8c; border-radius: 5px; padding: 8px 12px; margin-bottom: 14px; font-size: 10pt; }
+    .ps-orient-ttl { font-weight: 700; color: #2d3a8c; margin-bottom: 5px; font-size: 11pt; }
+    .ps-orient-row { margin: 3px 0; }
+    .ps-sec-ttl { font-weight: 700; font-size: 12pt; color: #1a1a2e; border-bottom: 1px solid #ccc; padding-bottom: 3px; margin: 14px 0 8px; }
+    .ps-tbl { width: 100%; border-collapse: collapse; font-size: 10pt; }
+    .ps-tbl th { background: #1a1a2e; color: #fff; padding: 5px 7px; text-align: left; font-size: 9.5pt; }
+    .ps-tbl td { padding: 5px 7px; border-bottom: 1px solid #e5e7eb; vertical-align: top; }
+    .ps-tbl tr:nth-child(even) td { background: #f8f9fc; }
+    .ps-tbl .tc { text-align: center; }
+    .ps-noquero { background: #f8f8f8; border: 1px solid #ddd; border-radius: 5px; padding: 9px 12px; margin-top: 14px; }
+    .ps-nq-ttl  { font-weight: 700; color: #b91c1c; font-size: 11pt; margin-bottom: 4px; }
+    .ps-nq-note { font-size: 9pt; color: #7f1d1d; font-style: italic; margin-bottom: 7px; }
+    .ps-footer  { margin-top: 18px; border-top: 1px solid #ccc; padding-top: 10px; font-size: 10pt; display: grid; grid-template-columns: 1fr 1fr; gap: 8px 20px; }
+    .ps-footer-full { grid-column: 1 / -1; }
+    .ps-uline { display: inline-block; min-width: 160px; border-bottom: 1px solid #999; }
+    .page-break { page-break-after: always; break-after: page; }
+    @media print {
+      body > *:not(.print-overlay) { display: none !important; }
+      .print-overlay { position: static !important; background: none !important; padding: 0 !important; display: block !important; overflow: visible !important; }
+      .print-overlay-toolbar { display: none !important; }
+      .print-sheet-wrap { box-shadow: none !important; margin: 0 !important; width: 100% !important; padding: 8mm 10mm !important; }
+    }
+
     .composer-row { display: flex; gap: 7px; align-items: flex-end; }
     .btn-attach {
       background: none;
@@ -8090,6 +8155,16 @@ function appendBubble(container, msg, optimistic = false, history = null, histor
     bubble.appendChild(_textNode);
   }
 
+  // ── Botão "Imprimir separação" — lista escolar do site ──
+  if (role === "user" && !optimistic && isSiteSchoolListMessage(content)) {
+    const _printBtn = document.createElement("button");
+    _printBtn.className = "btn-print-lista";
+    _printBtn.textContent = "🖨 Imprimir separação";
+    _printBtn.title = "Gerar folha de separação e conferência para a equipe";
+    _printBtn.onclick = (e) => { e.stopPropagation(); openSchoolListPrint(content, msg); };
+    bubble.appendChild(_printBtn);
+  }
+
   // ── Botão "Remover mídia" ────────────────────────────────────────────────────
   if (!optimistic && historyIndex !== null && !mediaDeleted && !mediaUnavailable &&
       (mediaUrl || mediaData)) {
@@ -11930,6 +12005,250 @@ async function openContactResult(contact) {
     if (!wrap.contains(e.target)) closeContactResults();
   });
 })();
+
+// ════════════════════════════════════════════════════════════════════════════
+// FOLHA DE SEPARAÇÃO — Lista Escolar enviada pelo site
+// ════════════════════════════════════════════════════════════════════════════
+
+function isSiteSchoolListMessage(content) {
+  return typeof content === "string" && content.includes("[SITE_LISTA_ESCOLAR]");
+}
+
+// Extrai valor de campo "Nome do Campo: valor" dentro de um bloco de texto
+function _sslField(block, fieldName) {
+  // Escapa chars especiais para uso em regex (ex: "/" em "Ano/Série")
+  const escaped = fieldName.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  const re = new RegExp(escaped + "\\s*:\\s*([^\\n]+)");
+  const m = block.match(re);
+  return m ? m[1].trim() : "";
+}
+
+// Parser de itens: linhas "Nx Item" com sub-linhas de observação
+function _sslParseItems(block, startMarker, endMarker) {
+  const si = block.indexOf(startMarker);
+  if (si === -1) return [];
+  let section = block.slice(si + startMarker.length);
+  if (endMarker) {
+    const ei = section.indexOf(endMarker);
+    if (ei !== -1) section = section.slice(0, ei);
+  }
+  const items = [];
+  let cur = null;
+  for (const line of section.split("\n")) {
+    const t = line.trim();
+    if (!t) continue;
+    const m = t.match(/^(\d+)\s*[xX]\s+(.+)/);
+    if (m) {
+      if (cur) items.push(cur);
+      cur = { qty: m[1], name: m[2].trim(), obs: [] };
+    } else if (cur) {
+      // Sub-linha de observação: normaliza rótulos conhecidos
+      const obs = t
+        .replace(/^Preferência do cliente:\s*/i, "preferência: ")
+        .replace(/^Sugestão da escola:\s*/i, "sugestão da escola: ");
+      cur.obs.push(obs);
+    }
+  }
+  if (cur) items.push(cur);
+  return items;
+}
+
+function parseSiteSchoolList(content) {
+  const result = { clientName: "", whatsapp: "", lists: [] };
+
+  // Nome do cliente: "Sou *Nome*"
+  const nameM = content.match(/[Ss]ou\s+\*([^*]+)\*/);
+  if (nameM) result.clientName = nameM[1].trim();
+
+  // WhatsApp informado no site
+  const wppM = content.match(/\*WhatsApp informado no site:\*\s*\n([^\n]+)/);
+  if (wppM) result.whatsapp = wppM[1].trim();
+
+  // Divide nos blocos *Lista N*
+  const blocks = content.split(/(?=\*Lista\s+\d+\*)/i);
+
+  for (const block of blocks) {
+    if (!/^\*Lista\s+\d+\*/i.test(block.trim())) continue;
+
+    const listNumM = block.match(/^\*Lista\s+(\d+)\*/i);
+    const listNum  = listNumM ? parseInt(listNumM[1]) : result.lists.length + 1;
+
+    const escola    = _sslField(block, "Escola");
+    const anoSerie  = _sslField(block, "Ano/Série");
+    const segmento  = _sslField(block, "Segmento");
+    const anoLetivo = _sslField(block, "Ano letivo");
+
+    const alunoNome    = _sslField(block, "Nome");
+    const prefCor      = _sslField(block, "Preferência de cor quando a lista não indicar");
+    const obsCorModelo = _sslField(block, "Observações sobre cores/modelos");
+
+    // Linha "Quando a lista indicar..." (orientação de cor geral)
+    const regaCorM = block.match(/Quando a lista indicar[^\n]+/);
+    const regaCor  = regaCorM ? regaCorM[0].trim() : "";
+
+    // Preferência de orçamento (pode vir em duas formas no texto)
+    const prefOrcM = block.match(/\*Preferência para o orçamento:\*\s*\n([^\n]+)/);
+    const prefOrcamento = prefOrcM ? prefOrcM[1].trim()
+                                   : _sslField(block, "Preferência para o orçamento");
+
+    const items    = _sslParseItems(block, "*Itens que quero comprar:*",        "*Itens marcados como Não quero:*");
+    const naoQuero = _sslParseItems(block, "*Itens marcados como Não quero:*",  null);
+
+    result.lists.push({ listNum, escola, anoSerie, segmento, anoLetivo,
+                        alunoNome, prefCor, obsCorModelo, regaCor,
+                        prefOrcamento, items, naoQuero });
+  }
+
+  // Fallback: marcador presente mas nenhum bloco *Lista N* encontrado
+  if (result.lists.length === 0) {
+    result.lists.push({ listNum: 1, escola: "", anoSerie: "", segmento: "", anoLetivo: "",
+                        alunoNome: "", prefCor: "", obsCorModelo: "", regaCor: "",
+                        prefOrcamento: "", items: [], naoQuero: [] });
+  }
+
+  return result;
+}
+
+function _sslSheetHtml(parsed, lst, isLast, receivedAt) {
+  // Linhas da tabela principal
+  let itemRows = "";
+  if (lst.items.length === 0) {
+    itemRows = `<tr><td colspan="6" style="font-style:italic;color:#888;padding:7px;">Nenhum item identificado</td></tr>`;
+  } else {
+    for (const item of lst.items) {
+      const obs = item.obs.length > 0 ? esc(item.obs.join("; ")) : "";
+      itemRows += `<tr>
+        <td style="width:38px;text-align:center;">${esc(item.qty)}</td>
+        <td>${esc(item.name)}</td>
+        <td style="font-size:9pt;color:#555;">${obs}</td>
+        <td class="tc" style="width:48px;">&#9744;</td>
+        <td class="tc" style="width:48px;">&#9744;</td>
+        <td style="width:90px;">&nbsp;</td>
+      </tr>`;
+    }
+  }
+
+  // Linhas dos itens "Não quero"
+  let nqRows = "";
+  for (const item of lst.naoQuero) {
+    const obs = item.obs.length > 0 ? esc(item.obs.join("; ")) : "";
+    nqRows += `<tr>
+      <td style="width:38px;text-align:center;">${esc(item.qty)}</td>
+      <td>${esc(item.name)}</td>
+      <td style="font-size:9pt;color:#555;">${obs}</td>
+    </tr>`;
+  }
+
+  const alunoLabel = esc(lst.alunoNome || `Lista ${lst.listNum}`);
+
+  const orientBlock = (lst.prefCor || lst.obsCorModelo || lst.regaCor) ? `
+    <div class="ps-orient">
+      <div class="ps-orient-ttl">Orientações de cor e modelo</div>
+      ${lst.prefCor      ? `<div class="ps-orient-row"><strong>Preferência de cor:</strong> ${esc(lst.prefCor)}</div>` : ""}
+      ${lst.obsCorModelo ? `<div class="ps-orient-row"><strong>Observações sobre cores/modelos:</strong> ${esc(lst.obsCorModelo)}</div>` : ""}
+      ${lst.regaCor      ? `<div class="ps-orient-row"><strong>Regra:</strong> ${esc(lst.regaCor)}</div>` : ""}
+    </div>` : "";
+
+  const nqBlock = lst.naoQuero.length > 0 ? `
+    <div class="ps-noquero">
+      <div class="ps-nq-ttl">Itens marcados como NÃO QUERO</div>
+      <div class="ps-nq-note">Não separar estes itens, a menos que o cliente solicite depois.</div>
+      <table class="ps-tbl">
+        <thead><tr><th style="width:38px;">Qtd.</th><th>Item</th><th>Observações</th></tr></thead>
+        <tbody>${nqRows}</tbody>
+      </table>
+    </div>` : "";
+
+  return `<div class="print-sheet-wrap${!isLast ? " page-break" : ""}">
+    <div class="ps-hdr">
+      <div class="ps-hdr-name">Sartec Papelaria</div>
+      <div class="ps-hdr-sub">Folha de separação e conferência</div>
+      <div class="ps-hdr-badge">Lista escolar enviada pelo site</div>
+    </div>
+
+    <div class="ps-fields">
+      <div class="ps-field"><span class="ps-lbl">Cliente:</span> ${esc(parsed.clientName || "Não informado")}</div>
+      <div class="ps-field"><span class="ps-lbl">WhatsApp:</span> ${esc(parsed.whatsapp || "Não informado")}</div>
+      <div class="ps-field"><span class="ps-lbl">Aluno:</span> ${alunoLabel}</div>
+      <div class="ps-field"><span class="ps-lbl">Escola:</span> ${esc(lst.escola || "Não informado")}</div>
+      <div class="ps-field"><span class="ps-lbl">Ano/Série:</span> ${esc(lst.anoSerie || "Não informado")}</div>
+      <div class="ps-field"><span class="ps-lbl">Segmento:</span> ${esc(lst.segmento || "Não informado")}</div>
+      <div class="ps-field"><span class="ps-lbl">Ano letivo:</span> ${esc(lst.anoLetivo || "Não informado")}</div>
+      <div class="ps-field-full"><span class="ps-lbl">Preferência de orçamento:</span> ${esc(lst.prefOrcamento || "Não informado")}</div>
+      ${receivedAt ? `<div class="ps-field-full"><span class="ps-lbl">Recebido em:</span> ${esc(receivedAt)}</div>` : ""}
+    </div>
+
+    ${orientBlock}
+
+    <div class="ps-sec-ttl">Itens para separar</div>
+    <table class="ps-tbl">
+      <thead>
+        <tr>
+          <th style="width:38px;">Qtd.</th>
+          <th>Item</th>
+          <th style="width:130px;">Observações</th>
+          <th style="width:48px;text-align:center;">Separado</th>
+          <th style="width:48px;text-align:center;">Conferido</th>
+          <th style="width:90px;">Falta/Substituição</th>
+        </tr>
+      </thead>
+      <tbody>${itemRows}</tbody>
+    </table>
+
+    ${nqBlock}
+
+    <div class="ps-footer">
+      <div class="ps-field">Separado por: <span class="ps-uline">&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;</span></div>
+      <div class="ps-field">Conferido por: <span class="ps-uline">&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;</span></div>
+      <div class="ps-field">Cliente avisado: &#9744; Sim &nbsp; &#9744; Não</div>
+      <div class="ps-field">Data: ____/____/____</div>
+    </div>
+  </div>`;
+}
+
+function openSchoolListPrint(content, msg) {
+  const parsed = parseSiteSchoolList(content);
+
+  let receivedAt = "";
+  if (msg?.createdAt) {
+    try {
+      const d = new Date(msg.createdAt);
+      receivedAt = d.toLocaleString("pt-BR", {
+        timeZone: "America/Sao_Paulo", day: "2-digit", month: "2-digit",
+        year: "numeric", hour: "2-digit", minute: "2-digit", hour12: false
+      });
+    } catch {}
+  }
+
+  const sheetsHtml = parsed.lists
+    .map((lst, i) => _sslSheetHtml(parsed, lst, i === parsed.lists.length - 1, receivedAt))
+    .join("\n");
+
+  // Remove overlay anterior se houver
+  document.getElementById("ssl-print-overlay")?.remove();
+
+  const overlay = document.createElement("div");
+  overlay.className = "print-overlay";
+  overlay.id = "ssl-print-overlay";
+
+  const toolbar = document.createElement("div");
+  toolbar.className = "print-overlay-toolbar";
+  toolbar.innerHTML = `
+    <button class="btn-do-print" onclick="window.print()">🖨 Imprimir</button>
+    <button class="btn-close-print" onclick="document.getElementById('ssl-print-overlay')?.remove()">Fechar</button>
+  `;
+  overlay.appendChild(toolbar);
+
+  const sheetsDiv = document.createElement("div");
+  sheetsDiv.innerHTML = sheetsHtml;
+  overlay.appendChild(sheetsDiv);
+
+  const onEsc = (e) => { if (e.key === "Escape") { overlay.remove(); document.removeEventListener("keydown", onEsc); } };
+  document.addEventListener("keydown", onEsc);
+
+  document.body.appendChild(overlay);
+  overlay.scrollTop = 0;
+}
 </script>
 <div id="toast-container"></div>
 
