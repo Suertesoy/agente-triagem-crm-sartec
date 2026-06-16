@@ -227,6 +227,7 @@ function initPageTransitions() {
    ========================================================= */
 window.SartecInit = function ({ active, fab }) {
   document.addEventListener('DOMContentLoaded', () => {
+    if (active) document.body.classList.add('page-' + active);
     renderHeader(active);
     renderEscolasFaixa();
     renderFooter();

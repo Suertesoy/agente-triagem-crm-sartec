@@ -33,7 +33,7 @@
 html, body {
   margin: 0;
   padding: 0;
-  font-family: 'Inter', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+  font-family: 'Source Sans 3', 'Inter', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
   color: var(--texto);
   background: var(--branco);
   font-size: 16px;
@@ -45,7 +45,7 @@ img { max-width: 100%; display: block; }
 a { color: var(--azul); text-decoration: none; }
 a:hover { color: var(--azul-claro); }
 
-h1, h2, h3, h4 { font-weight: 800; letter-spacing: -0.02em; line-height: 1.15; margin: 0 0 .5em; }
+h1, h2, h3, h4 { font-family: 'Archivo', sans-serif; font-weight: 800; letter-spacing: -0.02em; line-height: 1.15; margin: 0 0 .5em; }
 h1 { font-size: clamp(2rem, 4vw, 3.4rem); }
 h2 { font-size: clamp(1.6rem, 3vw, 2.4rem); }
 h3 { font-size: 1.25rem; }
@@ -62,11 +62,12 @@ p  { margin: 0 0 1em; color: var(--texto-suave); }
   position: sticky;
   top: 0;
   z-index: 50;
-  background: var(--azul);
+  background: #FFFFFF;
   height: var(--header-h);
   display: flex;
   align-items: center;
-  box-shadow: 0 2px 16px rgba(0,0,0,0.22);
+  border-bottom: 1px solid #E2E8F0;
+  box-shadow: 0 1px 4px rgba(15,23,42,0.06);
 }
 .site-header .container {
   display: flex;
@@ -77,21 +78,21 @@ p  { margin: 0 0 1em; color: var(--texto-suave); }
 .brand { display: flex; align-items: center; gap: 12px; flex-shrink: 0; }
 .brand img { height: 68px; object-fit: contain; }
 .brand-text { display: flex; flex-direction: column; line-height: 1.25; }
-.brand-text strong { color: #ffffff; font-size: 1.15rem; letter-spacing: .01em; }
-.brand-text span { color: rgba(255,255,255,0.75); font-size: .68rem; letter-spacing: .12em; text-transform: uppercase; margin-top: 2px; }
+.brand-text strong { color: #0F172A; font-size: 1.15rem; letter-spacing: .01em; }
+.brand-text span { color: #475569; font-size: .68rem; letter-spacing: .12em; text-transform: uppercase; margin-top: 2px; }
 
 .main-nav { display: flex; gap: 26px; }
 .main-nav a {
-  color: rgba(255,255,255,0.85);
+  color: #475569;
   font-size: .86rem;
-  font-weight: 500;
+  font-weight: 600;
   position: relative;
   padding: 6px 2px;
   white-space: nowrap;
   transition: color .15s;
 }
-.main-nav a:hover { color: #ffffff; }
-.main-nav a.active { color: #ffffff; font-weight: 700; }
+.main-nav a:hover { color: #1E3A8A; }
+.main-nav a.active { color: #1E3A8A; font-weight: 700; }
 .main-nav a.active::after {
   content: '';
   position: absolute;
@@ -99,13 +100,12 @@ p  { margin: 0 0 1em; color: var(--texto-suave); }
   left: 0;
   right: 0;
   height: 3px;
-  background: rgba(255,255,255,0.9);
+  background: #DC2626;
   border-radius: 3px 3px 0 0;
 }
 
 .header-actions { display: flex; align-items: center; gap: 10px; flex-shrink: 0; }
 
-/* .dark-toggle removido — site sempre em light mode */
 
 .btn-wpp-header {
   display: inline-flex;
@@ -122,7 +122,7 @@ p  { margin: 0 0 1em; color: var(--texto-suave); }
 }
 .btn-wpp-header:hover { background: var(--verde-wpp-escuro); color: white; transform: translateY(-1px); }
 
-.menu-toggle { display: none; background: none; border: 0; cursor: pointer; color: white; padding: 4px; }
+.menu-toggle { display: none; background: none; border: 0; cursor: pointer; color: #0F172A; padding: 4px; }
 
 @media (max-width: 1080px) {
   .main-nav { gap: 16px; }
@@ -136,9 +136,10 @@ p  { margin: 0 0 1em; color: var(--texto-suave); }
     position: absolute;
     top: var(--header-h);
     left: 0; right: 0;
-    background: var(--azul);
+    background: #FFFFFF;
+    border-top: 1px solid #E2E8F0;
     padding: 12px 0;
-    box-shadow: 0 8px 24px rgba(0,0,0,0.25);
+    box-shadow: 0 8px 24px rgba(15,23,42,0.12);
     z-index: 200;
     /* estado inicial: oculto com transição */
     opacity: 0;
@@ -1054,7 +1055,6 @@ section { padding: 64px 0; }
 .mb-2 { margin-bottom: 16px; }
 .mb-4 { margin-bottom: 32px; }
 
-/* dark mode removido — site sempre em light mode */
 
 
 /* ======================== COMO USAR (Lista Escolar) ======================== */
@@ -1263,6 +1263,42 @@ section { padding: 64px 0; }
 }
 .footer-digital-link:hover { color: rgba(255,255,255,0.88); border-bottom-color: rgba(255,255,255,0.65); }
 
+/* ======================== BANNER DE IMPLANTAÇÃO ======================== */
+.banner-implantacao {
+  background: #EFF3FB;
+  border-bottom: 1px solid #E2E8F0;
+  padding: 11px 0;
+  font-size: .87rem;
+  color: #1E3A8A;
+}
+.banner-implantacao .container {
+  display: flex;
+  align-items: flex-start;
+  justify-content: center;
+  gap: 8px;
+  flex-wrap: wrap;
+  text-align: center;
+}
+.banner-implantacao-ico {
+  flex-shrink: 0;
+  margin-top: 1px;
+}
+
+/* Link "O que é este item?" nos cards da lista */
+.item-img-buscar {
+  display: inline-block;
+  margin-bottom: 10px;
+  font-size: .78rem;
+  color: var(--azul-claro);
+  text-decoration: none;
+  font-weight: 500;
+  transition: color .15s;
+}
+.item-img-buscar:hover {
+  color: var(--azul);
+  text-decoration: underline;
+}
+
 /* =========================================================
    PAGE TRANSITIONS (page-transition)
    ========================================================= */
@@ -1296,4 +1332,46 @@ body.is-leaving {
     opacity: 1;
     transform: none;
   }
+}
+
+/* ======================== MOBILE — AJUSTES ESPECÍFICOS ======================== */
+
+/* 1. Header: logo maior no mobile */
+@media (max-width: 900px) {
+  :root { --header-h: 104px; }
+  .brand img { height: 84px; }
+}
+
+/* 2. Lista Escolar — ações finais: sem sticky no mobile */
+@media (max-width: 768px) {
+  .acoes-finais {
+    position: static;
+    bottom: auto;
+    box-shadow: var(--shadow);
+    margin-top: 28px;
+    width: 100%;
+  }
+}
+
+/* 3. Lista Escolar — FAB compacto no topo direito no mobile */
+@media (max-width: 900px) {
+  .page-lista .fab-wpp {
+    top: calc(var(--header-h) + 8px);
+    bottom: auto;
+    right: 14px;
+    padding: 8px 10px;
+    font-size: .82rem;
+    box-shadow: var(--shadow);
+  }
+  .page-lista .fab-wpp .label { display: none; }
+  .page-lista .fab-wpp .ico { font-size: 1.25rem; }
+}
+
+/* 4. Footer: centralizar no mobile */
+@media (max-width: 768px) {
+  .footer-brand { text-align: center; }
+  .footer-brand img { margin: 0 auto 14px; }
+  .footer-col { text-align: center; }
+  .footer-col h4 { text-align: center; }
+  .footer-bottom { text-align: center; }
 }
