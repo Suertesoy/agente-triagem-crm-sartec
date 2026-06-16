@@ -7958,8 +7958,12 @@ function appendBubble(container, msg, optimistic = false, history = null, histor
 
   // ── PDF / Documento ──
   } else if ((mediaType === "document" || mediaMimeType === "application/pdf") && (mediaUrl || mediaData)) {
-    const fname = mediaFilename || "Documento PDF";
-    const card = buildMediaCard("📄", fname, mediaData, mediaMimeType || "application/pdf", true, mediaUrl);
+    const _isPdf = (mediaMimeType || "").includes("pdf");
+    const _isSheet = (mediaMimeType || "").includes("spreadsheet") || (mediaMimeType || "").includes("excel") || /xlsx?/.test(mediaMimeType || "");
+    const _isWord = (mediaMimeType || "").includes("wordprocessing") || /docx?/.test(mediaFilename || "") || (mediaMimeType || "").includes("msword");
+    const _docIcon = _isPdf ? "📄" : _isSheet ? "📊" : _isWord ? "📝" : "📎";
+    const _docLabel = mediaFilename || (_isPdf ? "Documento PDF" : "Documento");
+    const card = buildMediaCard(_docIcon, _docLabel, mediaData, mediaMimeType || "application/pdf", _isPdf, mediaUrl);
     bubble.appendChild(card);
     if (content) {
       const txt = document.createElement("div");
@@ -7967,6 +7971,20 @@ function appendBubble(container, msg, optimistic = false, history = null, histor
       txt.textContent = content;
       bubble.appendChild(txt);
     }
+
+  // ── Documento sem arquivo disponível (legado — arquivo nunca salvo) ──
+  } else if (mediaType === "document" && !mediaUrl && !mediaData && !mediaUnavailable && !mediaDeleted) {
+    const _legacyCard = document.createElement("div");
+    _legacyCard.style.cssText = "background:#fff7ed;border:1px solid #fed7aa;border-radius:8px;padding:8px 11px;font-size:.8rem;line-height:1.45;";
+    const _legacyTitle = document.createElement("div");
+    _legacyTitle.style.cssText = "font-weight:600;color:#c2410c;margin-bottom:3px;";
+    _legacyTitle.textContent = "📎 " + (mediaFilename || "Documento");
+    _legacyCard.appendChild(_legacyTitle);
+    const _legacyText = document.createElement("div");
+    _legacyText.style.cssText = "color:#9a3412;";
+    _legacyText.textContent = "Documento registrado, mas o arquivo não ficou disponível. Peça para o cliente reenviar.";
+    _legacyCard.appendChild(_legacyText);
+    bubble.appendChild(_legacyCard);
 
   // ── Planilha ──
   } else if ((mediaUrl || mediaData) && (

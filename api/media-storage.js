@@ -27,6 +27,21 @@ const MIME_TO_EXT = {
   "audio/mpeg":       "mp3",
   "audio/mp3":        "mp3",
   "video/mp4":        "mp4",
+  // Documentos Office
+  "application/msword":                                                          "doc",
+  "application/vnd.openxmlformats-officedocument.wordprocessingml.document":    "docx",
+  "application/vnd.ms-excel":                                                   "xls",
+  "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet":          "xlsx",
+  "application/vnd.ms-powerpoint":                                              "ppt",
+  "application/vnd.openxmlformats-officedocument.presentationml.presentation":  "pptx",
+  // Outros formatos comuns
+  "text/plain":       "txt",
+  "text/csv":         "csv",
+  "application/zip":  "zip",
+  "application/x-zip-compressed": "zip",
+  "image/gif":        "gif",
+  "image/heic":       "heic",
+  "image/heif":       "heif",
 };
 
 function getExt(mimeType) {

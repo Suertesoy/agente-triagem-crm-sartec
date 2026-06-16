@@ -2245,6 +2245,35 @@ async function handleIncomingMessage(req, res) {
 
           // ── OUTROS DOCUMENTOS (Word, zip, etc.) ──────────────
           if (type === "document") {
+            const _docMediaId  = message.document?.id;
+            const _docFilename = message.document?.filename || "documento";
+            const _docMime     = message.document?.mime_type || undefined;
+
+            console.log(`[Doc] recebido type=document mime=${_docMime || "—"} filename=${_docFilename} mediaId=${_docMediaId}`);
+
+            // Download + upload para R2 (mesmo padrão dos handlers de imagem e PDF)
+            let _docStorageKey     = null;
+            let _docStorageFailed  = false;
+            try {
+              const _docMedia = await downloadMedia(_docMediaId);
+              console.log(`[Doc] download ok size=${_docMedia.buffer?.length || 0} mime=${_docMedia.mimeType || _docMime}`);
+              try {
+                const _r2Doc = await uploadMedia(_docMedia.buffer, _docMime || _docMedia.mimeType, from, _docMediaId);
+                if (_r2Doc) {
+                  _docStorageKey = _r2Doc.storageKey;
+                  console.log(`[Doc] salvo no R2 size=${_r2Doc.size}`);
+                } else {
+                  _docStorageFailed = true; // R2_DISABLED
+                  console.log(`[Doc] R2 desabilitado — arquivo não salvo`);
+                }
+              } catch (_r2Err) {
+                _docStorageFailed = true;
+                console.error(`[Doc] falha upload R2: ${_r2Err.message}`);
+              }
+            } catch (_dlErr) {
+              console.error(`[Doc] falha download: ${_dlErr.message}`);
+            }
+
             // Mensagem do cliente → reinicia janela de 24h
             try {
               await withSessionLock(getRedis(), from, async () => {
@@ -2295,22 +2324,30 @@ async function handleIncomingMessage(req, res) {
                     _docSession._stopFlow = true; // Flag temporária para o handler
                   }
                 }
-                addMessage(_docSession, "user", "[documento]", {
+                const _docMsgExtra = {
                   ...msgMeta,
                   mediaType:    "document",
-                  mediaFilename: message.document?.filename || "documento",
-                  mediaMimeType: message.document?.mime_type || undefined,
-                });
+                  mediaFilename: _docFilename,
+                  mediaMimeType: _docMime,
+                };
+                if (_docStorageKey)    _docMsgExtra.mediaStorageKey     = _docStorageKey;
+                if (_docStorageFailed) _docMsgExtra.mediaStorageFailed  = true;
+                addMessage(_docSession, "user", "[documento]", _docMsgExtra);
                 await saveSession(from, _docSession);
+                if (_docStorageKey) {
+                  console.log(`[Doc] salvo no histórico com mediaStorageKey`);
+                } else {
+                  console.log(`[Doc] salvo no histórico sem arquivo (download/R2 falhou)`);
+                }
                 if (_docSession._stopFlow) {
                   // Limpa a flag temporária e sinaliza para o handler não enviar mensagem
                   delete _docSession._stopFlow;
                   throw new Error("STOP_FLOW");
                 }
               });
-            } catch (_e) { 
+            } catch (_e) {
               if (_e.message === "STOP_FLOW") continue;
-              console.error("[Doc/window] ❌", _e.message); 
+              console.error("[Doc/window] ❌", _e.message);
             }
             await sendTextMessage(from, "Recebi seu arquivo 📎 Vou passar para a equipe dar uma olhada 🤝");
             continue;
