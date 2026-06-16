@@ -75,6 +75,17 @@ export default async function handler(req, res) {
     // Normaliza history preservando mídia (imagens e documentos/PDF)
     // Usa Promise.all + async para suportar geração de URL presigned R2
     const history = await Promise.all((session.history || []).map(async (m) => {
+      // Evento de reação (fallback — mensagem original não encontrada)
+      if (m.messageType === "reaction_event") {
+        return {
+          role:            m.role,
+          content:         "",
+          messageType:     "reaction_event",
+          reactionEmoji:   m.reactionEmoji   || "",
+          targetMessageId: m.targetMessageId || null,
+          createdAt:       m.createdAt       || null,
+        };
+      }
       if (m.messageType === "template_status") {
         return {
           role:             m.role,
@@ -197,6 +208,7 @@ export default async function handler(req, res) {
       if (m.transcription)      item.transcription      = m.transcription;
       if (m.transcriptionError) item.transcriptionError = m.transcriptionError;
       if (m.pjLunchAutoReply)   item.pjLunchAutoReply   = true;
+      if (m.reactions?.length)  item.reactions          = m.reactions;
 
       return item;
     }));

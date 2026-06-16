@@ -2173,6 +2173,24 @@
     }
     .btn-emoji:hover { border-color: var(--brand-navy); color: var(--brand-navy); }
 
+    /* ══════ REAÇÕES DO CLIENTE ══════ */
+    .rxn-pill {
+      display: inline-flex; align-items: center; gap: 3px;
+      background: #f0f0f0; border: 1px solid #e0e0e0;
+      border-radius: 12px; padding: 2px 7px;
+      font-size: .82rem; line-height: 1.3;
+      margin-top: 4px; cursor: default; user-select: none;
+    }
+    .bubble.human .rxn-pill, .bubble.bot .rxn-pill {
+      background: #e8eaf6; border-color: #c8d0ee;
+    }
+    .rxn-count { font-size: .72rem; color: #666; }
+    .rxn-event-line {
+      display: flex; align-items: center; justify-content: center;
+      font-size: .72rem; color: var(--text-muted, #aaa);
+      margin: 3px 8px; gap: 4px; user-select: none;
+    }
+
     /* ══════ LISTA ESCOLAR — IMPRESSÃO ══════ */
     .btn-print-lista {
       display: inline-flex; align-items: center; gap: 5px;
@@ -5182,9 +5200,10 @@ const _cardNewJustArrived  = new Set(); // phones com nova msg detectada neste t
 function processCardNewMsg(phone, lastUserMessageAt) {
   if (!lastUserMessageAt) return _cardUnreadCount[phone] || 0;
   if (_cardLastUserMsgAt[phone] === undefined) {
-    _cardLastUserMsgAt[phone] = lastUserMessageAt; // primeira render: sem badge
-    _cardUnreadCount[phone]   = 0;
-    return 0;
+    _cardLastUserMsgAt[phone] = lastUserMessageAt;
+    // Card novo de handoff/triagem: iniciar com badge 1 para chamar atenção
+    _cardUnreadCount[phone] = _newlyArrivedPhones.has(phone) ? 1 : 0;
+    return _cardUnreadCount[phone];
   }
   if (lastUserMessageAt > _cardLastUserMsgAt[phone]) {
     _cardLastUserMsgAt[phone] = lastUserMessageAt;
@@ -5227,7 +5246,8 @@ let mediaModalMime   = null;
 let mediaModalUrl    = null;
 
 // tracking para notificação de novos cards
-let knownPhones = new Set();
+let knownPhones         = new Set();
+let _newlyArrivedPhones = new Set(); // phones de cards que chegaram neste tick de polling
 let audioCtx    = null;
 
 // aba Conversas — filtro, pin, não lida, menu contextual
@@ -6110,6 +6130,9 @@ async function loadQueue() {
     console.log("[loadQueue] conversations:", (data.conversations||[]).length);
     allConvs   = data.conversations || [];
     Object.assign(_colOrder, data.pipelineOrder || {});
+    // detectNewCards ANTES de renderPipeline para que _newlyArrivedPhones
+    // esteja populado quando processCardNewMsg inicializar o badge dos cards novos
+    detectNewCards(allConvs);
     console.log("[loadQueue] before renderPipeline, __onboardingActive:", window.__onboardingActive);
     if (!window.__onboardingActive) {
       renderPipeline(allConvs);
@@ -6120,7 +6143,6 @@ async function loadQueue() {
     updateHeader(allConvs);
     console.log("[loadQueue] ✅ done");
     updateDocTitle(allConvs);
-    detectNewCards(allConvs);
     setRefreshState("ok");
     if (checkAndShowOnboardingAfterLogin()) {
       // Handled
@@ -6207,9 +6229,11 @@ function updateHeader(convs) {
 }
 
 function detectNewCards(convs) {
+  _newlyArrivedPhones.clear(); // reset a cada tick
   const newPhones = new Set(convs.map(c => c.phone));
   let hasNew = false;
   let hasHighPriority = false;
+  const _newActiveConvs = []; // cards novos em estado de trabalho humano
   for (const p of newPhones) {
     if (!knownPhones.has(p)) {
       hasNew = true;
@@ -6217,14 +6241,38 @@ function detectNewCards(convs) {
       if (conv) {
         const { level } = computePriority(conv);
         if (level === "critica" || level === "alta") hasHighPriority = true;
+        // Card novo que entrou como trabalho humano (pós-triagem/handoff)
+        if (conv.status === "aguardando_humano") {
+          _newlyArrivedPhones.add(p);
+          _newActiveConvs.push(conv);
+        }
       }
     }
   }
   if (hasNew && knownPhones.size > 0) {
     if (hasHighPriority) playPrioritySound();
     else playNotificationSound();
+    // Notificação do navegador específica para cards novos de trabalho humano
+    if (_newActiveConvs.length > 0) {
+      const _nc = _newActiveConvs[0];
+      _showNewCardNotification(_nc.clientName);
+    }
   }
   knownPhones = newPhones;
+}
+
+function _showNewCardNotification(clientName) {
+  if (!("Notification" in window) || Notification.permission !== "granted") return;
+  try {
+    const n = new Notification("Sartec: nova conversa no painel", {
+      body: clientName && clientName !== "—"
+        ? `Revisar triagem de ${clientName}.`
+        : "Abra o card para revisar a triagem.",
+      icon: "./assets/logo-sartec-header.png",
+    });
+    n.onclick = () => { window.focus(); n.close(); };
+    setTimeout(() => n.close(), 5000);
+  } catch {}
 }
 
 function toggleResolvedCol(btn) {
@@ -7061,6 +7109,7 @@ async function openChat(phone) {
   openModalPhone = phone;
   _cardUnreadCount[phone]   = 0;
   _cardNewJustArrived.delete(phone);
+  _newlyArrivedPhones.delete(phone); // remove badge de card novo ao abrir
   _cardLastUserMsgAt[phone] = new Date().toISOString(); // marca como visto
   if (isConvLockedByOther(phone)) showDupeWarning("modal");
   else hideDupeWarning("modal");
@@ -7993,6 +8042,16 @@ function appendBubble(container, msg, optimistic = false, history = null, histor
     return;
   }
 
+  // ── Evento de reação (fallback — mensagem original não localizada) ──
+  if (msg.messageType === "reaction_event") {
+    const _rxLine = document.createElement("div");
+    _rxLine.className = "rxn-event-line";
+    _rxLine.title = `Reação a mensagem anterior (ID: ${msg.targetMessageId || "desconhecido"})`;
+    _rxLine.innerHTML = `<span>${msg.reactionEmoji || "👋"}</span><span>1</span>`;
+    container.appendChild(_rxLine);
+    return;
+  }
+
   const wrap = document.createElement("div");
   wrap.className = `bubble-wrap ${role === "user" ? "left" : "right"}`;
 
@@ -8176,6 +8235,21 @@ function appendBubble(container, msg, optimistic = false, history = null, histor
       _rmBtn.title = "Remover o arquivo do armazenamento (a mensagem permanece no histórico)";
       _rmBtn.onclick = (e) => { e.stopPropagation(); removeMedia(_rmPhone, historyIndex, _rmBtn); };
       bubble.appendChild(_rmBtn);
+    }
+  }
+
+  // ── Cápsula de reação do cliente ─────────────────────────────────────────
+  if (!optimistic && Array.isArray(msg.reactions) && msg.reactions.length > 0) {
+    const _rxnsByEmoji = {};
+    for (const r of msg.reactions) {
+      if (r.emoji) _rxnsByEmoji[r.emoji] = (_rxnsByEmoji[r.emoji] || 0) + 1;
+    }
+    for (const [emoji, count] of Object.entries(_rxnsByEmoji)) {
+      const pill = document.createElement("span");
+      pill.className = "rxn-pill";
+      pill.title = "Cliente reagiu à mensagem";
+      pill.innerHTML = `<span>${emoji}</span><span class="rxn-count">${count}</span>`;
+      bubble.appendChild(pill);
     }
   }
 

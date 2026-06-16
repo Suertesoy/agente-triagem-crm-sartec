@@ -2393,6 +2393,42 @@ async function handleIncomingMessage(req, res) {
             continue;
           }
 
+          // ── REACTION — reação do cliente a mensagem da Sartec ─
+          if (type === "reaction") {
+            const _rEmoji  = message.reaction?.emoji ?? "";
+            const _rTarget = message.reaction?.message_id;
+            const _rMsgId  = message.id;
+            console.log(`[reaction] recebida phone=+${from} emoji="${_rEmoji}" targetMessageId=${_rTarget || "—"}`);
+            if (_rTarget) {
+              try {
+                await withSessionLock(getRedis(), from, async () => {
+                  const session = await loadSession(from);
+                  const targetMsg = session.history.find(m => m.metaMessageId === _rTarget);
+                  if (targetMsg) {
+                    if (!targetMsg.reactions) targetMsg.reactions = [];
+                    const idx = targetMsg.reactions.findIndex(r => r.from === "client");
+                    if (_rEmoji) {
+                      const rxn = { emoji: _rEmoji, from: "client", reactedAt: new Date().toISOString(), reactionMessageId: _rMsgId, targetMessageId: _rTarget };
+                      if (idx >= 0) targetMsg.reactions[idx] = rxn;
+                      else targetMsg.reactions.push(rxn);
+                      console.log(`[reaction] vinculada targetMessageId=${_rTarget} emoji="${_rEmoji}"`);
+                    } else {
+                      if (idx >= 0) { targetMsg.reactions.splice(idx, 1); if (!targetMsg.reactions.length) delete targetMsg.reactions; }
+                      console.log(`[reaction] removida targetMessageId=${_rTarget}`);
+                    }
+                  } else {
+                    if (_rEmoji) {
+                      session.history.push({ role: "user", content: "", messageType: "reaction_event", reactionEmoji: _rEmoji, reactionMsgId: _rMsgId, targetMessageId: _rTarget, createdAt: new Date().toISOString() });
+                      console.log(`[reaction] target não encontrado, salvo como fallback discreto targetMessageId=${_rTarget}`);
+                    }
+                  }
+                  await saveSession(from, session);
+                });
+              } catch (_rxnErr) { console.error(`[reaction] erro ${_rxnErr.message}`); }
+            }
+            continue;
+          }
+
           console.log(`[Msg] Tipo ignorado: ${type}`);
         }
       }
