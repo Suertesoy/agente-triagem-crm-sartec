@@ -310,6 +310,7 @@ async function sendDocument(req, res, body, PHONE_NUMBER_ID, ACCESS_TOKEN) {
 
   // 1. Upload para a Meta
   const binaryData = Buffer.from(mediaBase64, "base64");
+  console.log(`[send/document] upload start filename=${filename} mime=${mimeType} size=${binaryData.length}`);
 
   const uploadResult = await callMetaWithRetry(
     `https://graph.facebook.com/v19.0/${PHONE_NUMBER_ID}/media`,
@@ -324,11 +325,13 @@ async function sendDocument(req, res, body, PHONE_NUMBER_ID, ACCESS_TOKEN) {
   );
 
   if (!uploadResult.ok) {
+    const _ue = uploadResult.data?.error || {};
+    console.error(`[send/document] falha upload meta code=${_ue.code} msg="${_ue.message}"`);
     return metaErrRes(res, "Erro ao fazer upload do documento para a Meta API", uploadResult);
   }
 
   const mediaId = uploadResult.data.id;
-  console.log(`[send/document] ✅ Upload OK — media_id: ${mediaId} attempts=${uploadResult.attempts}`);
+  console.log(`[send/document] upload ok media_id=${mediaId} attempts=${uploadResult.attempts}`);
 
   // 2. Envia o documento via media_id
   const msgPayload = {
@@ -357,11 +360,13 @@ async function sendDocument(req, res, body, PHONE_NUMBER_ID, ACCESS_TOKEN) {
   );
 
   if (!metaResult.ok) {
+    const _se = metaResult.data?.error || {};
+    console.error(`[send/document] falha send code=${_se.code} msg="${_se.message}"`);
     return metaErrRes(res, "Erro ao enviar documento pela Meta API", metaResult);
   }
 
   const metaMessageId = metaResult.data?.messages?.[0]?.id || null;
-  console.log(`[send/document] ✅ ID: ${metaMessageId}${replyToMessageId ? " (reply)" : ""} attempts=${metaResult.attempts}`);
+  console.log(`[send/document] send ok metaMessageId=${metaMessageId}${replyToMessageId ? " (reply)" : ""} attempts=${metaResult.attempts}`);
 
   // 3. Upload para R2 (best-effort; falha não cancela envio já realizado)
   let r2DocResult = null;

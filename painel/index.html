@@ -2126,6 +2126,53 @@
     }
     .iq-count { flex-basis: 100%; font-size: .68rem; color: var(--text-secondary); padding: 0 2px; }
 
+    /* ── Fila de PDFs para envio sequencial ── */
+    .doc-q-item {
+      display: flex; align-items: center; gap: 5px;
+      background: #fff1f0; border: 1px solid #fca5a5; border-radius: 7px;
+      padding: 4px 8px 4px 6px; font-size: .75rem; max-width: 220px;
+      position: relative;
+    }
+    .doc-q-name {
+      flex: 1; overflow: hidden; text-overflow: ellipsis;
+      white-space: nowrap; color: var(--text-primary); max-width: 130px;
+    }
+    .doc-q-size { color: var(--text-secondary); flex-shrink: 0; font-size: .68rem; }
+    .doc-q-item .iq-rm { position: static; width: 14px; height: 14px; font-size: .5rem; flex-shrink: 0; }
+
+    /* ── Separador de dia no histórico ── */
+    .day-separator {
+      display: flex; align-items: center; gap: 8px;
+      font-size: .65rem; color: var(--text-secondary);
+      margin: 10px 8px 4px; user-select: none;
+    }
+    .day-separator::before, .day-separator::after {
+      content: ""; flex: 1; height: 1px; background: var(--border);
+    }
+
+    /* ── Paleta de emojis ── */
+    .emoji-pop {
+      display: none; position: fixed;
+      background: #fff; border: 1px solid var(--border); border-radius: 10px;
+      padding: 7px; box-shadow: 0 4px 18px rgba(0,0,0,.14);
+      z-index: 9999; flex-wrap: wrap; width: 196px; gap: 2px;
+    }
+    .emoji-pop.visible { display: flex; }
+    .emoji-pop button {
+      background: none; border: none; font-size: 1.25rem;
+      cursor: pointer; border-radius: 6px; padding: 4px 6px;
+      transition: background .12s; line-height: 1;
+    }
+    .emoji-pop button:hover { background: #eef2ff; }
+    .btn-emoji {
+      background: none; border: 1px solid var(--border);
+      color: var(--text-secondary); border-radius: 8px;
+      width: 38px; height: 38px; font-size: 1.1rem; cursor: pointer;
+      display: flex; align-items: center; justify-content: center;
+      flex-shrink: 0; transition: border-color .15s, color .15s;
+    }
+    .btn-emoji:hover { border-color: var(--brand-navy); color: var(--brand-navy); }
+
     .composer-row { display: flex; gap: 7px; align-items: flex-end; }
     .btn-attach {
       background: none;
@@ -4778,10 +4825,11 @@
         </div>
         <div class="img-queue-bar" id="modal-img-queue-bar"></div>
         <div class="composer-row">
-          <button class="btn-attach" onclick="handleAttachClick('modal')" title="Imagem">📎</button>
+          <button class="btn-attach" onclick="handleAttachClick('modal')" title="Imagem / PDF">📎</button>
           <input type="file" id="modal-file-input" accept="image/jpeg,image/png,image/gif,image/webp,application/pdf" multiple style="display:none" onchange="handleImageSelect(event,'modal')">
           <input type="file" id="modal-camera-input" accept="image/*" capture="environment" style="display:none" onchange="handleImageSelect(event,'modal')">
           <button class="btn-camera" onclick="handleCameraClick('modal')" title="Câmera">📷</button>
+          <button class="btn-emoji" id="modal-emoji-btn" onclick="toggleEmojiPicker('modal'); event.stopPropagation();" title="Emojis aprovados">🙂</button>
           <textarea id="modal-msg-input" placeholder="Digite sua mensagem..." rows="1"
             onkeydown="handleEnter(event,'modal')" oninput="autoResize(this)"></textarea>
           <button class="btn-introduce" onclick="introduceAttendant('modal')" title="Me apresentar">Me apresentar</button>
@@ -5057,9 +5105,10 @@ let openConvsRedisKey   = null;   // chave Redis da conversa aberta (para buscar
 let lastActiveChatPhone = null;
 let lastActiveChatRedisKey = null;
 let _convsChatRequestSeq = 0;    // guard anti-corrida: incrementado a cada abertura/refresh
-let pendingMedia    = {};     // { modal: {type,base64,mimeType,filename}, convs: {...} }
-const pendingImages = { modal: [], convs: [] }; // fila de até 10 imagens por prefix
-const _isSending    = { modal: false, convs: false }; // trava contra envio concorrente
+let pendingMedia      = {};                          // { modal: {type,base64,mimeType,filename}, convs: {...} }
+const pendingImages   = { modal: [], convs: [] };    // fila de até 10 imagens por prefix
+const pendingDocuments = { modal: [], convs: [] };   // fila de PDFs para envio sequencial
+const _isSending      = { modal: false, convs: false }; // trava contra envio concorrente
 const _replyTarget  = { modal: null, convs: null };
 const _cardLastUserMsgAt   = {};       // phone → ISO do último lastUserMessageAt registrado
 const _cardUnreadCount     = {};       // phone → contador de msgs novas não lidas
@@ -7583,10 +7632,11 @@ async function openConvsChat(phone, redisKey, isArchive) {
         <div class="composer-lock-bar" id="convs-composer-lock" style="display:none"></div>
         <div class="reply-bar" id="convs-reply-bar" style="display:none"><span class="reply-bar-label">Respondendo:</span><span class="reply-bar-text" id="convs-reply-text"></span><button class="reply-bar-cancel" onclick="clearReplyTarget('convs')" title="Cancelar resposta">✕</button></div>
         <div class="composer-row">
-          <button class="btn-attach" onclick="handleAttachClick('convs')" title="Imagem">📎</button>
+          <button class="btn-attach" onclick="handleAttachClick('convs')" title="Imagem / PDF">📎</button>
           <input type="file" id="convs-file-input" accept="image/jpeg,image/png,image/gif,image/webp,application/pdf" multiple style="display:none" onchange="handleImageSelect(event,'convs')">
           <input type="file" id="convs-camera-input" accept="image/*" capture="environment" style="display:none" onchange="handleImageSelect(event,'convs')">
           <button class="btn-camera" onclick="handleCameraClick('convs')" title="Câmera">📷</button>
+          <button class="btn-emoji" id="convs-emoji-btn" onclick="toggleEmojiPicker('convs'); event.stopPropagation();" title="Emojis aprovados">🙂</button>
           <textarea id="convs-msg-input" placeholder="Digite sua mensagem..." rows="1"
             onkeydown="handleEnter(event,'convs')" oninput="autoResize(this)"></textarea>
           <button class="btn-introduce" onclick="introduceAttendant('convs')" title="Me apresentar">Me apresentar</button>
@@ -7827,6 +7877,18 @@ function appendBubble(container, msg, optimistic = false, history = null, histor
   const { role, content, sentByHuman, mediaType, mediaData, mediaMimeType, mediaFilename,
           mediaUrl, mediaUnavailable, mediaDeleted, sentMedia, mediaStorageFailed,
           attendantId, attendantName, transcription, transcriptionError } = msg;
+
+  // ── Separador de dia ──
+  if (!optimistic && historyIndex !== null && Array.isArray(history)) {
+    const curDay  = getDayKey(msg.createdAt);
+    const prevDay = historyIndex > 0 ? getDayKey(history[historyIndex - 1]?.createdAt) : null;
+    if (curDay && curDay !== prevDay) {
+      const sep = document.createElement("div");
+      sep.className = "day-separator";
+      sep.textContent = formatDayLabel(msg.createdAt);
+      container.appendChild(sep);
+    }
+  }
 
   // ── Evento de falha no template ──
   if (msg.messageType === "template_status" && msg.templateStatus === "failed") {
@@ -8532,30 +8594,43 @@ function renderImageQueue(prefix) {
 }
 
 // ── Seleção de imagem/arquivo ─────────────────────────────────────────────────
+const _MAX_PDF_BYTES = 7 * 1024 * 1024; // 7 MB — base64 ~9.3 MB < 10 MB bodyParser
+
 async function handleImageSelect(event, prefix) {
   const files = Array.from(event.target.files || []);
   event.target.value = "";
   if (!files.length) return;
 
-  // PDF: fluxo original inalterado
-  const pdfFile = files.find(f => f.type === "application/pdf");
-  if (pdfFile) {
-    const reader = new FileReader();
-    reader.onload = (e) => {
-      const dataUrl = e.target.result;
-      pendingMedia[prefix] = { type: "document", base64: dataUrl.split(",")[1], mimeType: pdfFile.type, filename: pdfFile.name };
-      const thumb = document.getElementById(`${prefix}-img-thumb`);
-      if (thumb) thumb.src = "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='50' height='50'%3E%3Crect width='50' height='50' fill='%23fee2e2' rx='6'/%3E%3Ctext x='25' y='33' text-anchor='middle' font-size='22'%3E%F0%9F%93%84%3C/text%3E%3C/svg%3E";
-      const bar = document.getElementById(`${prefix}-img-preview-bar`);
-      if (bar) bar.classList.add("visible");
-      const cap = document.getElementById(`${prefix}-img-caption`);
-      if (cap) { cap.value = ""; cap.placeholder = pdfFile.name; }
-    };
-    reader.readAsDataURL(pdfFile);
+  // ── PDF: fila de documentos (substitui fluxo de arquivo único) ──
+  const pdfFiles = files.filter(f => f.type === "application/pdf");
+  if (pdfFiles.length > 0) {
+    let added = 0, rejected = 0;
+    for (const pdfFile of pdfFiles) {
+      if (pdfFile.size > _MAX_PDF_BYTES) { rejected++; continue; }
+      const dataUrl = await new Promise(resolve => {
+        const reader = new FileReader();
+        reader.onload = e => resolve(e.target.result);
+        reader.readAsDataURL(pdfFile);
+      });
+      pendingDocuments[prefix] = [...(pendingDocuments[prefix] || []), {
+        base64:   dataUrl.split(",")[1],
+        mimeType: pdfFile.type,
+        filename: pdfFile.name,
+        size:     pdfFile.size,
+        id:       Date.now() + Math.random(),
+      }];
+      added++;
+    }
+    if (rejected > 0 && added === 0) {
+      showToast(`PDF muito grande (máx. 7 MB). Comprima e tente novamente.`, "t-err");
+    } else if (rejected > 0) {
+      showToast(`${rejected} PDF(s) muito grande(s) ignorado(s) — máx. 7 MB por arquivo.`, "t-warn");
+    }
+    renderDocQueue(prefix);
     return;
   }
 
-  // Imagens: fila de até 10
+  // ── Imagens: fila de até 10 ──
   const imageFiles = files.filter(f => f.type.startsWith("image/"));
   if (!imageFiles.length) return;
   const queue     = pendingImages[prefix] || [];
@@ -8578,8 +8653,9 @@ async function handleImageSelect(event, prefix) {
 }
 
 function clearImage(prefix) {
-  pendingMedia[prefix]  = null;
-  pendingImages[prefix] = [];
+  pendingMedia[prefix]       = null;
+  pendingImages[prefix]      = [];
+  pendingDocuments[prefix]   = [];
   const bar = document.getElementById(`${prefix}-img-preview-bar`);
   if (bar) bar.classList.remove("visible");
   const thumb = document.getElementById(`${prefix}-img-thumb`);
@@ -8587,6 +8663,7 @@ function clearImage(prefix) {
   const cap = document.getElementById(`${prefix}-img-caption`);
   if (cap) cap.value = "";
   renderImageQueue(prefix);
+  renderDocQueue(prefix);
 }
 
 // ╔══════════════════════════════════════════════════════════════╗
@@ -8615,11 +8692,12 @@ async function sendMessage(prefix) {
   const text   = input?.value.trim() || "";
   const hasPending      = !!pendingMedia[prefix];
   const hasPendingImages = (pendingImages[prefix]?.length || 0) > 0;
+  const hasPendingDocs  = (pendingDocuments[prefix]?.length || 0) > 0;
 
-  if (!text && !hasPending && !hasPendingImages) return;
+  if (!text && !hasPending && !hasPendingImages && !hasPendingDocs) return;
 
   // Bloquear: reply ativo + mídia + texto/legenda no mesmo envio
-  if ((hasPending || hasPendingImages) && _replyTarget[prefix] && text) {
+  if ((hasPending || hasPendingImages || hasPendingDocs) && _replyTarget[prefix] && text) {
     openReplyWarnModal();
     return;
   }
@@ -8649,6 +8727,8 @@ async function sendMessage(prefix) {
   try {
     if (hasPendingImages) {
       await sendImagesSequential(prefix, container, text);
+    } else if (hasPendingDocs) {
+      await sendDocumentsSequential(prefix, container, text);
     } else if (hasPending) {
       const mtype = pendingMedia[prefix].type;
       if (mtype === "document") {
@@ -8885,6 +8965,194 @@ function removeLastOptimistic(container) {
 
 function handleEnter(event, prefix) {
   // Enter = quebra de linha; envio somente pelo botão Enviar
+}
+
+// ── Renderiza fila de PDFs ────────────────────────────────────────────────────
+function renderDocQueue(prefix) {
+  const bar  = document.getElementById(`${prefix}-img-queue-bar`);
+  if (!bar) return;
+  const docs = pendingDocuments[prefix] || [];
+
+  // Imagens têm prioridade visual — não sobrescreve bar de imagens
+  if ((pendingImages[prefix] || []).length > 0) return;
+
+  if (!docs.length) {
+    bar.classList.remove("visible");
+    bar.innerHTML = "";
+    updateMediaButtonsState(prefix);
+    return;
+  }
+
+  bar.classList.add("visible");
+  bar.innerHTML = "";
+
+  docs.forEach(doc => {
+    const item = document.createElement("div");
+    item.className = "doc-q-item";
+    item.title = `${doc.filename} (${formatBytes(doc.size)})`;
+
+    const name = document.createElement("span");
+    name.className = "doc-q-name";
+    name.textContent = doc.filename;
+
+    const size = document.createElement("span");
+    size.className = "doc-q-size";
+    size.textContent = formatBytes(doc.size);
+
+    const rm = document.createElement("button");
+    rm.className = "iq-rm";
+    rm.title = "Remover";
+    rm.textContent = "✕";
+    rm.onclick = () => {
+      pendingDocuments[prefix] = pendingDocuments[prefix].filter(d => d.id !== doc.id);
+      renderDocQueue(prefix);
+    };
+
+    item.appendChild(document.createTextNode("📄 "));
+    item.appendChild(name);
+    item.appendChild(size);
+    item.appendChild(rm);
+    bar.appendChild(item);
+  });
+
+  const cnt = document.createElement("div");
+  cnt.className = "iq-count";
+  cnt.textContent = docs.length === 1
+    ? "1 PDF selecionado — clique Enviar para confirmar"
+    : `${docs.length} PDFs selecionados — serão enviados um por vez`;
+  bar.appendChild(cnt);
+
+  updateMediaButtonsState(prefix);
+}
+
+// ── Envio sequencial de documentos (um por request) ──────────────────────────
+async function sendDocumentsSequential(prefix, container, captionForFirst) {
+  const phone = getPhoneForPrefix(prefix);
+  const att   = getCurrentAttendant();
+  const reply = _replyTarget[prefix];
+  const docs  = [...(pendingDocuments[prefix] || [])];
+
+  // Limpa a fila antes de enviar para não disparar novamente
+  pendingDocuments[prefix] = [];
+  renderDocQueue(prefix);
+
+  for (let i = 0; i < docs.length; i++) {
+    const doc     = docs[i];
+    const caption = i === 0 ? captionForFirst : "";
+
+    if (docs.length > 1) {
+      showToast(`Enviando PDF ${i + 1} de ${docs.length}…`);
+    }
+
+    appendBubble(container, {
+      role: "assistant", content: caption, sentByHuman: true,
+      mediaType: "document", mediaData: doc.base64,
+      mediaMimeType: doc.mimeType, mediaFilename: doc.filename,
+      attendantId: att?.id, attendantName: att?.name,
+      ...(reply?.metaMessageId && i === 0 ? { replyToMsgId: reply.metaMessageId } : {}),
+    }, true);
+    scrollToBottom(container);
+
+    try {
+      const payload = {
+        to: phone, type: "document",
+        mediaBase64: doc.base64, mimeType: doc.mimeType,
+        filename: doc.filename, caption: caption || undefined,
+        attendantId:   att?.id   || null,
+        attendantName: att?.name || null,
+      };
+      if (reply?.metaMessageId && i === 0) payload.replyToMessageId = reply.metaMessageId;
+
+      const res = await fetch("/api/send", {
+        method:  "POST",
+        headers: { "Content-Type": "application/json" },
+        body:    JSON.stringify(payload),
+      });
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}));
+        console.error("[sendDocuments] ❌", err.detail || err.error);
+        removeLastOptimistic(container);
+        // Restaura documentos restantes para retry
+        pendingDocuments[prefix] = docs.slice(i);
+        renderDocQueue(prefix);
+        const prevSent = i > 0 ? ` ${i} enviado(s) com sucesso antes da falha.` : "";
+        showToast(`"${doc.filename}" não pôde ser enviado.${prevSent} Tente novamente.`, "t-err");
+        return;
+      }
+    } catch (e) {
+      console.error("[sendDocuments] ❌ rede:", e?.message);
+      removeLastOptimistic(container);
+      pendingDocuments[prefix] = docs.slice(i);
+      renderDocQueue(prefix);
+      showToast(`Erro de rede ao enviar "${doc.filename}". Verifique a conexão.`, "t-err");
+      return;
+    }
+  }
+
+  clearReplyTarget(prefix);
+  prefix === "modal" ? await refreshModal() : await refreshConvsChat(phone);
+  showToast(docs.length === 1 ? "PDF enviado." : `${docs.length} PDFs enviados.`);
+  await ensureAttendantAssumedOnMessage(phone, prefix);
+  autoAdvanceAfterHumanReply(phone);
+}
+
+// ── Paleta de emojis ──────────────────────────────────────────────────────────
+const _EMOJI_LIST = [
+  { emoji: "🙂", title: "cordial" },
+  { emoji: "😊", title: "simpático" },
+  { emoji: "✅", title: "confirmado" },
+  { emoji: "👍", title: "entendido" },
+  { emoji: "🙏", title: "agradecimento / desculpa" },
+  { emoji: "📎", title: "anexo" },
+  { emoji: "📍", title: "localização" },
+  { emoji: "🕐", title: "horário / prazo" },
+  { emoji: "💳", title: "pagamento" },
+  { emoji: "🚚", title: "entrega" },
+];
+
+function initEmojiPickers() {
+  ["modal", "convs"].forEach(prefix => {
+    const pop = document.createElement("div");
+    pop.className = "emoji-pop";
+    pop.id = `${prefix}-emoji-pop`;
+    _EMOJI_LIST.forEach(({ emoji, title }) => {
+      const btn = document.createElement("button");
+      btn.textContent = emoji;
+      btn.title = title;
+      btn.addEventListener("click", (e) => { e.stopPropagation(); insertEmoji(prefix, emoji); });
+      pop.appendChild(btn);
+    });
+    document.body.appendChild(pop);
+  });
+  document.addEventListener("click", () => {
+    document.querySelectorAll(".emoji-pop.visible").forEach(p => p.classList.remove("visible"));
+  });
+}
+
+function toggleEmojiPicker(prefix) {
+  const btn = document.getElementById(`${prefix}-emoji-btn`);
+  const pop = document.getElementById(`${prefix}-emoji-pop`);
+  if (!pop || !btn) return;
+  const isVisible = pop.classList.contains("visible");
+  document.querySelectorAll(".emoji-pop.visible").forEach(p => p.classList.remove("visible"));
+  if (isVisible) return;
+  const rect = btn.getBoundingClientRect();
+  pop.style.bottom = `${window.innerHeight - rect.top + 6}px`;
+  pop.style.left   = `${Math.max(4, rect.left - 80)}px`;
+  pop.classList.add("visible");
+}
+
+function insertEmoji(prefix, emoji) {
+  const ta = document.getElementById(`${prefix}-msg-input`);
+  if (!ta || ta.disabled) return;
+  const start = ta.selectionStart || 0;
+  const end   = ta.selectionEnd   || 0;
+  ta.value = ta.value.slice(0, start) + emoji + ta.value.slice(end);
+  ta.selectionStart = ta.selectionEnd = start + emoji.length;
+  ta.focus();
+  autoResize(ta);
+  const pop = document.getElementById(`${prefix}-emoji-pop`);
+  if (pop) pop.classList.remove("visible");
 }
 
 function autoResize(el) {
@@ -11346,6 +11614,7 @@ function introduceAttendant(prefix) {
 // DOMContentLoaded garante que o FAB já existe no DOM quando initAttendant roda
 document.addEventListener("DOMContentLoaded", initAttendant);
 document.addEventListener("DOMContentLoaded", initPjLunchMode);
+document.addEventListener("DOMContentLoaded", initEmojiPickers);
 document.addEventListener("DOMContentLoaded", function() {
   // Reflete escolha salva de ordenação de conversas
   document.getElementById("sort-btn-recent")?.classList.toggle("active", convSort === "recent");
@@ -11420,19 +11689,73 @@ function formatDeliveryStatus(msg) {
 }
 
 // ── Horário das mensagens ─────────────────────────────────────────────────────
+const _TZ = "America/Sao_Paulo";
+
+function _dayStr(d) {
+  return d.toLocaleDateString("pt-BR", { timeZone: _TZ });
+}
+function _timePart(d) {
+  return d.toLocaleTimeString("pt-BR", { timeZone: _TZ, hour: "2-digit", minute: "2-digit", hour12: false });
+}
+
 function formatMsgTime(createdAt) {
   if (!createdAt) return null;
   try {
-    const d     = new Date(createdAt);
-    const now   = new Date();
-    const tz    = "America/Sao_Paulo";
-    const isToday = d.toLocaleDateString("pt-BR", { timeZone: tz }) ===
-                    now.toLocaleDateString("pt-BR", { timeZone: tz });
-    const timePart = d.toLocaleTimeString("pt-BR", { timeZone: tz, hour: "2-digit", minute: "2-digit", hour12: false });
-    if (isToday) return timePart;
-    const datePart = d.toLocaleDateString("pt-BR", { timeZone: tz, day: "2-digit", month: "2-digit" });
-    return `${datePart} ${timePart}`;
+    const d   = new Date(createdAt);
+    const now = new Date();
+    const t   = _timePart(d);
+    const ds  = _dayStr(d);
+    const ns  = _dayStr(now);
+
+    if (ds === ns) return t; // hoje: "14:32"
+
+    const yest = new Date(now);
+    yest.setDate(yest.getDate() - 1);
+    if (ds === _dayStr(yest)) return `Ontem, ${t}`; // "Ontem, 14:32"
+
+    const diffDays = (now - d) / 86400000;
+    if (diffDays < 7) {
+      const wd = d.toLocaleDateString("pt-BR", { timeZone: _TZ, weekday: "long" });
+      return `${wd.charAt(0).toUpperCase()}${wd.slice(1)}, ${t}`; // "Terça-feira, 14:32"
+    }
+
+    const dp = d.toLocaleDateString("pt-BR", { timeZone: _TZ, day: "2-digit", month: "2-digit", year: "numeric" });
+    return `${dp}, ${t}`; // "05/06/2026, 14:32"
   } catch { return null; }
+}
+
+// Chave de dia para separadores (ex: "16/06/2026")
+function getDayKey(createdAt) {
+  if (!createdAt) return null;
+  try { return _dayStr(new Date(createdAt)); } catch { return null; }
+}
+
+// Rótulo legível para separador de dia
+function formatDayLabel(createdAt) {
+  if (!createdAt) return "";
+  try {
+    const d    = new Date(createdAt);
+    const now  = new Date();
+    const ds   = _dayStr(d);
+    const ns   = _dayStr(now);
+    if (ds === ns) return "Hoje";
+    const yest = new Date(now); yest.setDate(yest.getDate() - 1);
+    if (ds === _dayStr(yest)) return "Ontem";
+    const diffDays = (now - d) / 86400000;
+    if (diffDays < 7) {
+      const wd = d.toLocaleDateString("pt-BR", { timeZone: _TZ, weekday: "long" });
+      return wd.charAt(0).toUpperCase() + wd.slice(1);
+    }
+    return d.toLocaleDateString("pt-BR", { timeZone: _TZ, day: "2-digit", month: "2-digit", year: "numeric" });
+  } catch { return ""; }
+}
+
+// Formata tamanho de arquivo
+function formatBytes(bytes) {
+  if (!bytes || bytes <= 0) return "";
+  if (bytes < 1024)    return `${bytes} B`;
+  if (bytes < 1048576) return `${(bytes / 1024).toFixed(0)} KB`;
+  return `${(bytes / 1048576).toFixed(1)} MB`;
 }
 
 // ── Almoço PJ ─────────────────────────────────────────────────────────────────
