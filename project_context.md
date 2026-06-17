@@ -2,15 +2,13 @@
 
 ## 1. Visão geral
 
-Este é o projeto digital da Sartec Papelaria. Ele reúne, em um único ecossistema, o agente de triagem do WhatsApp, o CRM interno de atendimento e o site público da loja.
-
-O projeto não deve ser tratado como apenas um webhook, apenas um painel ou apenas um site. As três frentes fazem parte do mesmo fluxo operacional:
+Este é o projeto digital da Sartec Papelaria. Este repositório (`agente-triagem-crm-sartec`) reúne o agente de triagem do WhatsApp e o CRM interno de atendimento. O site público institucional da Sartec Papelaria vive em outro repositório separado (`Suertesoy/sartecpapelaria`) — ver SITE_OFICIAL.md.
 
 ```text
 Cliente → WhatsApp ou site → triagem / entrada estruturada → CRM → atendimento humano
 ```
 
-O objetivo principal é reduzir perda de mensagens, organizar atendimentos de pessoa física e pessoa jurídica, preservar histórico, acelerar respostas e criar uma base para futuras entradas vindas do site, especialmente listas escolares.
+O objetivo principal é reduzir perda de mensagens, organizar atendimentos de pessoa física e pessoa jurídica, preservar histórico, acelerar respostas e criar uma base para futuras entradas vindas do site (mantido em repositório separado), especialmente listas escolares.
 
 ## 2. Arquivo de regras obrigatório
 
@@ -37,7 +35,7 @@ A raiz correta do projeto é:
 C:\Users\Cabral\Desktop\PROJETOS\SARTEC\PAINEL, AGENTE E SITE
 ```
 
-Esta pasta deve conter o projeto completo com Git, Vercel, APIs, painel, site e documentação.
+Esta pasta deve conter o projeto completo com Git, Vercel, APIs, painel e documentação. O site público fica em repositório separado (ver SITE_OFICIAL.md).
 
 Estrutura oficial esperada:
 
@@ -48,11 +46,11 @@ PAINEL, AGENTE E SITE/
   .claude/
   api/
   painel/
-  site/
   logos/
   .gitignore
   package.json
   vercel.json
+  SITE_OFICIAL.md
   PROJECT_CONTEXT.md ou project_context.md
   agent_rules_sartec.md
   README.md
@@ -63,7 +61,6 @@ As pastas operacionais devem permanecer em minúsculo:
 ```text
 api/
 painel/
-site/
 logos/
 ```
 
@@ -147,33 +144,14 @@ Aviso quando outra aba ou outro atendente está na conversa
 Polling para atualização do painel
 ```
 
-### 4.3 Site público
+### 4.3 Site público (fora deste repositório)
 
-Responsável pela presença pública da Sartec. O site não é um e-commerce completo neste momento. Ele funciona como vitrine, canal de entrada de leads e ponte para WhatsApp.
+O site público da Sartec não faz parte deste repositório. Ele é mantido em `Suertesoy/sartecpapelaria`, projeto Vercel `sartec`, domínio `https://sartecpapelaria.com.br/`. Ver SITE_OFICIAL.md para o mapa completo da separação.
 
-Arquivos principais:
-
-```text
-site/
-site/assets/
-logos/
-vercel.json
-```
-
-Função estratégica do site:
+Integração futura entre site e CRM (lado CRM fica aqui, lado site fica no repo separado):
 
 ```text
-Apresentar a loja
-Destacar variedade de produtos
-Direcionar para WhatsApp
-Receber interesse de PF e PJ
-Preparar futura entrada de listas escolares
-```
-
-O site terá uma frente futura de lista escolar:
-
-```text
-Usuário acessa página de lista escolar
+Usuário acessa página de lista escolar (repo sartecpapelaria)
 Envia foto ou PDF da lista
 Seleciona itens desejados
 Sistema estrutura a lista
@@ -181,7 +159,7 @@ Entrada segue para WhatsApp ou CRM de forma mais organizada
 Card pode entrar no CRM já com origem = site
 ```
 
-No momento, o foco principal continua sendo o MVP do CRM e do agente. O site deve ser preservado, mas não deve ser alterado quando a tarefa for explicitamente CRM ou agente.
+O foco principal deste repositório continua sendo o MVP do CRM e do agente.
 
 ## 5. Arquitetura técnica
 
@@ -216,24 +194,18 @@ agente-triagem-sartec
 
 A pasta `.vercel/` é local e não deve ser commitada.
 
-O `vercel.json` controla as rotas principais:
+O `vercel.json` deste repositório controla apenas as rotas de painel e API:
 
 ```text
-/ → /site/index.html
-/index.html → /site/index.html
-/assets/(.*) → /site/assets/$1
-/produtos.html → /site/produtos.html
-/lista-escolar.html → /site/lista-escolar.html
-/empresas.html → /site/empresas.html
-/escolas.html → /site/escolas.html
-/copias.html → /site/copias.html
 /painel → /painel/index.html
 /painel/ → /painel/index.html
 /painel/(.*) → /painel/$1
 /api/(.*) → /api/$1
 ```
 
-Por isso, as pastas `site/`, `painel/` e `api/` devem continuar em minúsculo.
+As rotas de site público foram removidas deste `vercel.json` — o site tem seu próprio `vercel.json` e domínio no repositório `Suertesoy/sartecpapelaria`.
+
+Por isso, as pastas `painel/` e `api/` devem continuar em minúsculo.
 
 ## 7. Limite de funções serverless
 
@@ -426,7 +398,8 @@ As seguintes decisões já fazem parte do estado atual do projeto:
 
 ```text
 Pasta AGENTE+API removida.
-Pastas principais padronizadas em minúsculo: api, painel, site, logos.
+Pastas principais padronizadas em minúsculo: api, painel, logos.
+Site público separado para o repositório Suertesoy/sartecpapelaria; pasta site/ removida deste repositório.
 Redis de teste foi limpo e o painel ficou vazio para testes do zero.
 loadSession corrigido para preservar histórico entre dias.
 TTLs aumentados para 90 dias.
@@ -496,10 +469,7 @@ Aprimorar relatórios ou filtros por status/categoria.
 ### Depois do MVP do CRM
 
 ```text
-Retomar site público.
-Validar rotas do site em produção.
-Commitar site/ e logos/ quando estiverem prontos.
-Criar fluxo de lista escolar pelo site.
+Criar fluxo de lista escolar pelo site (repositório sartecpapelaria).
 Definir integração site → WhatsApp → CRM.
 ```
 
@@ -521,10 +491,10 @@ Arquivos/pastas estruturais que não devem ser apagados:
 .vercel/
 api/
 painel/
-site/
 logos/
 package.json
 vercel.json
+SITE_OFICIAL.md
 PROJECT_CONTEXT.md ou project_context.md
 agent_rules_sartec.md
 README.md
@@ -567,7 +537,7 @@ Ao começar uma nova conversa no Antigravity/Claude Code, o agente deve:
 2. Rodar git status.
 3. Ler agent_rules_sartec.md.
 4. Ler project_context.md ou PROJECT_CONTEXT.md.
-5. Confirmar se está mexendo em agente, CRM, site ou integração.
+5. Confirmar se está mexendo em agente, CRM ou integração (site público é repositório separado).
 6. Confirmar arquivos envolvidos.
 7. Não alterar nada antes de apresentar plano quando a tarefa for de implementação.
 ```

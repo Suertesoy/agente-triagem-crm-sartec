@@ -2,38 +2,6 @@
   "version": 2,
   "rewrites": [
     {
-      "source": "/",
-      "destination": "/site/index.html"
-    },
-    {
-      "source": "/index.html",
-      "destination": "/site/index.html"
-    },
-    {
-      "source": "/assets/(.*)",
-      "destination": "/site/assets/$1"
-    },
-    {
-      "source": "/produtos.html",
-      "destination": "/site/produtos.html"
-    },
-    {
-      "source": "/lista-escolar.html",
-      "destination": "/site/lista-escolar.html"
-    },
-    {
-      "source": "/empresas.html",
-      "destination": "/site/empresas.html"
-    },
-    {
-      "source": "/escolas.html",
-      "destination": "/site/escolas.html"
-    },
-    {
-      "source": "/copias.html",
-      "destination": "/site/copias.html"
-    },
-    {
       "source": "/painel",
       "destination": "/painel/index.html"
     },

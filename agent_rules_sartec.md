@@ -13,33 +13,34 @@ agent_rules_sartec.md
 
 ## AVISO — Site público oficial
 
-A pasta `/site` neste repositório é **legada**. O site oficial atual da Sartec está em:
+O site público da Sartec **não existe mais dentro deste repositório**. Ele está em um repositório separado e isolado:
 
 ```text
 Repositório: github.com/Suertesoy/sartecpapelaria
-Deploy:      https://sartec.vercel.app
+Projeto Vercel: sartec
+Domínio: https://sartecpapelaria.com.br/
 ```
 
 Regras obrigatórias:
 
 ```text
-Não implementar features do site público em /site deste monorepo.
-Não criar páginas, estilos ou lógica nova em site/ aqui.
-Usar o repositório isolado sartecpapelaria para o site oficial.
-Funcionalidades de lista escolar com IA devem ir no repo isolado.
+Não recriar uma pasta site/ neste repositório.
+Não implementar páginas, estilos ou lógica de site público aqui.
+Usar o repositório isolado sartecpapelaria para qualquer ajuste do site oficial.
+Funcionalidades de lista escolar com IA pelo site devem ir no repo isolado.
+Ver SITE_OFICIAL.md na raiz para o mapa completo da separação.
 ```
 
 ---
 
 ## 1. Identidade do projeto
 
-Este é o projeto Sartec, um ecossistema digital integrado para atendimento, triagem, CRM e site público da Sartec Papelaria.
+Este é o projeto Sartec — CRM, painel de atendimento, agente WhatsApp, webhook e APIs operacionais. O site público institucional da Sartec Papelaria vive em outro repositório (`Suertesoy/sartecpapelaria`); ver SITE_OFICIAL.md.
 
-O projeto não deve ser tratado como apenas um webhook, apenas um CRM ou apenas um site. Ele possui três frentes conectadas:
+Este repositório possui duas frentes conectadas:
 
 1. Agente WhatsApp e webhook de triagem
 2. CRM interno de atendimento
-3. Site público da loja, com vitrine, captação de leads e futuro fluxo de lista escolar
 
 Stack principal:
 
@@ -76,10 +77,10 @@ A raiz deve conter:
 .vercel/
 api/
 painel/
-site/
 logos/
 package.json
 vercel.json
+SITE_OFICIAL.md
 PROJECT_CONTEXT.md
 agent_rules_sartec.md
 README.md
@@ -90,7 +91,6 @@ A estrutura oficial deve usar nomes em minúsculo para evitar problemas de case 
 ```text
 api/
 painel/
-site/
 logos/
 ```
 
@@ -158,26 +158,9 @@ api/archive.js
 api/active-attendant.js
 ```
 
-### 3.3 Site público
+### 3.3 Site público (fora deste repositório)
 
-Responsável por:
-
-1. Apresentar a Sartec Papelaria
-2. Funcionar como vitrine de produtos
-3. Gerar contato via WhatsApp
-4. Apoiar fluxos de cópias, empresas e escolas
-5. Futuramente receber lista escolar por imagem ou PDF
-6. Futuramente encaminhar input estruturado para WhatsApp ou CRM
-
-Arquivos principais:
-
-```text
-site/
-logos/
-vercel.json
-```
-
-O site não é um e-commerce. Ele deve ser uma ponte rápida para WhatsApp e atendimento.
+O site público da Sartec Papelaria não faz parte deste repositório. Ele vive em `Suertesoy/sartecpapelaria`, deploy no projeto Vercel `sartec`, domínio `https://sartecpapelaria.com.br/`. Ver SITE_OFICIAL.md.
 
 ---
 
@@ -193,7 +176,7 @@ api/send.js
 api/send-template.js
 ```
 
-Não alterar `painel/index.html` ou `site/` sem necessidade explícita.
+Não alterar `painel/index.html` sem necessidade explícita.
 
 ### Tarefa sobre CRM
 
@@ -212,28 +195,20 @@ api/archive.js
 api/active-attendant.js
 ```
 
-Não alterar `site/` ou `logos/` se a tarefa for somente CRM.
+Não alterar `logos/` se a tarefa for somente CRM.
 
 ### Tarefa sobre site público
 
-Priorizar:
-
-```text
-site/
-logos/
-vercel.json
-```
-
-Não alterar APIs do agente ou do CRM sem diagnóstico de integração.
+O site público não existe neste repositório. Qualquer tarefa sobre site público deve ser feita no repositório `Suertesoy/sartecpapelaria`, não aqui. Ver SITE_OFICIAL.md.
 
 ### Tarefa de integração
 
-Quando envolver `site → WhatsApp → CRM`, primeiro diagnosticar fronteiras e propor plano antes de editar.
+Quando envolver `site → WhatsApp → CRM`, primeiro diagnosticar fronteiras e propor plano antes de editar. O lado "site" dessa integração está no repositório `Suertesoy/sartecpapelaria`.
 
 Exemplo de integração futura:
 
 ```text
-site/lista-escolar.html
+lista-escolar.html (repo sartecpapelaria)
 → usuário envia imagem ou PDF
 → site estrutura lista
 → envia input para WhatsApp ou CRM
@@ -444,7 +419,7 @@ criar nova API serverless
 rodar deploy manual
 commitar arquivos untracked
 mover pastas principais
-renomear api, painel, site ou logos
+renomear api, painel ou logos
 criar pasta AGENTE+API
 alterar templates aprovados da Meta
 alterar prompt do agente
@@ -509,29 +484,20 @@ Quando precisar adicionar funcionalidade backend, preferir integrar em API exist
 
 ## 14. Regras de rotas
 
-O `vercel.json` usa rotas para:
+O `vercel.json` deste repositório usa rotas apenas para painel e API:
 
 ```text
-/
-/index.html
-/assets/(.*)
-/produtos.html
-/lista-escolar.html
-/empresas.html
-/escolas.html
-/copias.html
 /painel
 /painel/
 /painel/(.*)
 /api/(.*)
 ```
 
-As rotas do site apontam para `/site/...` e as do painel para `/painel/...`.
+Não há mais rotas de site público aqui — elas foram removidas porque o site público vive no repositório `Suertesoy/sartecpapelaria`, com seu próprio `vercel.json` e domínio próprio.
 
 Por isso, as pastas devem permanecer em minúsculo:
 
 ```text
-site/
 painel/
 api/
 ```
@@ -539,7 +505,6 @@ api/
 Não alterar `vercel.json` sem validar:
 
 ```text
-site
 painel
 api
 produção na Vercel
@@ -689,50 +654,7 @@ template modal
 
 ## 19. Regras do site público
 
-O site público é uma frente futura do mesmo produto, não uma sobra.
-
-Objetivo do site:
-
-```text
-apresentar a loja
-destacar produtos
-gerar contato via WhatsApp
-facilitar envio de lista escolar
-servir como entrada de leads para o CRM
-```
-
-O site não é e-commerce.
-
-A home não deve ser centrada apenas em lista escolar. A narrativa principal deve ser:
-
-```text
-temos produtos, variedade e atendimento rápido
-```
-
-Lista escolar é importante, mas sazonal.
-
-Páginas esperadas:
-
-```text
-site/index.html
-site/produtos.html
-site/lista-escolar.html
-site/empresas.html
-site/escolas.html
-site/copias.html
-site/assets/
-```
-
-Regras para site:
-
-```text
-priorizar clareza
-priorizar WhatsApp
-priorizar mobile
-evitar fluxo complexo
-evitar excesso de informação
-não mexer em CRM/API sem diagnóstico de integração
-```
+O site público não faz parte deste repositório. Ele é mantido em `Suertesoy/sartecpapelaria` (projeto Vercel `sartec`, domínio `https://sartecpapelaria.com.br/`). Qualquer regra de conteúdo, narrativa ou páginas do site deve ser consultada/aplicada naquele repositório, não aqui. Ver SITE_OFICIAL.md.
 
 ---
 
@@ -844,8 +766,8 @@ Arquivos/pastas oficiais:
 ```text
 api/
 painel/
-site/
 logos/
+SITE_OFICIAL.md
 PROJECT_CONTEXT.md
 agent_rules_sartec.md
 README.md
@@ -865,7 +787,7 @@ fix_card.js
 .env.reset.tmp
 ```
 
-Não apagar `site/` ou `logos/`: são frentes futuras do produto.
+Não apagar `logos/`. O site público não existe mais neste repositório (ver SITE_OFICIAL.md) — não recriar uma pasta `site/` aqui.
 
 Se um arquivo parecer sobra, primeiro classificar como:
 
@@ -896,7 +818,6 @@ cat .vercel/project.json
 ls
 ls api
 ls painel
-ls site
 ```
 
 Confirmar:
@@ -906,7 +827,7 @@ raiz correta
 projectName = agente-triagem-sartec
 api/ com 12 funções
 painel/index.html existe
-site/ existe
+site/ não existe neste repositório (site público vive em Suertesoy/sartecpapelaria)
 AGENTE+API/ não existe
 branch main sincronizada ou status explicado
 ```
@@ -965,15 +886,13 @@ validar continuamente reabertura por attendance_resume
 validar histórico após mudança de dia
 organizar .gitignore para arquivos locais
 atualizar PROJECT_CONTEXT.md para apontar para agent_rules_sartec.md
-atualizar README.md, pois está desatualizado
-commitar site/ e logos/ quando o site estiver pronto para deploy
 ```
 
 Backlog futuro:
 
 ```text
 persistir ordem manual dos cards no Redis
-integração site/lista escolar com CRM
+integração lista escolar (repo sartecpapelaria) com CRM
 origem do lead no CRM
 fluxo estruturado para listas escolares
 melhorias no histórico e arquivamento
@@ -988,4 +907,4 @@ Código previsível.
 Sem refactors desnecessários.
 Sem pastas paralelas.
 Sem deploy sem autorização.
-Sempre preservar estabilidade operacional do CRM, agente WhatsApp e site público.
+Sempre preservar estabilidade operacional do CRM e do agente WhatsApp. O site público é responsabilidade do repositório `Suertesoy/sartecpapelaria`.

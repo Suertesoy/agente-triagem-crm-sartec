@@ -1,6 +1,6 @@
-# Sartec — Agente, CRM e Site
+# Sartec — Agente e CRM
 
-Este repositório reúne o ecossistema digital da Sartec Papelaria: agente de triagem via WhatsApp, CRM interno de atendimento e site público da loja.
+Este repositório (`agente-triagem-crm-sartec`) reúne o agente de triagem via WhatsApp e o CRM interno de atendimento da Sartec Papelaria. O site institucional oficial vive em um repositório separado — ver [SITE_OFICIAL.md](SITE_OFICIAL.md).
 
 O projeto ainda está em fase de MVP e testes, então a prioridade é estabilidade, clareza operacional e integração segura entre as frentes.
 
@@ -16,7 +16,7 @@ Cliente
 → Atendimento humano
 ```
 
-O objetivo é reduzir perda de mensagens no WhatsApp, organizar atendimentos de pessoa física e pessoa jurídica, preservar histórico das conversas e preparar a base para entradas futuras vindas do site, como listas escolares enviadas por imagem ou PDF.
+O objetivo é reduzir perda de mensagens no WhatsApp, organizar atendimentos de pessoa física e pessoa jurídica, preservar histórico das conversas e preparar a base para entradas futuras vindas do site (mantido em repositório separado), como listas escolares enviadas por imagem ou PDF.
 
 ## Frentes do projeto
 
@@ -52,23 +52,15 @@ api/archive.js
 api/active-attendant.js
 ```
 
-### 3. Site público (pasta `/site` — LEGADA)
+### 3. Site público (fora deste repositório)
 
-> **Atenção:** A pasta `/site` é uma versão legada. O site oficial atual está em:
-> - Repositório: https://github.com/Suertesoy/sartecpapelaria
-> - Deploy: https://sartec.vercel.app
->
-> Novas funcionalidades do site — incluindo leitura de lista escolar com IA — devem ser implementadas no repositório isolado, não em `/site`.
+O site institucional da Sartec Papelaria não é mais mantido dentro deste repositório. Ele está em:
 
-A pasta `/site` existe neste monorepo porque o `vercel.json` ainda roteia o domínio para ela. Não alterar seu conteúdo sem coordenar com a migração das rotas.
+- Repositório: https://github.com/Suertesoy/sartecpapelaria
+- Projeto Vercel: `sartec`
+- Domínio: https://sartecpapelaria.com.br/
 
-Arquivos principais:
-
-```text
-site/
-logos/
-vercel.json
-```
+Detalhes completos da separação em [SITE_OFICIAL.md](SITE_OFICIAL.md).
 
 ## Stack técnica
 
@@ -100,10 +92,10 @@ A estrutura oficial usa nomes em minúsculo para evitar problemas de case sensit
 /
 ├── api/
 ├── painel/
-├── site/
 ├── logos/
 ├── package.json
 ├── vercel.json
+├── SITE_OFICIAL.md
 ├── project_context.md
 ├── agent_rules_sartec.md
 └── README.md
@@ -120,24 +112,18 @@ LOGOS/
 
 ## Rotas Vercel
 
-O `vercel.json` roteia:
+O `vercel.json` deste repositório roteia apenas painel e API:
 
 ```text
-/                       → /site/index.html
-/index.html             → /site/index.html
-/assets/(.*)            → /site/assets/$1
-/produtos.html          → /site/produtos.html
-/lista-escolar.html     → /site/lista-escolar.html
-/empresas.html          → /site/empresas.html
-/escolas.html           → /site/escolas.html
-/copias.html            → /site/copias.html
 /painel                 → /painel/index.html
 /painel/                → /painel/index.html
 /painel/(.*)            → /painel/$1
 /api/(.*)               → /api/$1
 ```
 
-Por isso, as pastas `site/`, `painel/` e `api/` devem permanecer em minúsculo.
+As rotas de site público foram removidas — o site tem seu próprio `vercel.json` no repositório `Suertesoy/sartecpapelaria`.
+
+Por isso, as pastas `painel/` e `api/` devem permanecer em minúsculo.
 
 ## APIs atuais
 
@@ -190,7 +176,8 @@ Decisões e correções já realizadas:
 
 ```text
 Pasta AGENTE+API/ removida.
-Pastas oficiais padronizadas em minúsculo: api/, painel/, site/, logos/.
+Pastas oficiais padronizadas em minúsculo: api/, painel/, logos/.
+Site público separado para o repositório Suertesoy/sartecpapelaria; pasta site/ removida deste repositório.
 Reset de teste integrado em api/webhook.js.
 api/dev-reset.js não deve ser recriado.
 loadSession() foi corrigido para não apagar histórico ao mudar o dia.
@@ -299,15 +286,14 @@ Prioridade atual do produto:
 2. Validar fluxo de atendimento real com números de teste.
 3. Garantir histórico, templates, janela de 24h e pipeline estáveis.
 4. Organizar documentação do projeto.
-5. Só depois avançar com o site público e fluxo de lista escolar.
+5. Integração futura com lista escolar do site (repositório separado).
 ```
 
 Pendências futuras:
 
 ```text
 Persistir ordem manual dos cards no Redis.
-Finalizar e validar site público.
-Integrar entrada estruturada de lista escolar pelo site.
+Integrar entrada estruturada de lista escolar vinda do site (repositório sartecpapelaria).
 Revisar README conforme o projeto evoluir.
 ```
 
@@ -320,6 +306,6 @@ Não criar nova Serverless Function sem contar o limite da Vercel Hobby.
 Não apagar histórico por troca de dia.
 Não confundir janela de 24h do WhatsApp com reset de sessão.
 Não alterar templates aprovados da Meta sem validação.
-Não alterar rotas em vercel.json sem validar site, painel e API.
-Não mexer no site quando a tarefa for CRM, salvo integração explícita.
+Não alterar rotas em vercel.json sem validar painel e API.
+Não recriar uma pasta site/ neste repositório — o site público vive em Suertesoy/sartecpapelaria.
 ```
