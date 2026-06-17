@@ -2366,7 +2366,43 @@
       .print-sheet-wrap { box-shadow: none !important; margin: 0 !important; width: 100% !important; padding: 0 !important; }
     }
 
+    /* ── Seção "Depois do orçamento" no modal ── */
+    .org-budget-section {
+      margin-top: 22px; padding: 16px 18px;
+      background: #f0f9ff; border: 1.5px solid #bae6fd;
+      border-left: 4px solid #0ea5e9; border-radius: 10px;
+    }
+    .org-budget-header {
+      display: flex; align-items: flex-start; gap: 12px; margin-bottom: 12px;
+    }
+    .org-budget-icon { font-size: 1.4rem; flex-shrink: 0; margin-top: 2px; }
+    .org-budget-title { font-size: .92rem; font-weight: 700; color: #0369a1; margin-bottom: 2px; }
+    .org-budget-sub { font-size: .78rem; color: #0c4a6e; line-height: 1.5; }
+    .org-budget-textarea {
+      width: 100%; height: 140px; border: 1.5px solid #bae6fd;
+      border-radius: 7px; padding: 9px 11px; font-size: .8rem;
+      font-family: 'Courier New', monospace; resize: vertical;
+      background: #fff; color: #1a1a2e; outline: none; box-sizing: border-box;
+      transition: border-color .15s;
+    }
+    .org-budget-textarea:focus { border-color: #0ea5e9; box-shadow: 0 0 0 3px rgba(14,165,233,.12); }
+    .org-budget-actions { display: flex; gap: 8px; margin-top: 10px; flex-wrap: wrap; }
+    .org-budget-preview-title {
+      font-size: .82rem; font-weight: 700; color: #059669;
+      margin-bottom: 8px; display: flex; align-items: center; gap: 6px;
+    }
+
+    /* Tabela de folha de separação — colunas mais compactas */
+    .sep-tbl th, .sep-tbl td { padding: 4px 5px; font-size: 9.5pt; }
+    .sep-tbl input[type=text] {
+      width: 100%; border: 1px solid transparent; border-radius: 3px;
+      padding: 2px 4px; font-size: .8rem; background: transparent; font-family: inherit; outline: none;
+    }
+    .sep-tbl input[type=text]:hover { border-color: #c7d2ee; background: #fff; }
+    .sep-tbl input[type=text]:focus { border-color: #2d3a8c; background: #fff; }
+
     .composer-row { display: flex; gap: 7px; align-items: flex-end; }
+
     .btn-attach {
       background: none;
       border: 1px solid var(--border);
@@ -12227,30 +12263,29 @@ async function openContactResult(contact) {
 
 // ════════════════════════════════════════════════════════════════════════════
 // ════════════════════════════════════════════════════════════════════════════
-// LISTA ESCOLAR — Organizar e imprimir
+// ════════════════════════════════════════════════════════════════════════════
+// LISTA ESCOLAR — Etapa 1: Organizar · Etapa 2: Importar orçamento · Etapa 3: Separação
 // ════════════════════════════════════════════════════════════════════════════
 
 function isSiteSchoolListMessage(content) {
   return typeof content === "string" && content.includes("[SITE_LISTA_ESCOLAR]");
 }
 
-// Extrai valor de campo "Nome do Campo: valor" ou "*Nome do Campo:* valor"
-// Suporta tanto formato simples quanto markdown bold (*Campo:*)
+// ── Escape HTML ──────────────────────────────────────────────────────────────
+function _esc(s) {
+  return String(s || "").replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;");
+}
+
+// ── Extrai campo "Campo: valor" ou "*Campo:* valor" (markdown-tolerante) ────
 function _sslField(block, fieldName) {
   const escaped = fieldName.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-  // Tenta: *Campo:* valor (markdown) ou Campo: valor (simples) — case-insensitive
-  const re = new RegExp(
-    "\\*?" + escaped + "\\*?\\s*:\\*?\\s*([^\\n]+)",
-    "i"
-  );
+  const re = new RegExp("\\*?" + escaped + "\\*?\\s*:\\*?\\s*([^\\n]+)", "i");
   const m = block.match(re);
   if (!m) return "";
-  // Remove markdown bold asteriscos do resultado
   return m[1].trim().replace(/^\*+|\*+$/g, "").trim();
 }
 
-// Parser de itens: linhas "Nx Item" com sub-linhas de observação
-// Tolera caracteres lixo/quebrados antes da quantidade (ex: "  1x Item", "\uFFFD 1x Item")
+// ── Parser de itens "Nx Item" — tolera chars quebrados antes do número ──────
 function _sslParseItems(block, startMarker, endMarker) {
   const si = block.indexOf(startMarker);
   if (si === -1) return [];
@@ -12264,13 +12299,11 @@ function _sslParseItems(block, startMarker, endMarker) {
   for (const line of section.split("\n")) {
     const t = line.trim();
     if (!t) continue;
-    // Tolerante: ignora chars não-dígito no início da linha (inclui \uFFFD, emojis, bullets)
     const m = t.match(/^[^\d]*(\d+)\s*[xX]\s+(.+)/);
     if (m) {
       if (cur) items.push(cur);
       cur = { qty: m[1], name: m[2].trim(), obs: [] };
     } else if (cur) {
-      // Sub-linha de observação: normaliza rótulos conhecidos
       const obs = t
         .replace(/^Preferência do cliente:\s*/i, "preferência: ")
         .replace(/^Sugestão da escola:\s*/i, "sugestão da escola: ");
@@ -12281,73 +12314,46 @@ function _sslParseItems(block, startMarker, endMarker) {
   return items;
 }
 
-function _esc(s) {
-  return String(s || "").replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;");
-}
-
+// ── Parser da mensagem do site ───────────────────────────────────────────────
 function parseSiteSchoolList(content) {
   const result = { clientName: "", whatsapp: "", lists: [] };
 
-  // Nome do cliente: "Sou *Nome*" ou "*Cliente:* Nome"
   const nameM1 = content.match(/[Ss]ou\s+\*([^*]+)\*/);
   const nameM2 = content.match(/\*?[Cc]liente:\*?\s*([^\n*]+)/);
   if (nameM1) result.clientName = nameM1[1].trim();
   else if (nameM2) result.clientName = nameM2[1].trim().replace(/^\*+|\*+$/g,"").trim();
 
-  // WhatsApp: várias formas possíveis
-  // Forma 1: "*WhatsApp informado no site:*\nValor"
-  // Forma 2: "*WhatsApp:* (12) 3934-1666" (na mesma linha)
-  // Forma 3: "WhatsApp: valor"
   const wppM1 = content.match(/\*WhatsApp informado no site:\*\s*\n([^\n]+)/i);
   const wppM2 = content.match(/\*?WhatsApp:?\*?\s*([+\d()\s\-\u2013\u2014]{7,})/i);
   if (wppM1) result.whatsapp = wppM1[1].trim();
   else if (wppM2) result.whatsapp = wppM2[1].trim().replace(/^\*+|\*+$/g,"").trim();
 
-  // Divide nos blocos *Lista N*
   const blocks = content.split(/(?=\*Lista\s+\d+\*)/i);
 
   for (const block of blocks) {
     if (!/^\*Lista\s+\d+\*/i.test(block.trim())) continue;
-
     const listNumM = block.match(/^\*Lista\s+(\d+)\*/i);
     const listNum  = listNumM ? parseInt(listNumM[1]) : result.lists.length + 1;
-
-    // Extrai nome do aluno de "*Lista N · NomeAluno*" se presente
     const alunoNomeM = block.match(/^\*Lista\s+\d+\s*[·\-\u2013]\s*([^*\n]+)\*/i);
 
     const escola    = _sslField(block, "Escola");
     const anoSerie  = _sslField(block, "Ano/Série") || _sslField(block, "Ano/Serie");
     const segmento  = _sslField(block, "Segmento");
     const anoLetivo = _sslField(block, "Ano letivo");
-
     const alunoNome    = _sslField(block, "Nome") || (alunoNomeM ? alunoNomeM[1].trim() : "");
-    const prefCor      = _sslField(block, "Preferência de cor quando a lista não indicar")
-                      || _sslField(block, "Preferencia de cor quando a lista nao indicar");
-    const obsCorModelo = _sslField(block, "Observações sobre cores/modelos")
-                      || _sslField(block, "Observacoes sobre cores/modelos");
-
-    // Linha "Quando a lista indicar..." (orientação de cor geral)
+    const prefCor      = _sslField(block, "Preferência de cor quando a lista não indicar") || _sslField(block, "Preferencia de cor quando a lista nao indicar");
+    const obsCorModelo = _sslField(block, "Observações sobre cores/modelos") || _sslField(block, "Observacoes sobre cores/modelos");
     const regaCorM = block.match(/Quando a lista indicar[^\n]+/);
     const regaCor  = regaCorM ? regaCorM[0].trim() : "";
+    const prefOrcM = block.match(/\*Preferência para o orçamento:\*\s*\n([^\n]+)/i) || block.match(/\*Preferencia para o orcamento:\*\s*\n([^\n]+)/i);
+    const prefOrcamento = prefOrcM ? prefOrcM[1].trim() : _sslField(block, "Preferência para o orçamento") || _sslField(block, "Critério para orçamento") || _sslField(block, "Criterio para orcamento");
 
-    // Preferência de orçamento (pode vir em duas formas no texto)
-    const prefOrcM = block.match(/\*Preferência para o orçamento:\*\s*\n([^\n]+)/i)
-                  || block.match(/\*Preferencia para o orcamento:\*\s*\n([^\n]+)/i);
-    const prefOrcamento = prefOrcM ? prefOrcM[1].trim()
-                                   : _sslField(block, "Preferência para o orçamento")
-                                  || _sslField(block, "Critério para orçamento")
-                                  || _sslField(block, "Criterio para orcamento");
+    const items    = _sslParseItems(block, "*Itens que quero comprar:*", "*Itens marcados como Não quero:*");
+    const naoQuero = _sslParseItems(block, "*Itens marcados como Não quero:*", null);
 
-    const items    = _sslParseItems(block, "*Itens que quero comprar:*",        "*Itens marcados como Não quero:*");
-    const naoQuero = _sslParseItems(block, "*Itens marcados como Não quero:*",  null);
-
-    result.lists.push({ listNum, escola, anoSerie, segmento, anoLetivo,
-                        alunoNome, prefCor, obsCorModelo, regaCor,
-                        prefOrcamento, items, naoQuero });
+    result.lists.push({ listNum, escola, anoSerie, segmento, anoLetivo, alunoNome, prefCor, obsCorModelo, regaCor, prefOrcamento, items, naoQuero });
   }
 
-  // Fallback: marcador presente mas nenhum bloco *Lista N* encontrado
-  // Tenta extrair itens diretamente do conteúdo completo
   if (result.lists.length === 0) {
     const fallbackItems = [];
     for (const line of content.split("\n")) {
@@ -12356,118 +12362,250 @@ function parseSiteSchoolList(content) {
       const m = t.match(/^[^\d]*(\d+)\s*[xX]\s+(.+)/);
       if (m) fallbackItems.push({ qty: m[1], name: m[2].trim(), obs: [] });
     }
-    result.lists.push({
-      listNum: 1, escola: "", anoSerie: "", segmento: "", anoLetivo: "",
-      alunoNome: "", prefCor: "", obsCorModelo: "", regaCor: "",
-      prefOrcamento: "", items: fallbackItems, naoQuero: []
-    });
+    result.lists.push({ listNum: 1, escola: "", anoSerie: "", segmento: "", anoLetivo: "", alunoNome: "", prefCor: "", obsCorModelo: "", regaCor: "", prefOrcamento: "", items: fallbackItems, naoQuero: [] });
+  }
+  return result;
+}
+
+// ════════════════════════════════════════════════════════════════════════════
+// PARSER DO ORÇAMENTO OFICIAL (Etapa 2)
+// Formato: "Código Descrição ... Quant. ValorUnit. Total"
+// Regra: 1º bloco = código, 3 últimos blocos = qtd / v.unit / total
+//         tudo no meio = descrição
+// ════════════════════════════════════════════════════════════════════════════
+function parseBudgetText(text) {
+  const result = {
+    numOrc: "", data: "", cliente: "", endereco: "", telefones: "",
+    vendedor: "", totalProd: "", items: []
+  };
+
+  const lines = text.split(/\r?\n/);
+
+  // Cabeçalho: busca campos simples por label
+  const getField = function(label) {
+    const re = new RegExp(label + "[:\\s]+([^\\n]+)", "i");
+    const m = text.match(re);
+    return m ? m[1].trim() : "";
+  };
+
+  // Número do orçamento: "Orçamento MOV 54030" ou "Orçamento 54030"
+  const numM = text.match(/Or[cç]amento\s+(MOV\s+)?(\d+)/i);
+  if (numM) result.numOrc = (numM[1] ? numM[1].trim() + " " : "") + numM[2];
+
+  result.data      = getField("Data");
+  result.vendedor  = getField("Vendedor");
+  result.totalProd = getField("Total Produtos");
+
+  // Cliente: "Cliente: 4885 - NOME" ou "Cliente: NOME"
+  const clienteM = text.match(/Cliente:\s*([^\n]+)/i);
+  if (clienteM) result.cliente = clienteM[1].trim();
+
+  // Endereço e Telefones
+  const endM = text.match(/Endere[cç]o:\s*([^\n]+)/i);
+  if (endM) result.endereco = endM[1].trim();
+  const telM = text.match(/Telefones?:\s*([^\n]+)/i);
+  if (telM) result.telefones = telM[1].trim();
+
+  // Detecta linhas de item pelo padrão: 4+ dígitos seguidos de texto + 3 números no final
+  // Ex: "9999 COPO 200ML COPAZA TRANSP C/100 4 19,68 78,72"
+  // Regex: código (dígitos) | descrição | qtd | v.unit | total
+  const itemRe = /^(\d{3,})\s+(.+?)\s+(\d+(?:,\d+)?)\s+(\d+(?:\.\d{3})*(?:,\d+)?)\s+(\d+(?:\.\d{3})*(?:,\d+)?)$/;
+
+  // Parse mais robusto: divide linha em tokens e aplica regra dos 3 últimos numéricos
+  const numPtBr = /^\d+(?:\.\d{3})*(?:,\d+)?$/; // ex: 1.234,56 ou 19,68
+
+  for (const rawLine of lines) {
+    const line = rawLine.trim();
+    if (!line) continue;
+
+    // Tenta regex direto primeiro
+    let m = line.match(itemRe);
+    if (m) {
+      result.items.push({
+        codigo: m[1], descricao: m[2].trim(),
+        qty: m[3], valorUnit: m[4], total: m[5]
+      });
+      continue;
+    }
+
+    // Fallback: tokeniza e extrai pelo posicionamento
+    const tokens = line.split(/\s+/);
+    // Precisa: 1º token = código numérico, pelo menos 5 tokens no total
+    if (tokens.length < 5) continue;
+    if (!/^\d{3,}$/.test(tokens[0])) continue;
+
+    // Os 3 últimos tokens devem ser numéricos no formato BR
+    const t1 = tokens[tokens.length - 1];
+    const t2 = tokens[tokens.length - 2];
+    const t3 = tokens[tokens.length - 3];
+    if (!numPtBr.test(t1) || !numPtBr.test(t2)) continue;
+
+    const codigo = tokens[0];
+    const total    = t1;
+    const valorUnit = t2;
+    // Quantidade: t3 pode ser inteiro puro ou decimal
+    const qty = /^\d+(?:,\d+)?$/.test(t3) ? t3 : null;
+    if (!qty) continue;
+
+    const descEnd = tokens.length - 3;
+    const descricao = tokens.slice(1, descEnd).join(" ").trim();
+    if (!descricao) continue;
+
+    result.items.push({ codigo, descricao, qty, valorUnit, total });
   }
 
   return result;
 }
 
-// ── Etapa 1: HTML da folha de impressão (Lista organizada recebida) ──
+// ════════════════════════════════════════════════════════════════════════════
+// ETAPA 1 — HTML da folha impressa "Lista organizada para orçamento"
+// ════════════════════════════════════════════════════════════════════════════
 function _sslPrintSheetHtml(parsed, lst, isLast, receivedAt) {
-  // Linhas da tabela principal
   let itemRows = "";
   if (lst.items.length === 0) {
-    itemRows = `<tr><td colspan="3" style="font-style:italic;color:#888;padding:7px;">Nenhum item na lista</td></tr>`;
+    itemRows = '<tr><td colspan="3" style="font-style:italic;color:#888;padding:7px;">Nenhum item na lista</td></tr>';
   } else {
     for (const item of lst.items) {
       const obs = item.obs.length > 0 ? _esc(item.obs.join("; ")) : "";
-      itemRows += `<tr>
-        <td style="width:42px;text-align:center;">${_esc(item.qty)}</td>
-        <td>${_esc(item.name)}</td>
-        <td style="font-size:9pt;color:#555;">${obs}</td>
-      </tr>`;
+      itemRows += "<tr>" +
+        '<td style="width:42px;text-align:center;">' + _esc(item.qty) + "</td>" +
+        "<td>" + _esc(item.name) + "</td>" +
+        '<td style="font-size:9pt;color:#555;">' + obs + "</td>" +
+        "</tr>";
     }
   }
 
-  // Linhas dos itens "Não quero"
   let nqRows = "";
   for (const item of lst.naoQuero) {
     const obs = item.obs.length > 0 ? _esc(item.obs.join("; ")) : "";
-    nqRows += `<tr>
-      <td style="width:42px;text-align:center;">${_esc(item.qty)}</td>
-      <td>${_esc(item.name)}</td>
-      <td style="font-size:9pt;color:#555;">${obs}</td>
-    </tr>`;
+    nqRows += "<tr>" +
+      '<td style="width:42px;text-align:center;">' + _esc(item.qty) + "</td>" +
+      "<td>" + _esc(item.name) + "</td>" +
+      '<td style="font-size:9pt;color:#555;">' + obs + "</td>" +
+      "</tr>";
   }
 
-  const alunoLabel = _esc(lst.alunoNome || `Lista ${lst.listNum}`);
+  const alunoLabel = _esc(lst.alunoNome || ("Lista " + lst.listNum));
 
-  const orientBlock = (lst.prefCor || lst.obsCorModelo || lst.regaCor) ? `
-    <div class="ps-orient">
-      <div class="ps-orient-ttl">Orientações de cor e modelo</div>
-      ${lst.prefCor      ? `<div class="ps-orient-row"><strong>Preferência de cor:</strong> ${_esc(lst.prefCor)}</div>` : ""}
-      ${lst.obsCorModelo ? `<div class="ps-orient-row"><strong>Observações sobre cores/modelos:</strong> ${_esc(lst.obsCorModelo)}</div>` : ""}
-      ${lst.regaCor      ? `<div class="ps-orient-row"><strong>Regra:</strong> ${_esc(lst.regaCor)}</div>` : ""}
-    </div>` : "";
+  const orientBlock = (lst.prefCor || lst.obsCorModelo || lst.regaCor) ?
+    '<div class="ps-orient">' +
+    '<div class="ps-orient-ttl">Orientações de cor e modelo</div>' +
+    (lst.prefCor      ? '<div class="ps-orient-row"><strong>Preferência de cor:</strong> ' + _esc(lst.prefCor) + "</div>" : "") +
+    (lst.obsCorModelo ? '<div class="ps-orient-row"><strong>Observações sobre cores/modelos:</strong> ' + _esc(lst.obsCorModelo) + "</div>" : "") +
+    (lst.regaCor      ? '<div class="ps-orient-row"><strong>Regra:</strong> ' + _esc(lst.regaCor) + "</div>" : "") +
+    "</div>" : "";
 
-  const nqBlock = lst.naoQuero.length > 0 ? `
-    <div class="ps-noquero">
-      <div class="ps-nq-ttl">Itens marcados como NÃO QUERO</div>
-      <div class="ps-nq-note">Não separar estes itens, a menos que o cliente solicite depois.</div>
-      <table class="ps-tbl">
-        <thead><tr><th style="width:42px;">Qtd.</th><th>Item</th><th>Observações</th></tr></thead>
-        <tbody>${nqRows}</tbody>
-      </table>
-    </div>` : "";
+  const nqBlock = lst.naoQuero.length > 0 ?
+    '<div class="ps-noquero">' +
+    '<div class="ps-nq-ttl">Itens marcados como NÃO QUERO</div>' +
+    '<div class="ps-nq-note">Não separar estes itens, a menos que o cliente solicite depois.</div>' +
+    '<table class="ps-tbl"><thead><tr><th style="width:42px;">Qtd.</th><th>Item</th><th>Observações</th></tr></thead>' +
+    "<tbody>" + nqRows + "</tbody></table></div>" : "";
 
-  return `<div class="print-sheet-wrap${!isLast ? " page-break" : ""}">
-    <div class="ps-hdr">
-      <div class="ps-hdr-name">Sartec Papelaria</div>
-      <div class="ps-hdr-sub">Lista organizada recebida</div>
-      <div class="ps-hdr-note">Use esta folha para conferir os itens antes de lançar o orçamento no sistema da loja.</div>
-      <div class="ps-hdr-badge">Etapa 1 — Consulta e organização</div>
-    </div>
-
-    <div class="ps-fields">
-      ${parsed.clientName ? `<div class="ps-field"><span class="ps-lbl">Cliente:</span> ${_esc(parsed.clientName)}</div>` : ""}
-      ${parsed.whatsapp   ? `<div class="ps-field"><span class="ps-lbl">WhatsApp:</span> ${_esc(parsed.whatsapp)}</div>` : ""}
-      <div class="ps-field"><span class="ps-lbl">Aluno/Lista:</span> ${alunoLabel}</div>
-      ${lst.escola    ? `<div class="ps-field"><span class="ps-lbl">Escola:</span> ${_esc(lst.escola)}</div>` : ""}
-      ${lst.anoSerie  ? `<div class="ps-field"><span class="ps-lbl">Ano/Série:</span> ${_esc(lst.anoSerie)}</div>` : ""}
-      ${lst.segmento  ? `<div class="ps-field"><span class="ps-lbl">Segmento:</span> ${_esc(lst.segmento)}</div>` : ""}
-      ${lst.anoLetivo ? `<div class="ps-field"><span class="ps-lbl">Ano letivo:</span> ${_esc(lst.anoLetivo)}</div>` : ""}
-      ${lst.prefOrcamento ? `<div class="ps-field-full"><span class="ps-lbl">Critério para orçamento:</span> ${_esc(lst.prefOrcamento)}</div>` : ""}
-      ${receivedAt        ? `<div class="ps-field-full"><span class="ps-lbl">Recebido em:</span> ${_esc(receivedAt)}</div>` : ""}
-    </div>
-
-    ${orientBlock}
-
-    <div class="ps-sec-ttl">Itens da lista (${lst.items.length} ${lst.items.length === 1 ? "item" : "itens"})</div>
-    <table class="ps-tbl">
-      <thead>
-        <tr>
-          <th style="width:42px;">Qtd.</th>
-          <th>Item</th>
-          <th style="width:160px;">Observações</th>
-        </tr>
-      </thead>
-      <tbody>${itemRows}</tbody>
-    </table>
-
-    ${nqBlock}
-
-    <div class="ps-footer">
-      <div class="ps-field ps-footer-full" style="font-style:italic;font-size:9pt;color:#666;margin-bottom:8px;">
-        Esta é a lista recebida do cliente, ainda NÃO é a lista final aprovada. Lance os itens no sistema da loja para gerar o orçamento.
-      </div>
-      <div class="ps-field">Consultado por: <span class="ps-uline">&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;</span></div>
-      <div class="ps-field">Data: ____/____/____</div>
-    </div>
-  </div>`;
+  return '<div class="print-sheet-wrap' + (!isLast ? " page-break" : "") + '">' +
+    '<div class="ps-hdr">' +
+    '<div class="ps-hdr-name">Sartec Papelaria</div>' +
+    '<div class="ps-hdr-sub">Lista organizada para orçamento</div>' +
+    '<div class="ps-hdr-note">Arquivo de apoio para revisar os itens recebidos antes de lançar o orçamento no sistema da loja.</div>' +
+    '<div class="ps-hdr-badge">Etapa 1 — Organização para orçamento</div>' +
+    "</div>" +
+    '<div class="ps-fields">' +
+    (parsed.clientName ? '<div class="ps-field"><span class="ps-lbl">Cliente:</span> ' + _esc(parsed.clientName) + "</div>" : "") +
+    (parsed.whatsapp   ? '<div class="ps-field"><span class="ps-lbl">WhatsApp:</span> ' + _esc(parsed.whatsapp) + "</div>" : "") +
+    '<div class="ps-field"><span class="ps-lbl">Aluno/Lista:</span> ' + alunoLabel + "</div>" +
+    (lst.escola    ? '<div class="ps-field"><span class="ps-lbl">Escola:</span> ' + _esc(lst.escola) + "</div>" : "") +
+    (lst.anoSerie  ? '<div class="ps-field"><span class="ps-lbl">Ano/Série:</span> ' + _esc(lst.anoSerie) + "</div>" : "") +
+    (lst.segmento  ? '<div class="ps-field"><span class="ps-lbl">Segmento:</span> ' + _esc(lst.segmento) + "</div>" : "") +
+    (lst.anoLetivo ? '<div class="ps-field"><span class="ps-lbl">Ano letivo:</span> ' + _esc(lst.anoLetivo) + "</div>" : "") +
+    (lst.prefOrcamento ? '<div class="ps-field-full"><span class="ps-lbl">Critério para orçamento:</span> ' + _esc(lst.prefOrcamento) + "</div>" : "") +
+    (receivedAt        ? '<div class="ps-field-full"><span class="ps-lbl">Recebido em:</span> ' + _esc(receivedAt) + "</div>" : "") +
+    "</div>" +
+    orientBlock +
+    '<div class="ps-sec-ttl">Itens da lista (' + lst.items.length + " " + (lst.items.length === 1 ? "item" : "itens") + ")</div>" +
+    '<table class="ps-tbl"><thead><tr>' +
+    '<th style="width:42px;">Qtd.</th><th>Item</th><th style="width:180px;">Observações</th>' +
+    "</tr></thead><tbody>" + itemRows + "</tbody></table>" +
+    nqBlock +
+    '<div class="ps-footer">' +
+    '<div class="ps-field ps-footer-full" style="font-style:italic;font-size:9pt;color:#666;margin-bottom:8px;">Lista recebida do cliente — NÃO é lista aprovada. Lance os itens no sistema da loja para gerar o orçamento.</div>' +
+    '<div class="ps-field">Consultado por: <span class="ps-uline">&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;</span></div>' +
+    '<div class="ps-field">Data: ____/____/____</div>' +
+    "</div>" +
+    "</div>";
 }
 
-// ── Etapa 1: Abre modal editável com a lista organizada ──
-function openSchoolListOrganize(content, msg) {
-  const parsed = parseSiteSchoolList(content);
+// ════════════════════════════════════════════════════════════════════════════
+// ETAPA 3 — HTML da folha de separação (a partir do orçamento aprovado)
+// ════════════════════════════════════════════════════════════════════════════
+function _sepSheetHtml(budget) {
+  let itemRows = "";
+  if (!budget.items || budget.items.length === 0) {
+    itemRows = '<tr><td colspan="8" style="font-style:italic;color:#888;padding:10px;">Nenhum item identificado no orçamento.</td></tr>';
+  } else {
+    budget.items.forEach(function(it, idx) {
+      itemRows +=
+        "<tr>" +
+        '<td style="width:52px;font-size:8.5pt;" id="sep-cod-' + idx + '">' + _esc(it.codigo) + "</td>" +
+        '<td id="sep-desc-' + idx + '">' + _esc(it.descricao) + "</td>" +
+        '<td style="width:36px;text-align:center;" id="sep-qty-' + idx + '">' + _esc(it.qty) + "</td>" +
+        '<td style="width:62px;text-align:right;" id="sep-vu-' + idx + '">' + _esc(it.valorUnit) + "</td>" +
+        '<td style="width:42px;text-align:center;font-size:14pt;">&#9744;</td>' +
+        '<td style="width:42px;text-align:center;font-size:14pt;">&#9744;</td>' +
+        '<td style="width:90px;">&nbsp;</td>' +
+        '<td style="width:80px;">&nbsp;</td>' +
+        "</tr>";
+    });
+  }
 
-  let receivedAt = "";
+  return '<div class="print-sheet-wrap">' +
+    '<div class="ps-hdr">' +
+    '<div class="ps-hdr-name">Sartec Papelaria</div>' +
+    '<div class="ps-hdr-sub">Folha de separação e conferência</div>' +
+    '<div class="ps-hdr-note">Gerada a partir do orçamento aprovado — uso interno da equipe.</div>' +
+    '<div class="ps-hdr-badge">Etapa 3 — Separação e conferência</div>' +
+    "</div>" +
+    '<div class="ps-fields">' +
+    (budget.numOrc   ? '<div class="ps-field"><span class="ps-lbl">Orçamento nº:</span> ' + _esc(budget.numOrc) + "</div>" : "") +
+    (budget.data     ? '<div class="ps-field"><span class="ps-lbl">Data:</span> ' + _esc(budget.data) + "</div>" : "") +
+    (budget.cliente  ? '<div class="ps-field ps-field-full"><span class="ps-lbl">Cliente:</span> ' + _esc(budget.cliente) + "</div>" : "") +
+    (budget.telefones ? '<div class="ps-field"><span class="ps-lbl">Telefone:</span> ' + _esc(budget.telefones) + "</div>" : "") +
+    (budget.vendedor ? '<div class="ps-field"><span class="ps-lbl">Vendedor:</span> ' + _esc(budget.vendedor) + "</div>" : "") +
+    (budget.totalProd ? '<div class="ps-field"><span class="ps-lbl">Total orçamento:</span> R$ ' + _esc(budget.totalProd) + "</div>" : "") +
+    "</div>" +
+    '<div class="ps-sec-ttl">Itens para separar (' + (budget.items || []).length + ")</div>" +
+    '<table class="ps-tbl sep-tbl">' +
+    "<thead><tr>" +
+    '<th style="width:52px;font-size:8.5pt;">Código</th>' +
+    "<th>Descrição</th>" +
+    '<th style="width:36px;">Qtd.</th>' +
+    '<th style="width:62px;text-align:right;">Valor Unit.</th>' +
+    '<th style="width:42px;text-align:center;">Sep.</th>' +
+    '<th style="width:42px;text-align:center;">Conf.</th>' +
+    '<th style="width:90px;">Falta/Subst.</th>' +
+    '<th style="width:80px;">Obs.</th>' +
+    "</tr></thead>" +
+    "<tbody>" + itemRows + "</tbody>" +
+    "</table>" +
+    '<div class="ps-footer">' +
+    '<div class="ps-field">Separado por: <span class="ps-uline">&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;</span></div>' +
+    '<div class="ps-field">Conferido por: <span class="ps-uline">&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;</span></div>' +
+    '<div class="ps-field">Cliente avisado: &#9744; Sim &nbsp; &#9744; Não</div>' +
+    '<div class="ps-field">Data: ____/____/____</div>' +
+    '<div class="ps-field-full" style="margin-top:6px;">Observações gerais: <span class="ps-uline" style="min-width:300px;">&nbsp;</span></div>' +
+    "</div>" +
+    "</div>";
+}
+
+// ════════════════════════════════════════════════════════════════════════════
+// ETAPA 1 — Modal principal (organizar lista para orçamento)
+// ════════════════════════════════════════════════════════════════════════════
+function openSchoolListOrganize(content, msg) {
+  var parsed = parseSiteSchoolList(content);
+
+  var receivedAt = "";
   if (msg && msg.createdAt) {
     try {
-      const d = new Date(msg.createdAt);
+      var d = new Date(msg.createdAt);
       receivedAt = d.toLocaleString("pt-BR", {
         timeZone: "America/Sao_Paulo", day: "2-digit", month: "2-digit",
         year: "numeric", hour: "2-digit", minute: "2-digit", hour12: false
@@ -12475,226 +12613,349 @@ function openSchoolListOrganize(content, msg) {
     } catch(e) {}
   }
 
-  // Remove modal anterior se houver
   var prevModal = document.getElementById("ssl-org-modal");
   if (prevModal) prevModal.remove();
 
-  const overlay = document.createElement("div");
+  var overlay = document.createElement("div");
   overlay.className = "org-modal-overlay";
   overlay.id = "ssl-org-modal";
 
-  const allLists = parsed.lists;
+  var allLists = parsed.lists;
+  var listsHtml = "";
 
-  // Constrói o HTML das listas
-  let listsHtml = "";
   allLists.forEach(function(lst, listIdx) {
-    const alunoLabel = lst.alunoNome || ("Lista " + lst.listNum);
+    var alunoLabel = lst.alunoNome || ("Lista " + lst.listNum);
 
-    // Cabeçalho de orientações
-    const orientHtml = (lst.prefCor || lst.obsCorModelo || lst.regaCor) ? (
+    var orientHtml = (lst.prefCor || lst.obsCorModelo || lst.regaCor) ?
       '<div class="org-orient">' +
       '<div class="org-orient-ttl">Orientações de cor e modelo</div>' +
-      (lst.prefCor      ? '<div class="org-orient-row"><strong>Preferência de cor:</strong> ' + _esc(lst.prefCor) + '</div>' : '') +
-      (lst.obsCorModelo ? '<div class="org-orient-row"><strong>Observações:</strong> ' + _esc(lst.obsCorModelo) + '</div>' : '') +
-      (lst.regaCor      ? '<div class="org-orient-row"><strong>Regra:</strong> ' + _esc(lst.regaCor) + '</div>' : '') +
-      '</div>'
-    ) : "";
+      (lst.prefCor      ? '<div class="org-orient-row"><strong>Preferência de cor:</strong> ' + _esc(lst.prefCor) + "</div>" : "") +
+      (lst.obsCorModelo ? '<div class="org-orient-row"><strong>Observações:</strong> ' + _esc(lst.obsCorModelo) + "</div>" : "") +
+      (lst.regaCor      ? '<div class="org-orient-row"><strong>Regra:</strong> ' + _esc(lst.regaCor) + "</div>" : "") +
+      "</div>" : "";
 
-    // Linhas editáveis da tabela
-    let rowsHtml = "";
+    var rowsHtml = "";
     lst.items.forEach(function(item, rowIdx) {
-      rowsHtml += '<tr data-list="' + listIdx + '" data-row="' + rowIdx + '">' +
+      rowsHtml +=
+        '<tr data-list="' + listIdx + '" data-row="' + rowIdx + '">' +
         '<td style="width:58px;"><input type="number" min="1" max="9999" value="' + _esc(item.qty) + '" class="org-item-qty" /></td>' +
         '<td><input type="text" value="' + _esc(item.name) + '" class="org-item-name" /></td>' +
         '<td style="width:200px;"><input type="text" value="' + _esc(item.obs.join("; ")) + '" class="org-item-obs" /></td>' +
         '<td style="width:36px;text-align:center;"><button class="org-rm-row" onclick="orgRemoveRow(this)" title="Remover item">&#215;</button></td>' +
-        '</tr>';
+        "</tr>";
     });
 
-    // Itens Não quero (somente leitura no modal)
-    let nqHtml = "";
+    var nqHtml = "";
     if (lst.naoQuero.length > 0) {
       nqHtml = '<div class="org-noquero"><div class="org-nq-ttl">&#9940; Itens marcados como NÃO QUERO</div>' +
         '<div class="org-nq-note">Não separar estes itens, salvo instrução contrária do cliente.</div>';
       lst.naoQuero.forEach(function(it) {
-        nqHtml += '<div style="font-size:.82rem;padding:2px 0;">' + _esc(it.qty) + '&times; ' + _esc(it.name) +
-          (it.obs.length ? ' <em>(' + _esc(it.obs.join("; ")) + ')</em>' : '') + '</div>';
+        nqHtml += '<div style="font-size:.82rem;padding:2px 0;">' + _esc(it.qty) + "&times; " + _esc(it.name) +
+          (it.obs.length ? " <em>(" + _esc(it.obs.join("; ")) + ")</em>" : "") + "</div>";
       });
-      nqHtml += '</div>';
+      nqHtml += "</div>";
     }
 
-    const listTitle = allLists.length > 1
+    var listTitle = allLists.length > 1
       ? '<div style="font-size:.9rem;font-weight:700;color:#1a2a5e;margin-bottom:10px;padding-bottom:6px;border-bottom:1px solid #e5e7eb;">&#128203; Lista ' +
-        lst.listNum + (lst.alunoNome ? ' — ' + _esc(lst.alunoNome) : '') + '</div>'
+        lst.listNum + (lst.alunoNome ? " \u2014 " + _esc(lst.alunoNome) : "") + "</div>"
       : "";
 
-    listsHtml += '<div class="org-list-section" data-list-idx="' + listIdx + '">' +
+    listsHtml +=
+      '<div class="org-list-section" data-list-idx="' + listIdx + '">' +
       listTitle +
       '<div class="org-fields-grid">' +
-      (parsed.clientName ? '<div class="org-field"><span class="org-field-lbl">Cliente:</span><span class="org-field-val">' + _esc(parsed.clientName) + '</span></div>' : '') +
-      (parsed.whatsapp   ? '<div class="org-field"><span class="org-field-lbl">WhatsApp:</span><span class="org-field-val">' + _esc(parsed.whatsapp) + '</span></div>' : '') +
-      (alunoLabel        ? '<div class="org-field"><span class="org-field-lbl">Aluno/Lista:</span><span class="org-field-val">' + _esc(alunoLabel) + '</span></div>' : '') +
-      (lst.escola    ? '<div class="org-field"><span class="org-field-lbl">Escola:</span><span class="org-field-val">' + _esc(lst.escola) + '</span></div>' : '') +
-      (lst.anoSerie  ? '<div class="org-field"><span class="org-field-lbl">Ano/Série:</span><span class="org-field-val">' + _esc(lst.anoSerie) + '</span></div>' : '') +
-      (lst.segmento  ? '<div class="org-field"><span class="org-field-lbl">Segmento:</span><span class="org-field-val">' + _esc(lst.segmento) + '</span></div>' : '') +
-      (lst.anoLetivo ? '<div class="org-field"><span class="org-field-lbl">Ano letivo:</span><span class="org-field-val">' + _esc(lst.anoLetivo) + '</span></div>' : '') +
-      (lst.prefOrcamento ? '<div class="org-field org-field-full"><span class="org-field-lbl">Critério para orçamento:</span><span class="org-field-val">' + _esc(lst.prefOrcamento) + '</span></div>' : '') +
-      (receivedAt        ? '<div class="org-field org-field-full"><span class="org-field-lbl">Recebido em:</span><span class="org-field-val">' + _esc(receivedAt) + '</span></div>' : '') +
-      '</div>' +
+      (parsed.clientName ? '<div class="org-field"><span class="org-field-lbl">Cliente:</span><span class="org-field-val">' + _esc(parsed.clientName) + "</span></div>" : "") +
+      (parsed.whatsapp   ? '<div class="org-field"><span class="org-field-lbl">WhatsApp:</span><span class="org-field-val">' + _esc(parsed.whatsapp) + "</span></div>" : "") +
+      (alunoLabel        ? '<div class="org-field"><span class="org-field-lbl">Aluno/Lista:</span><span class="org-field-val">' + _esc(alunoLabel) + "</span></div>" : "") +
+      (lst.escola    ? '<div class="org-field"><span class="org-field-lbl">Escola:</span><span class="org-field-val">' + _esc(lst.escola) + "</span></div>" : "") +
+      (lst.anoSerie  ? '<div class="org-field"><span class="org-field-lbl">Ano/Série:</span><span class="org-field-val">' + _esc(lst.anoSerie) + "</span></div>" : "") +
+      (lst.segmento  ? '<div class="org-field"><span class="org-field-lbl">Segmento:</span><span class="org-field-val">' + _esc(lst.segmento) + "</span></div>" : "") +
+      (lst.anoLetivo ? '<div class="org-field"><span class="org-field-lbl">Ano letivo:</span><span class="org-field-val">' + _esc(lst.anoLetivo) + "</span></div>" : "") +
+      (lst.prefOrcamento ? '<div class="org-field org-field-full"><span class="org-field-lbl">Critério p/ orçamento:</span><span class="org-field-val">' + _esc(lst.prefOrcamento) + "</span></div>" : "") +
+      (receivedAt        ? '<div class="org-field org-field-full"><span class="org-field-lbl">Recebido em:</span><span class="org-field-val">' + _esc(receivedAt) + "</span></div>" : "") +
+      "</div>" +
       orientHtml +
-      '<div style="font-size:.8rem;font-weight:700;color:#374151;margin-bottom:6px;">Itens da lista — editável antes de imprimir</div>' +
+      '<div style="font-size:.8rem;font-weight:700;color:#374151;margin-bottom:6px;">Itens da lista — editável antes de gerar</div>' +
       '<table class="org-tbl" id="org-tbl-' + listIdx + '">' +
       '<thead><tr><th style="width:58px;">Qtd.</th><th>Item</th><th style="width:200px;">Observações</th><th style="width:36px;"></th></tr></thead>' +
-      '<tbody id="org-tbody-' + listIdx + '">' + rowsHtml + '</tbody>' +
-      '</table>' +
+      '<tbody id="org-tbody-' + listIdx + '">' + rowsHtml + "</tbody>" +
+      "</table>" +
       '<div class="org-tbl-actions"><button class="org-modal-btn secondary" style="font-size:.78rem;padding:5px 12px;" onclick="orgAddRow(' + listIdx + ')">+ Adicionar item</button></div>' +
       nqHtml +
-      '</div>';
+      "</div>";
   });
 
-  overlay.innerHTML = '<div class="org-modal-box" onclick="event.stopPropagation()">' +
-    '<div class="org-modal-header">' +
+  // ── Seção "Depois do orçamento" (Etapa 2 + 3) ──
+  var budgetSection =
+    '<div class="org-budget-section">' +
+    '<div class="org-budget-header">' +
+    '<span class="org-budget-icon">&#128196;</span>' +
     '<div>' +
-    '<div class="org-modal-title">&#128203; Lista organizada recebida</div>' +
-    '<div class="org-modal-subtitle">Etapa 1 — Consulta antes de lançar no sistema da loja</div>' +
-    '</div>' +
-    '<button class="org-modal-btn secondary" style="margin-left:auto;padding:6px 14px;font-size:.8rem;" onclick="document.getElementById(\'ssl-org-modal\')?.remove()">&#10005; Fechar</button>' +
-    '</div>' +
-    '<div class="org-modal-body" id="org-modal-body">' + listsHtml + '</div>' +
+    '<div class="org-budget-title">Depois do orçamento</div>' +
+    '<div class="org-budget-sub">Após lançar a lista no sistema da loja e gerar o orçamento oficial, cole o conteúdo aqui para gerar a folha de separação.</div>' +
+    "</div>" +
+    "</div>" +
+    '<textarea id="org-budget-textarea" class="org-budget-textarea" placeholder="Cole aqui o texto do orçamento oficial (copie do sistema da loja ou do PDF)...&#10;&#10;Exemplo:&#10;Orçamento MOV 54030&#10;Data: 12/06/2026&#10;Cliente: Ana Flores&#10;Vendedor: Pedro&#10;&#10;9999 CADERNO 10 MATÉRIAS 200FLS 2 18,50 37,00&#10;9999 LÁPIS GRAFITE Nº2 C/12 3 8,90 26,70"></textarea>' +
+    '<div class="org-budget-actions">' +
+    '<button class="org-modal-btn secondary" onclick="orgReadBudget()" id="btn-read-budget">&#128270; Ler orçamento</button>' +
+    '<button class="org-modal-btn primary" onclick="orgGenerateSepSheet()" id="btn-gen-sep" style="display:none;">&#128203; Gerar folha de separação</button>' +
+    "</div>" +
+    '<div id="org-budget-preview" style="display:none;margin-top:14px;">' +
+    '<div class="org-budget-preview-title">&#10003; Dados extraídos — confira antes de gerar</div>' +
+    '<div id="org-budget-preview-content"></div>' +
+    "</div>" +
+    "</div>";
+
+  overlay.innerHTML =
+    '<div class="org-modal-box" onclick="event.stopPropagation()">' +
+    '<div class="org-modal-header">' +
+    "<div>" +
+    '<div class="org-modal-title">&#128203; Organizar lista para orçamento</div>' +
+    '<div class="org-modal-subtitle">Revise os itens recebidos antes de lançar o orçamento no sistema da loja.</div>' +
+    "</div>" +
+    '<button class="org-modal-btn secondary" style="margin-left:auto;padding:6px 14px;font-size:.8rem;" onclick="document.getElementById(\'ssl-org-modal\').remove()">&#10005; Fechar</button>' +
+    "</div>" +
+    '<div class="org-modal-body" id="org-modal-body">' +
+    listsHtml +
+    budgetSection +
+    "</div>" +
     '<div class="org-modal-footer">' +
-    '<button class="org-modal-btn secondary" onclick="document.getElementById(\'ssl-org-modal\')?.remove()">Fechar</button>' +
-    '<button class="org-modal-btn primary" onclick="orgPrintList()">&#128424; Imprimir lista organizada</button>' +
-    '</div>' +
-    '</div>';
+    '<button class="org-modal-btn secondary" onclick="document.getElementById(\'ssl-org-modal\').remove()">Fechar</button>' +
+    '<button class="org-modal-btn primary" onclick="orgGenerateOrgFile()">&#128196; Gerar arquivo organizado</button>' +
+    "</div>" +
+    "</div>";
 
-  // Fecha ao clicar fora do modal
-  overlay.addEventListener("click", function(e) {
-    if (e.target === overlay) overlay.remove();
-  });
-
-  // Fecha com Escape
-  var onEsc = function(e) {
-    if (e.key === "Escape") {
-      overlay.remove();
-      document.removeEventListener("keydown", onEsc);
-    }
-  };
+  overlay.addEventListener("click", function(e) { if (e.target === overlay) overlay.remove(); });
+  var onEsc = function(e) { if (e.key === "Escape") { overlay.remove(); document.removeEventListener("keydown", onEsc); } };
   document.addEventListener("keydown", onEsc);
 
-  // Guarda dados parsed para uso no print
   overlay._parsedData = parsed;
   overlay._receivedAt = receivedAt;
 
   document.body.appendChild(overlay);
 }
 
-// ── Lê os dados atuais da tabela editável ──
+// ── Lê dados atuais da tabela editável (Etapa 1) ────────────────────────────
 function orgGetCurrentItems(listIdx) {
-  const tbody = document.getElementById("org-tbody-" + listIdx);
+  var tbody = document.getElementById("org-tbody-" + listIdx);
   if (!tbody) return [];
-  const items = [];
-  const rows = tbody.querySelectorAll("tr[data-row], tr");
+  var items = [];
+  var rows = tbody.querySelectorAll("tr");
   for (var i = 0; i < rows.length; i++) {
-    const tr = rows[i];
-    const qty  = (tr.querySelector(".org-item-qty")  || {}).value || "1";
-    const name = (tr.querySelector(".org-item-name") || {}).value || "";
-    const obs  = (tr.querySelector(".org-item-obs")  || {}).value || "";
+    var tr = rows[i];
+    var qty  = (tr.querySelector(".org-item-qty")  || {}).value || "1";
+    var name = (tr.querySelector(".org-item-name") || {}).value || "";
+    var obs  = (tr.querySelector(".org-item-obs")  || {}).value || "";
     if (name.trim()) items.push({ qty: qty.trim(), name: name.trim(), obs: obs.trim() ? [obs.trim()] : [] });
   }
   return items;
 }
 
-// ── Adiciona linha na tabela editável ──
 function orgAddRow(listIdx) {
-  const tbody = document.getElementById("org-tbody-" + listIdx);
+  var tbody = document.getElementById("org-tbody-" + listIdx);
   if (!tbody) return;
-  const rowIdx = tbody.querySelectorAll("tr").length;
-  const tr = document.createElement("tr");
+  var rowIdx = tbody.querySelectorAll("tr").length;
+  var tr = document.createElement("tr");
   tr.dataset.list = listIdx;
   tr.dataset.row  = rowIdx;
-  tr.innerHTML = '<td style="width:58px;"><input type="number" min="1" max="9999" value="1" class="org-item-qty" /></td>' +
+  tr.innerHTML =
+    '<td style="width:58px;"><input type="number" min="1" max="9999" value="1" class="org-item-qty" /></td>' +
     '<td><input type="text" value="" class="org-item-name" placeholder="Descrição do item" /></td>' +
     '<td style="width:200px;"><input type="text" value="" class="org-item-obs" placeholder="Observações" /></td>' +
     '<td style="width:36px;text-align:center;"><button class="org-rm-row" onclick="orgRemoveRow(this)" title="Remover item">&#215;</button></td>';
   tbody.appendChild(tr);
-  const nameInput = tr.querySelector(".org-item-name");
-  if (nameInput) nameInput.focus();
+  var ni = tr.querySelector(".org-item-name");
+  if (ni) ni.focus();
 }
 
-// ── Remove linha da tabela editável ──
 function orgRemoveRow(btn) {
-  const tr = btn.closest("tr");
+  var tr = btn.closest("tr");
   if (tr) tr.remove();
 }
 
-// ── Imprime a lista organizada usando os dados atuais da tabela ──
-function orgPrintList() {
-  const overlay = document.getElementById("ssl-org-modal");
+// ── Gerar arquivo organizado (Etapa 1 impressão) ─────────────────────────────
+function orgGenerateOrgFile() {
+  var overlay = document.getElementById("ssl-org-modal");
   if (!overlay) return;
-  const parsed     = overlay._parsedData;
-  const receivedAt = overlay._receivedAt || "";
+  var parsed     = overlay._parsedData;
+  var receivedAt = overlay._receivedAt || "";
 
-  // Atualiza parsed.lists com os dados editados
-  const updatedParsed = JSON.parse(JSON.stringify(parsed));
+  var updatedParsed = JSON.parse(JSON.stringify(parsed));
   updatedParsed.lists.forEach(function(lst, idx) {
     lst.items = orgGetCurrentItems(idx);
   });
 
-  const sheetsHtml = updatedParsed.lists
-    .map(function(lst, i) {
-      return _sslPrintSheetHtml(updatedParsed, lst, i === updatedParsed.lists.length - 1, receivedAt);
-    })
-    .join("\n");
+  var sheetsHtml = updatedParsed.lists.map(function(lst, i) {
+    return _sslPrintSheetHtml(updatedParsed, lst, i === updatedParsed.lists.length - 1, receivedAt);
+  }).join("\n");
 
-  // Remove overlay de impressão anterior se houver
-  var prevPrintOverlay = document.getElementById("ssl-print-overlay");
-  if (prevPrintOverlay) prevPrintOverlay.remove();
-
-  const printOverlay = document.createElement("div");
-  printOverlay.className = "print-overlay";
-  printOverlay.id = "ssl-print-overlay";
-
-  const toolbar = document.createElement("div");
-  toolbar.className = "print-overlay-toolbar";
-  toolbar.innerHTML = '<button class="btn-do-print" onclick="window.print()">&#128424; Imprimir</button>' +
-    '<button class="btn-close-print" onclick="document.getElementById(\'ssl-print-overlay\')?.remove()">Fechar preview</button>';
-  printOverlay.appendChild(toolbar);
-
-  const sheetsDiv = document.createElement("div");
-  sheetsDiv.innerHTML = sheetsHtml;
-  printOverlay.appendChild(sheetsDiv);
-
-  var onEscPrint = function(e) {
-    if (e.key === "Escape") {
-      printOverlay.remove();
-      document.removeEventListener("keydown", onEscPrint);
-    }
-  };
-  document.addEventListener("keydown", onEscPrint);
-
-  document.body.appendChild(printOverlay);
-  printOverlay.scrollTop = 0;
+  _openPrintOverlay(sheetsHtml, "ssl-print-overlay");
 }
 
-// ════════════════════════════════════════════════════════════════════════════
-// ETAPA 2 (STUB) — Folha de separação a partir do orçamento aprovado
-// Será implementada quando a atendente tiver o PDF do orçamento aprovado.
-// Colunas planejadas:
-//   Código | Descrição | Qtd. | Valor Unit. | Separado | Conferido | Falta/Substituição | Obs.
-// O Valor Unit. tem função operacional: ajuda a localizar o produto pela etiqueta de preço.
-// ════════════════════════════════════════════════════════════════════════════
-function openSeparationSheet(pdfText) {
-  // TODO: parsear PDF de orçamento aprovado (pdfText extraído via FileReader + pdf.js ou similar)
-  // Layout planejado da folha:
-  //   Cabeçalho: Nº orçamento | Data | Cliente | Telefone | Vendedor
-  //   Tabela: Código | Descrição | Qtd. | Valor Unit. | Separado | Conferido | Falta/Substituição | Observações
-  //   Rodapé: Separado por / Conferido por / Cliente avisado / Data
-  console.warn("[Sartec CRM] openSeparationSheet: funcionalidade em desenvolvimento.");
-  alert("Gerar folha de separação\n\nEsta funcionalidade será disponibilizada após o orçamento ser aprovado no sistema da loja.\n\nO PDF do orçamento aprovado será importado aqui para gerar a folha de separação com: Código, Descrição, Qtd., Valor Unit., Separado, Conferido, Falta/Substituição.");
+// ── Ler orçamento colado (Etapa 2) ──────────────────────────────────────────
+function orgReadBudget() {
+  var ta = document.getElementById("org-budget-textarea");
+  if (!ta) return;
+  var text = ta.value.trim();
+  if (!text) {
+    alert("Cole o texto do orçamento no campo acima antes de continuar.");
+    return;
+  }
+
+  var budget = parseBudgetText(text);
+
+  // Guarda para uso posterior
+  var overlay = document.getElementById("ssl-org-modal");
+  if (overlay) overlay._budgetData = budget;
+
+  // Renderiza prévia dos dados extraídos
+  var previewDiv = document.getElementById("org-budget-preview");
+  var contentDiv = document.getElementById("org-budget-preview-content");
+  if (!previewDiv || !contentDiv) return;
+
+  var hasItems = budget.items && budget.items.length > 0;
+
+  // Editable budget items table
+  var editRows = "";
+  if (hasItems) {
+    budget.items.forEach(function(it, idx) {
+      editRows +=
+        '<tr>' +
+        '<td style="width:52px;"><input type="text" class="bud-cod" data-idx="' + idx + '" value="' + _esc(it.codigo) + '" /></td>' +
+        '<td><input type="text" class="bud-desc" data-idx="' + idx + '" value="' + _esc(it.descricao) + '" /></td>' +
+        '<td style="width:42px;"><input type="text" class="bud-qty" data-idx="' + idx + '" value="' + _esc(it.qty) + '" /></td>' +
+        '<td style="width:70px;"><input type="text" class="bud-vu" data-idx="' + idx + '" value="' + _esc(it.valorUnit) + '" /></td>' +
+        '<td style="width:70px;"><input type="text" class="bud-tot" data-idx="' + idx + '" value="' + _esc(it.total) + '" /></td>' +
+        '<td style="width:30px;text-align:center;"><button class="org-rm-row" onclick="orgRemoveBudgetRow(this,'+idx+')" title="Remover">&#215;</button></td>' +
+        "</tr>";
+    });
+  } else {
+    editRows = '<tr><td colspan="6" style="font-style:italic;color:#888;padding:8px;">Nenhum item reconhecido. Verifique o texto colado.</td></tr>';
+  }
+
+  var headerInfo =
+    '<div class="org-fields-grid" style="margin-bottom:12px;">' +
+    (budget.numOrc   ? '<div class="org-field"><span class="org-field-lbl">Orçamento nº:</span><span class="org-field-val">' + _esc(budget.numOrc) + "</span></div>" : "") +
+    (budget.data     ? '<div class="org-field"><span class="org-field-lbl">Data:</span><span class="org-field-val">' + _esc(budget.data) + "</span></div>" : "") +
+    (budget.cliente  ? '<div class="org-field org-field-full"><span class="org-field-lbl">Cliente:</span><span class="org-field-val">' + _esc(budget.cliente) + "</span></div>" : "") +
+    (budget.vendedor ? '<div class="org-field"><span class="org-field-lbl">Vendedor:</span><span class="org-field-val">' + _esc(budget.vendedor) + "</span></div>" : "") +
+    (budget.totalProd ? '<div class="org-field"><span class="org-field-lbl">Total:</span><span class="org-field-val">R$ ' + _esc(budget.totalProd) + "</span></div>" : "") +
+    "</div>";
+
+  contentDiv.innerHTML =
+    headerInfo +
+    '<div style="font-size:.8rem;font-weight:700;color:#374151;margin-bottom:5px;">' +
+    "Itens extraídos — edite se necessário antes de gerar</div>" +
+    '<div style="overflow-x:auto;">' +
+    '<table class="org-tbl">' +
+    "<thead><tr>" +
+    '<th style="width:52px;">Código</th><th>Descrição</th>' +
+    '<th style="width:42px;">Qtd.</th><th style="width:70px;">Valor Unit.</th>' +
+    '<th style="width:70px;">Total</th><th style="width:30px;"></th>' +
+    "</tr></thead>" +
+    "<tbody id='bud-preview-tbody'>" + editRows + "</tbody>" +
+    "</table></div>" +
+    '<div style="margin-top:8px;">' +
+    '<button class="org-modal-btn secondary" style="font-size:.76rem;padding:4px 10px;" onclick="orgAddBudgetRow()">+ Adicionar linha</button>' +
+    "</div>";
+
+  previewDiv.style.display = "block";
+
+  // Mostra botão de gerar separação
+  var genBtn = document.getElementById("btn-gen-sep");
+  if (genBtn) genBtn.style.display = "";
 }
 
-// Mantém compatibilidade com qualquer chamada legada ao nome antigo
+// ── Adicionar linha na tabela de orçamento (prévia editável) ─────────────────
+function orgAddBudgetRow() {
+  var tbody = document.getElementById("bud-preview-tbody");
+  if (!tbody) return;
+  var idx = tbody.querySelectorAll("tr").length;
+  var tr = document.createElement("tr");
+  tr.innerHTML =
+    '<td style="width:52px;"><input type="text" class="bud-cod" data-idx="' + idx + '" value="" /></td>' +
+    '<td><input type="text" class="bud-desc" data-idx="' + idx + '" value="" placeholder="Descrição" /></td>' +
+    '<td style="width:42px;"><input type="text" class="bud-qty" data-idx="' + idx + '" value="" /></td>' +
+    '<td style="width:70px;"><input type="text" class="bud-vu" data-idx="' + idx + '" value="" /></td>' +
+    '<td style="width:70px;"><input type="text" class="bud-tot" data-idx="' + idx + '" value="" /></td>' +
+    '<td style="width:30px;text-align:center;"><button class="org-rm-row" onclick="orgRemoveBudgetRow(this,' + idx + ')" title="Remover">&#215;</button></td>';
+  tbody.appendChild(tr);
+  var desc = tr.querySelector(".bud-desc");
+  if (desc) desc.focus();
+}
+
+function orgRemoveBudgetRow(btn) {
+  var tr = btn.closest("tr");
+  if (tr) tr.remove();
+}
+
+// ── Coleta itens editados do preview de orçamento ─────────────────────────────
+function orgGetBudgetPreviewItems() {
+  var tbody = document.getElementById("bud-preview-tbody");
+  if (!tbody) return [];
+  var items = [];
+  var rows = tbody.querySelectorAll("tr");
+  for (var i = 0; i < rows.length; i++) {
+    var tr = rows[i];
+    var cod  = (tr.querySelector(".bud-cod")  || {}).value || "";
+    var desc = (tr.querySelector(".bud-desc") || {}).value || "";
+    var qty  = (tr.querySelector(".bud-qty")  || {}).value || "";
+    var vu   = (tr.querySelector(".bud-vu")   || {}).value || "";
+    var tot  = (tr.querySelector(".bud-tot")  || {}).value || "";
+    if (desc.trim()) items.push({ codigo: cod.trim(), descricao: desc.trim(), qty: qty.trim(), valorUnit: vu.trim(), total: tot.trim() });
+  }
+  return items;
+}
+
+// ── Gerar folha de separação (Etapa 3) ───────────────────────────────────────
+function orgGenerateSepSheet() {
+  var overlay = document.getElementById("ssl-org-modal");
+  if (!overlay || !overlay._budgetData) {
+    alert("Leia o orçamento primeiro usando o botão 'Ler orçamento'.");
+    return;
+  }
+
+  // Usa dados editados na prévia
+  var editedItems = orgGetBudgetPreviewItems();
+  var budget = Object.assign({}, overlay._budgetData, { items: editedItems.length > 0 ? editedItems : overlay._budgetData.items });
+
+  var sheetHtml = _sepSheetHtml(budget);
+  _openPrintOverlay(sheetHtml, "ssl-sep-print-overlay");
+}
+
+// ── Helper: abre overlay de impressão ────────────────────────────────────────
+function _openPrintOverlay(html, id) {
+  var prev = document.getElementById(id);
+  if (prev) prev.remove();
+
+  var po = document.createElement("div");
+  po.className = "print-overlay";
+  po.id = id;
+
+  var tb = document.createElement("div");
+  tb.className = "print-overlay-toolbar";
+  tb.innerHTML =
+    '<button class="btn-do-print" onclick="window.print()">&#128424; Imprimir</button>' +
+    '<button class="btn-close-print" onclick="document.getElementById(\'' + id + '\').remove()">Fechar preview</button>';
+  po.appendChild(tb);
+
+  var sd = document.createElement("div");
+  sd.innerHTML = html;
+  po.appendChild(sd);
+
+  var onEsc = function(e) { if (e.key === "Escape") { po.remove(); document.removeEventListener("keydown", onEsc); } };
+  document.addEventListener("keydown", onEsc);
+
+  document.body.appendChild(po);
+  po.scrollTop = 0;
+}
+
+// ── Compatibilidade legada ──────────────────────────────────────────────────
 function openSchoolListPrint(content, msg) { openSchoolListOrganize(content, msg); }
+function openSeparationSheet(pdfText)     { orgReadBudget(); }
+// ── alias legado de orgPrintList → orgGenerateOrgFile
+function orgPrintList() { orgGenerateOrgFile(); }
 
 </script>
 <div id="toast-container"></div>
