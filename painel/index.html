@@ -1,4 +1,4 @@
-﻿<!DOCTYPE html>
+<!DOCTYPE html>
 <html lang="pt-BR">
 <head>
   <meta charset="UTF-8" />
@@ -2390,6 +2390,32 @@
     .org-budget-preview-title {
       font-size: .82rem; font-weight: 700; color: #059669;
       margin-bottom: 8px; display: flex; align-items: center; gap: 6px;
+    }
+    .org-pdf-upload-area {
+      border: 2px dashed #bae6fd;
+      border-radius: 8px;
+      padding: 16px;
+      text-align: center;
+      background: #fff;
+      margin-bottom: 12px;
+      cursor: pointer;
+      transition: background-color 0.15s, border-color 0.15s;
+    }
+    .org-pdf-upload-area:hover {
+      background-color: #f8fafc;
+      border-color: #0ea5e9;
+    }
+    .org-pdf-upload-area.dragover {
+      background-color: #e0f2fe;
+      border-color: #0284c7;
+    }
+    .org-spinner {
+      display: inline-block;
+      animation: org-spin 1s linear infinite;
+    }
+    @keyframes org-spin {
+      0% { transform: rotate(0deg); }
+      100% { transform: rotate(360deg); }
     }
 
     /* Tabela de folha de separação — colunas mais compactas */
@@ -12561,7 +12587,7 @@ function _sepSheetHtml(budget) {
     '<div class="ps-hdr">' +
     '<div class="ps-hdr-name">Sartec Papelaria</div>' +
     '<div class="ps-hdr-sub">Folha de separação e conferência</div>' +
-    '<div class="ps-hdr-note">Gerada a partir do orçamento aprovado — uso interno da equipe.</div>' +
+    '<div class="ps-hdr-note">Gerada a partir do orçamento aprovado</div>' +
     '<div class="ps-hdr-badge">Etapa 3 — Separação e conferência</div>' +
     "</div>" +
     '<div class="ps-fields">' +
@@ -12571,6 +12597,7 @@ function _sepSheetHtml(budget) {
     (budget.telefones ? '<div class="ps-field"><span class="ps-lbl">Telefone:</span> ' + _esc(budget.telefones) + "</div>" : "") +
     (budget.vendedor ? '<div class="ps-field"><span class="ps-lbl">Vendedor:</span> ' + _esc(budget.vendedor) + "</div>" : "") +
     (budget.totalProd ? '<div class="ps-field"><span class="ps-lbl">Total orçamento:</span> R$ ' + _esc(budget.totalProd) + "</div>" : "") +
+    (budget.totalAprovado ? '<div class="ps-field"><span class="ps-lbl">Total aprovado:</span> R$ ' + _esc(budget.totalAprovado) + "</div>" : "") +
     "</div>" +
     '<div class="ps-sec-ttl">Itens para separar (' + (budget.items || []).length + ")</div>" +
     '<table class="ps-tbl sep-tbl">' +
@@ -12686,21 +12713,49 @@ function openSchoolListOrganize(content, msg) {
       "</div>";
   });
 
-  // ── Seção "Depois do orçamento" (Etapa 2 + 3) ──
+  // ── Seção "Orçamento oficial da loja" (Etapa 2 + 3) ──
   var budgetSection =
     '<div class="org-budget-section">' +
     '<div class="org-budget-header">' +
     '<span class="org-budget-icon">&#128196;</span>' +
     '<div>' +
-    '<div class="org-budget-title">Depois do orçamento</div>' +
-    '<div class="org-budget-sub">Após lançar a lista no sistema da loja e gerar o orçamento oficial, cole o conteúdo aqui para gerar a folha de separação.</div>' +
+    '<div class="org-budget-title">Orçamento oficial da loja</div>' +
+    '<div class="org-budget-sub">Após lançar a lista no sistema da loja, importe aqui o PDF do orçamento oficial para revisar os itens aprovados e gerar a folha de separação.</div>' +
     "</div>" +
     "</div>" +
-    '<textarea id="org-budget-textarea" class="org-budget-textarea" placeholder="Cole aqui o texto do orçamento oficial (copie do sistema da loja ou do PDF)...&#10;&#10;Exemplo:&#10;Orçamento MOV 54030&#10;Data: 12/06/2026&#10;Cliente: Ana Flores&#10;Vendedor: Pedro&#10;&#10;9999 CADERNO 10 MATÉRIAS 200FLS 2 18,50 37,00&#10;9999 LÁPIS GRAFITE Nº2 C/12 3 8,90 26,70"></textarea>' +
+    
+    // File upload area (primary)
+    '<div class="org-pdf-upload-area" id="org-pdf-area" ' +
+    '  ondragover="event.preventDefault(); this.classList.add(\'dragover\')" ' +
+    '  ondragleave="this.classList.remove(\'dragover\')" ' +
+    '  ondrop="event.preventDefault(); this.classList.remove(\'dragover\'); orgHandlePdfDrop(event)" ' +
+    '  onclick="document.getElementById(\'org-budget-file\').click()">' +
+    '  <span style="font-size: 1.5rem; display: block; margin-bottom: 5px;">📥</span>' +
+    '  <span id="org-pdf-file-label" style="font-size: 0.82rem; color: #0c4a6e; font-weight: 600;">Arraste o PDF do orçamento ou clique para selecionar</span>' +
+    '  <input type="file" id="org-budget-file" accept="application/pdf" style="display:none;" onchange="orgHandlePdfSelect(event)" />' +
+    '</div>' +
+
+    // Fallback manual paste link
+    '<div style="text-align: right; margin-bottom: 8px;">' +
+    '  <a href="#" onclick="event.preventDefault(); orgToggleTextareaFallback()" style="font-size: 0.76rem; color: #0ea5e9; text-decoration: none; font-weight: 600;">[Ou colar texto do orçamento manualmente]</a>' +
+    '</div>' +
+    
+    '<textarea id="org-budget-textarea" class="org-budget-textarea" style="display:none;" placeholder="Cole aqui o texto do orçamento oficial (copie do sistema da loja ou do PDF)...&#10;&#10;Exemplo:&#10;Orçamento MOV 54030&#10;Data: 12/06/2026&#10;Cliente: Ana Flores&#10;Vendedor: Pedro&#10;&#10;9999 CADERNO 10 MATÉRIAS 200FLS 2 18,50 37,00&#10;9999 LÁPIS GRAFITE Nº2 C/12 3 8,90 26,70"></textarea>' +
+    
+    // Loading indicator
+    '<div id="org-budget-loading" style="display:none; text-align:center; padding:15px; font-size:0.85rem; color:#0284c7; font-weight:600;">' +
+    '  <span class="org-spinner" style="margin-right:8px;">⏳</span>Lendo e processando orçamento oficial com IA...' +
+    '</div>' +
+    
+    // Error feedback
+    '<div id="org-budget-error" style="display:none; color:#ef4444; background:#fef2f2; border:1px solid #fee2e2; border-radius:6px; padding:10px; margin-bottom:12px; font-size:0.82rem;"></div>' +
+
     '<div class="org-budget-actions">' +
-    '<button class="org-modal-btn secondary" onclick="orgReadBudget()" id="btn-read-budget">&#128270; Ler orçamento</button>' +
+    '<button class="org-modal-btn secondary" onclick="document.getElementById(\'org-budget-file\').click()">&#128196; Importar PDF do orçamento</button>' +
+    '<button class="org-modal-btn secondary" onclick="orgReadBudget()" id="btn-read-budget" disabled>&#128270; Ler orçamento</button>' +
     '<button class="org-modal-btn primary" onclick="orgGenerateSepSheet()" id="btn-gen-sep" style="display:none;">&#128203; Gerar folha de separação</button>' +
     "</div>" +
+    
     '<div id="org-budget-preview" style="display:none;margin-top:14px;">' +
     '<div class="org-budget-preview-title">&#10003; Dados extraídos — confira antes de gerar</div>' +
     '<div id="org-budget-preview-content"></div>' +
@@ -12794,77 +12849,386 @@ function orgGenerateOrgFile() {
 }
 
 // ── Ler orçamento colado (Etapa 2) ──────────────────────────────────────────
-function orgReadBudget() {
+// ── PDF.js / Extração de PDF ──────────────────────────────────────────────────
+function orgLoadPdfJs() {
+  return new Promise(function(resolve, reject) {
+    if (window.pdfjsLib) {
+      resolve(window.pdfjsLib);
+      return;
+    }
+    var script = document.createElement("script");
+    script.src = "https://cdnjs.cloudflare.com/ajax/libs/pdf.js/2.16.105/pdf.min.js";
+    script.onload = function() {
+      window.pdfjsLib.GlobalWorkerOptions.workerSrc = "https://cdnjs.cloudflare.com/ajax/libs/pdf.js/2.16.105/pdf.worker.min.js";
+      resolve(window.pdfjsLib);
+    };
+    script.onerror = function() {
+      reject(new Error("Erro de CSP ou falha de conexão: não foi possível carregar a biblioteca PDF.js da CDN."));
+    };
+    document.head.appendChild(script);
+  });
+}
+
+function orgExtractTextFromPdf(file) {
+  return new Promise(function(resolve, reject) {
+    orgLoadPdfJs().then(function(pdfjs) {
+      var reader = new FileReader();
+      reader.onload = function() {
+        var arrayBuffer = reader.result;
+        pdfjs.getDocument({ data: arrayBuffer }).promise.then(function(pdf) {
+          var maxPages = pdf.numPages;
+          var count = 0;
+          var pagesText = [];
+          
+          function loadPage(pageNum) {
+            pdf.getPage(pageNum).then(function(page) {
+              page.getTextContent().then(function(content) {
+                var lines = {};
+                content.items.forEach(function(item) {
+                  var y = Math.round(item.transform[5]);
+                  var foundKey = null;
+                  for (var k of Object.keys(lines)) {
+                    if (Math.abs(Number(k) - y) <= 4) {
+                      foundKey = k;
+                      break;
+                    }
+                  }
+                  if (foundKey) {
+                    lines[foundKey].push(item);
+                  } else {
+                    lines[y] = [item];
+                  }
+                });
+
+                var sortedY = Object.keys(lines).map(Number).sort(function(a, b) { return b - a; });
+                var pageText = "";
+                sortedY.forEach(function(y) {
+                  var rowItems = lines[y].sort(function(a, b) { return a.transform[4] - b.transform[4]; });
+                  var lineText = rowItems.map(function(item) { return item.str; }).join(" ");
+                  pageText += lineText + "\n";
+                });
+
+                pagesText[pageNum - 1] = pageText;
+                count++;
+                if (count === maxPages) {
+                  resolve(pagesText.join("\n"));
+                } else {
+                  loadPage(pageNum + 1);
+                }
+              }).catch(reject);
+            }).catch(reject);
+          }
+          
+          if (maxPages > 0) {
+            loadPage(1);
+          } else {
+            resolve("");
+          }
+        }).catch(reject);
+      };
+      reader.onerror = function() { reject(reader.error); };
+      reader.readAsArrayBuffer(file);
+    }).catch(reject);
+  });
+}
+
+function orgToggleTextareaFallback() {
   var ta = document.getElementById("org-budget-textarea");
+  var btnRead = document.getElementById("btn-read-budget");
   if (!ta) return;
-  var text = ta.value.trim();
-  if (!text) {
-    alert("Cole o texto do orçamento no campo acima antes de continuar.");
+  if (ta.style.display === "none") {
+    ta.style.display = "block";
+    btnRead.disabled = false;
+    btnRead.classList.remove("secondary");
+    btnRead.classList.add("primary");
+  } else {
+    ta.style.display = "none";
+    var overlay = document.getElementById("ssl-org-modal");
+    if (overlay && !overlay._selectedPdfFile) {
+      btnRead.disabled = true;
+      btnRead.classList.add("secondary");
+      btnRead.classList.remove("primary");
+    }
+  }
+}
+
+function orgHandlePdfSelect(e) {
+  var file = e.target.files[0];
+  if (!file) return;
+  orgSetSelectedFile(file);
+}
+
+function orgHandlePdfDrop(e) {
+  var file = e.dataTransfer.files[0];
+  if (!file || file.type !== "application/pdf") {
+    alert("Por favor, selecione ou arraste um arquivo PDF.");
+    return;
+  }
+  orgSetSelectedFile(file);
+}
+
+function orgSetSelectedFile(file) {
+  var overlay = document.getElementById("ssl-org-modal");
+  if (!overlay) return;
+  overlay._selectedPdfFile = file;
+  
+  var label = document.getElementById("org-pdf-file-label");
+  if (label) {
+    label.innerHTML = "📄 <strong>" + _esc(file.name) + "</strong> (" + (file.size / 1024).toFixed(1) + " KB)";
+  }
+  
+  var btnRead = document.getElementById("btn-read-budget");
+  if (btnRead) {
+    btnRead.disabled = false;
+    btnRead.classList.remove("secondary");
+    btnRead.classList.add("primary");
+  }
+}
+
+function normalizeBudget(budget) {
+  if (!budget) return null;
+  var items = (budget.items || []).map(function(it) {
+    return {
+      codigo: it.codigo || it.code || "",
+      descricao: it.descricao || it.description || "",
+      qty: String(it.qty !== undefined ? it.qty : (it.quantity !== undefined ? it.quantity : "")),
+      valorUnit: String(it.valorUnit !== undefined ? it.valorUnit : (it.unitValue !== undefined ? it.unitValue : "")),
+      total: String(it.total !== undefined ? it.total : ""),
+      approved: it.approved !== false
+    };
+  });
+
+  return {
+    numOrc: budget.numOrc || budget.number || "",
+    data: budget.data || budget.date || "",
+    cliente: budget.cliente || budget.client || "",
+    endereco: budget.endereco || budget.address || "",
+    telefones: budget.telefones || budget.phones || "",
+    vendedor: budget.vendedor || budget.seller || "",
+    totalProd: budget.totalProd || budget.totalProducts || budget.billedTotal || "",
+    items: items
+  };
+}
+
+// ── Ler orçamento colado/PDF (Etapa 2) ──────────────────────────────────────────
+function orgReadBudget() {
+  var overlay = document.getElementById("ssl-org-modal");
+  if (!overlay) return;
+
+  var file = overlay._selectedPdfFile;
+  var ta = document.getElementById("org-budget-textarea");
+  var text = ta ? ta.value.trim() : "";
+
+  if (!file && !text) {
+    alert("Selecione um arquivo PDF ou cole o texto do orçamento antes de continuar.");
     return;
   }
 
-  var budget = parseBudgetText(text);
-
-  // Guarda para uso posterior
-  var overlay = document.getElementById("ssl-org-modal");
-  if (overlay) overlay._budgetData = budget;
-
-  // Renderiza prévia dos dados extraídos
+  var loadingDiv = document.getElementById("org-budget-loading");
+  var errorDiv = document.getElementById("org-budget-error");
   var previewDiv = document.getElementById("org-budget-preview");
-  var contentDiv = document.getElementById("org-budget-preview-content");
-  if (!previewDiv || !contentDiv) return;
+  var btnRead = document.getElementById("btn-read-budget");
 
-  var hasItems = budget.items && budget.items.length > 0;
+  if (loadingDiv) loadingDiv.style.display = "block";
+  if (errorDiv) errorDiv.style.display = "none";
+  if (previewDiv) previewDiv.style.display = "none";
+  if (btnRead) btnRead.disabled = true;
 
-  // Editable budget items table
-  var editRows = "";
-  if (hasItems) {
-    budget.items.forEach(function(it, idx) {
-      editRows +=
-        '<tr>' +
-        '<td style="width:52px;"><input type="text" class="bud-cod" data-idx="' + idx + '" value="' + _esc(it.codigo) + '" /></td>' +
-        '<td><input type="text" class="bud-desc" data-idx="' + idx + '" value="' + _esc(it.descricao) + '" /></td>' +
-        '<td style="width:42px;"><input type="text" class="bud-qty" data-idx="' + idx + '" value="' + _esc(it.qty) + '" /></td>' +
-        '<td style="width:70px;"><input type="text" class="bud-vu" data-idx="' + idx + '" value="' + _esc(it.valorUnit) + '" /></td>' +
-        '<td style="width:70px;"><input type="text" class="bud-tot" data-idx="' + idx + '" value="' + _esc(it.total) + '" /></td>' +
-        '<td style="width:30px;text-align:center;"><button class="org-rm-row" onclick="orgRemoveBudgetRow(this,'+idx+')" title="Remover">&#215;</button></td>' +
-        "</tr>";
-    });
-  } else {
-    editRows = '<tr><td colspan="6" style="font-style:italic;color:#888;padding:8px;">Nenhum item reconhecido. Verifique o texto colado.</td></tr>';
+  function handleSuccess(budgetData) {
+    var budget = normalizeBudget(budgetData);
+    overlay._budgetData = budget;
+
+    var contentDiv = document.getElementById("org-budget-preview-content");
+    if (!contentDiv) return;
+
+    var hasItems = budget.items && budget.items.length > 0;
+
+    var editRows = "";
+    if (hasItems) {
+      budget.items.forEach(function(it, idx) {
+        var approvedChecked = it.approved !== false ? "checked" : "";
+        editRows +=
+          '<tr>' +
+          '<td style="width:36px;text-align:center;"><input type="checkbox" class="bud-approved" data-idx="' + idx + '" ' + approvedChecked + ' /></td>' +
+          '<td style="width:70px;"><input type="text" class="bud-cod" data-idx="' + idx + '" value="' + _esc(it.codigo) + '" /></td>' +
+          '<td><input type="text" class="bud-desc" data-idx="' + idx + '" value="' + _esc(it.descricao) + '" /></td>' +
+          '<td style="width:42px;"><input type="text" class="bud-qty" data-idx="' + idx + '" value="' + _esc(it.qty) + '" /></td>' +
+          '<td style="width:70px;"><input type="text" class="bud-vu" data-idx="' + idx + '" value="' + _esc(it.valorUnit) + '" /></td>' +
+          '<td style="width:70px;"><input type="text" class="bud-tot" data-idx="' + idx + '" value="' + _esc(it.total) + '" /></td>' +
+          '<td style="width:30px;text-align:center;"><button class="org-rm-row" onclick="orgRemoveBudgetRow(this,' + idx + ')" title="Remover">&#215;</button></td>' +
+          "</tr>";
+      });
+    } else {
+      editRows = '<tr><td colspan="7" style="font-style:italic;color:#888;padding:8px;">Nenhum item reconhecido. Verifique o arquivo importado ou o texto colado.</td></tr>';
+    }
+
+    var headerInfo =
+      '<div class="org-fields-grid" style="margin-bottom:12px;">' +
+      (budget.numOrc   ? '<div class="org-field"><span class="org-field-lbl">Orçamento nº:</span><span class="org-field-val">' + _esc(budget.numOrc) + "</span></div>" : "") +
+      (budget.data     ? '<div class="org-field"><span class="org-field-lbl">Data:</span><span class="org-field-val">' + _esc(budget.data) + "</span></div>" : "") +
+      (budget.cliente  ? '<div class="org-field org-field-full"><span class="org-field-lbl">Cliente:</span><span class="org-field-val">' + _esc(budget.cliente) + "</span></div>" : "") +
+      (budget.vendedor ? '<div class="org-field"><span class="org-field-lbl">Vendedor:</span><span class="org-field-val">' + _esc(budget.vendedor) + "</span></div>" : "") +
+      (budget.totalProd ? '<div class="org-field"><span class="org-field-lbl">Total:</span><span class="org-field-val">R$ ' + _esc(budget.totalProd) + "</span></div>" : "") +
+      "</div>";
+
+    contentDiv.innerHTML =
+      headerInfo +
+      '<div style="font-size:.8rem;font-weight:700;color:#374151;margin-bottom:5px;">' +
+      "Itens extraídos — edite se necessário antes de gerar</div>" +
+      '<div style="overflow-x:auto;">' +
+      '<table class="org-tbl">' +
+      "<thead><tr>" +
+      '<th style="width:36px;text-align:center;">Aprov.</th>' +
+      '<th style="width:70px;">Código</th>' +
+      '<th>Descrição</th>' +
+      '<th style="width:42px;">Qtd.</th>' +
+      '<th style="width:70px;">Valor Unit.</th>' +
+      '<th style="width:70px;">Total</th>' +
+      '<th style="width:30px;"></th>' +
+      "</tr></thead>" +
+      "<tbody id='bud-preview-tbody'>" + editRows + "</tbody>" +
+      "</table></div>" +
+      '<div style="margin-top:8px;">' +
+      '<button class="org-modal-btn secondary" style="font-size:.76rem;padding:4px 10px;" onclick="orgAddBudgetRow()">+ Adicionar linha</button>' +
+      "</div>";
+
+    if (loadingDiv) loadingDiv.style.display = "none";
+    if (previewDiv) previewDiv.style.display = "block";
+    if (btnRead) btnRead.disabled = false;
+
+    var genBtn = document.getElementById("btn-gen-sep");
+    if (genBtn) genBtn.style.display = "";
   }
 
-  var headerInfo =
-    '<div class="org-fields-grid" style="margin-bottom:12px;">' +
-    (budget.numOrc   ? '<div class="org-field"><span class="org-field-lbl">Orçamento nº:</span><span class="org-field-val">' + _esc(budget.numOrc) + "</span></div>" : "") +
-    (budget.data     ? '<div class="org-field"><span class="org-field-lbl">Data:</span><span class="org-field-val">' + _esc(budget.data) + "</span></div>" : "") +
-    (budget.cliente  ? '<div class="org-field org-field-full"><span class="org-field-lbl">Cliente:</span><span class="org-field-val">' + _esc(budget.cliente) + "</span></div>" : "") +
-    (budget.vendedor ? '<div class="org-field"><span class="org-field-lbl">Vendedor:</span><span class="org-field-val">' + _esc(budget.vendedor) + "</span></div>" : "") +
-    (budget.totalProd ? '<div class="org-field"><span class="org-field-lbl">Total:</span><span class="org-field-val">R$ ' + _esc(budget.totalProd) + "</span></div>" : "") +
-    "</div>";
+  function handleFailure(errMsg) {
+    if (loadingDiv) loadingDiv.style.display = "none";
+    if (btnRead) btnRead.disabled = false;
+    if (errorDiv) {
+      errorDiv.textContent = errMsg;
+      errorDiv.style.display = "block";
+    }
+  }
 
-  contentDiv.innerHTML =
-    headerInfo +
-    '<div style="font-size:.8rem;font-weight:700;color:#374151;margin-bottom:5px;">' +
-    "Itens extraídos — edite se necessário antes de gerar</div>" +
-    '<div style="overflow-x:auto;">' +
-    '<table class="org-tbl">' +
-    "<thead><tr>" +
-    '<th style="width:52px;">Código</th><th>Descrição</th>' +
-    '<th style="width:42px;">Qtd.</th><th style="width:70px;">Valor Unit.</th>' +
-    '<th style="width:70px;">Total</th><th style="width:30px;"></th>' +
-    "</tr></thead>" +
-    "<tbody id='bud-preview-tbody'>" + editRows + "</tbody>" +
-    "</table></div>" +
-    '<div style="margin-top:8px;">' +
-    '<button class="org-modal-btn secondary" style="font-size:.76rem;padding:4px 10px;" onclick="orgAddBudgetRow()">+ Adicionar linha</button>' +
-    "</div>";
-
-  previewDiv.style.display = "block";
-
-  // Mostra botão de gerar separação
-  var genBtn = document.getElementById("btn-gen-sep");
-  if (genBtn) genBtn.style.display = "";
+  if (file) {
+    orgExtractTextFromPdf(file).then(function(extractedText) {
+      var cleanText = (extractedText || "").trim();
+      
+      if (cleanText) {
+        fetch("/api/parse-budget-pdf", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ extractedText: cleanText })
+        }).then(function(res) {
+          if (res.ok) {
+            res.json().then(function(data) {
+              if (data.success && data.budget) {
+                handleSuccess(data.budget);
+              } else {
+                var localBudget = parseBudgetText(cleanText);
+                handleSuccess(localBudget);
+              }
+            }).catch(function() {
+              var localBudget = parseBudgetText(cleanText);
+              handleSuccess(localBudget);
+            });
+          } else {
+            var localBudget = parseBudgetText(cleanText);
+            handleSuccess(localBudget);
+          }
+        }).catch(function() {
+          var localBudget = parseBudgetText(cleanText);
+          handleSuccess(localBudget);
+        });
+      } else {
+        var reader = new FileReader();
+        reader.onload = function() {
+          var base64 = reader.result.split(",")[1];
+          fetch("/api/parse-budget-pdf", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ pdfBase64: base64 })
+          }).then(function(res) {
+            if (res.ok) {
+              res.json().then(function(data) {
+                if (data.success && data.budget) {
+                  handleSuccess(data.budget);
+                } else {
+                  handleFailure("Não consegui ler este PDF automaticamente. Tente gerar o PDF novamente no sistema ou envie este orçamento para revisão manual.");
+                }
+              }).catch(function() {
+                handleFailure("Não consegui ler este PDF automaticamente. Tente gerar o PDF novamente no sistema ou envie este orçamento para revisão manual.");
+              });
+            } else {
+              handleFailure("Não consegui ler este PDF automaticamente. Tente gerar o PDF novamente no sistema ou envie este orçamento para revisão manual.");
+            }
+          }).catch(function() {
+            handleFailure("Não consegui ler este PDF automaticamente. Tente gerar o PDF novamente no sistema ou envie este orçamento para revisão manual.");
+          });
+        };
+        reader.onerror = function() {
+          handleFailure("Erro ao ler o arquivo PDF localmente.");
+        };
+        reader.readAsDataURL(file);
+      }
+    }).catch(function(err) {
+      var reader = new FileReader();
+      reader.onload = function() {
+        var base64 = reader.result.split(",")[1];
+        fetch("/api/parse-budget-pdf", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ pdfBase64: base64 })
+        }).then(function(res) {
+          if (res.ok) {
+            res.json().then(function(data) {
+              if (data.success && data.budget) {
+                handleSuccess(data.budget);
+              } else {
+                handleFailure("Erro ao extrair conteúdo do PDF. Tente copiar e colar o texto manualmente.");
+              }
+            }).catch(function() {
+              handleFailure("Erro ao extrair conteúdo do PDF. Tente copiar e colar o texto manualmente.");
+            });
+          } else {
+            handleFailure("Erro ao extrair conteúdo do PDF. Tente copiar e colar o texto manualmente.");
+          }
+        }).catch(function() {
+          handleFailure("Erro ao extrair conteúdo do PDF. Tente copiar e colar o texto manualmente.");
+        });
+      };
+      reader.onerror = function() {
+        handleFailure("Erro ao carregar o arquivo PDF localmente.");
+      };
+      reader.readAsDataURL(file);
+    });
+  } 
+  else if (text) {
+    fetch("/api/parse-budget-pdf", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ extractedText: text })
+    }).then(function(res) {
+      if (res.ok) {
+        res.json().then(function(data) {
+          if (data.success && data.budget) {
+            handleSuccess(data.budget);
+          } else {
+            var localBudget = parseBudgetText(text);
+            handleSuccess(localBudget);
+          }
+        }).catch(function() {
+          var localBudget = parseBudgetText(text);
+          handleSuccess(localBudget);
+        });
+      } else {
+        var localBudget = parseBudgetText(text);
+        handleSuccess(localBudget);
+      }
+    }).catch(function() {
+      var localBudget = parseBudgetText(text);
+      handleSuccess(localBudget);
+    });
+  }
 }
 
 // ── Adicionar linha na tabela de orçamento (prévia editável) ─────────────────
@@ -12874,7 +13238,8 @@ function orgAddBudgetRow() {
   var idx = tbody.querySelectorAll("tr").length;
   var tr = document.createElement("tr");
   tr.innerHTML =
-    '<td style="width:52px;"><input type="text" class="bud-cod" data-idx="' + idx + '" value="" /></td>' +
+    '<td style="width:36px;text-align:center;"><input type="checkbox" class="bud-approved" data-idx="' + idx + '" checked /></td>' +
+    '<td style="width:70px;"><input type="text" class="bud-cod" data-idx="' + idx + '" value="" /></td>' +
     '<td><input type="text" class="bud-desc" data-idx="' + idx + '" value="" placeholder="Descrição" /></td>' +
     '<td style="width:42px;"><input type="text" class="bud-qty" data-idx="' + idx + '" value="" /></td>' +
     '<td style="width:70px;"><input type="text" class="bud-vu" data-idx="' + idx + '" value="" /></td>' +
@@ -12898,12 +13263,13 @@ function orgGetBudgetPreviewItems() {
   var rows = tbody.querySelectorAll("tr");
   for (var i = 0; i < rows.length; i++) {
     var tr = rows[i];
+    var approved = (tr.querySelector(".bud-approved") || { checked: true }).checked;
     var cod  = (tr.querySelector(".bud-cod")  || {}).value || "";
     var desc = (tr.querySelector(".bud-desc") || {}).value || "";
     var qty  = (tr.querySelector(".bud-qty")  || {}).value || "";
     var vu   = (tr.querySelector(".bud-vu")   || {}).value || "";
     var tot  = (tr.querySelector(".bud-tot")  || {}).value || "";
-    if (desc.trim()) items.push({ codigo: cod.trim(), descricao: desc.trim(), qty: qty.trim(), valorUnit: vu.trim(), total: tot.trim() });
+    if (desc.trim()) items.push({ approved: approved, codigo: cod.trim(), descricao: desc.trim(), qty: qty.trim(), valorUnit: vu.trim(), total: tot.trim() });
   }
   return items;
 }
@@ -12916,12 +13282,130 @@ function orgGenerateSepSheet() {
     return;
   }
 
-  // Usa dados editados na prévia
   var editedItems = orgGetBudgetPreviewItems();
   var budget = Object.assign({}, overlay._budgetData, { items: editedItems.length > 0 ? editedItems : overlay._budgetData.items });
 
-  var sheetHtml = _sepSheetHtml(budget);
+  var approvedItems = budget.items.filter(function(it) {
+    return it.approved !== false;
+  });
+
+  var totalAprovado = 0;
+  approvedItems.forEach(function(it) {
+    var cleanVal = String(it.total || "").replace(/\./g, "").replace(",", ".");
+    var parsedVal = parseFloat(cleanVal);
+    if (!isNaN(parsedVal)) {
+      totalAprovado += parsedVal;
+    }
+  });
+
+  var totalAprovadoStr = totalAprovado.toLocaleString("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+
+  var approvedBudget = Object.assign({}, budget, { 
+    items: approvedItems,
+    totalAprovado: totalAprovadoStr
+  });
+
+  var sheetHtml = _sepSheetHtml(approvedBudget);
   _openPrintOverlay(sheetHtml, "ssl-sep-print-overlay");
+}
+
+function _printViaIframe(html) {
+  var oldFrame = document.getElementById("print-iframe");
+  if (oldFrame) oldFrame.remove();
+
+  var iframe = document.createElement("iframe");
+  iframe.id = "print-iframe";
+  iframe.style.position = "fixed";
+  iframe.style.bottom = "0";
+  iframe.style.right = "0";
+  iframe.style.width = "0";
+  iframe.style.height = "0";
+  iframe.style.border = "none";
+  document.body.appendChild(iframe);
+
+  var doc = iframe.contentWindow.document;
+  doc.open();
+  doc.write('<!DOCTYPE html><html><head><title>Sartec Papelaria</title>');
+  doc.write('<style>');
+  doc.write(`
+    @page {
+      size: A4 portrait;
+      margin: 12mm;
+    }
+    html, body {
+      width: auto;
+      height: auto;
+      overflow: visible;
+      background: #fff;
+      color: #000;
+      font-family: Arial, sans-serif;
+      margin: 0;
+      padding: 0;
+    }
+    .print-sheet-wrap {
+      width: 100%;
+      box-sizing: border-box;
+      margin: 0;
+      font-size: 11pt;
+      line-height: 1.4;
+    }
+    .ps-hdr { text-align: center; border-bottom: 2px solid #1a1a2e; padding-bottom: 8px; margin-bottom: 14px; }
+    .ps-hdr-name  { font-size: 16pt; font-weight: 700; color: #1a1a2e; }
+    .ps-hdr-sub   { font-size: 10pt; color: #555; margin-top: 2px; }
+    .ps-hdr-note  { font-size: 8.5pt; color: #777; margin-top: 3px; font-style: italic; }
+    .ps-hdr-badge { display: inline-block; margin-top: 5px; padding: 2px 11px; background: #e0e7ff; color: #1a1a2e; border-radius: 20px; font-size: 9pt; font-weight: 600; }
+    .ps-fields { display: grid; grid-template-columns: 1fr 1fr; gap: 4px 20px; margin-bottom: 12px; font-size: 10pt; }
+    .ps-field {} .ps-field-full { grid-column: 1 / -1; }
+    .ps-lbl { font-weight: 700; color: #333; }
+    .ps-orient { background: #f0f4ff; border: 1px solid #c7d2ee; border-left: 3px solid #2d3a8c; border-radius: 5px; padding: 8px 12px; margin-bottom: 14px; font-size: 10pt; }
+    .ps-orient-ttl { font-weight: 700; color: #2d3a8c; margin-bottom: 5px; font-size: 11pt; }
+    .ps-orient-row { margin: 3px 0; }
+    .ps-sec-ttl { font-weight: 700; font-size: 12pt; color: #1a1a2e; border-bottom: 1px solid #ccc; padding-bottom: 3px; margin: 14px 0 8px; }
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 10pt;
+    }
+    th {
+      background: #1a1a2e;
+      color: #fff;
+      padding: 5px 7px;
+      text-align: left;
+      font-size: 9.5pt;
+    }
+    td {
+      padding: 5px 7px;
+      border-bottom: 1px solid #e5e7eb;
+      vertical-align: top;
+    }
+    tr {
+      break-inside: avoid;
+      page-break-inside: avoid;
+    }
+    thead {
+      display: table-header-group;
+    }
+    tfoot {
+      display: table-footer-group;
+    }
+    .sep-tbl th, .sep-tbl td { padding: 4px 5px; font-size: 9.5pt; }
+    .ps-noquero { background: #f8f8f8; border: 1px solid #ddd; border-radius: 5px; padding: 9px 12px; margin-top: 14px; }
+    .ps-nq-ttl  { font-weight: 700; color: #b91c1c; font-size: 11pt; margin-bottom: 4px; }
+    .ps-nq-note { font-size: 9pt; color: #7f1d1d; font-style: italic; margin-bottom: 7px; }
+    .ps-footer  { margin-top: 18px; border-top: 1px solid #ccc; padding-top: 10px; font-size: 10pt; display: grid; grid-template-columns: 1fr 1fr; gap: 8px 20px; }
+    .ps-footer-full { grid-column: 1 / -1; }
+    .ps-uline { display: inline-block; min-width: 160px; border-bottom: 1px solid #999; }
+    .page-break { page-break-after: always; break-after: page; }
+  `);
+  doc.write('</style></head><body>');
+  doc.write(html);
+  doc.write('</body></html>');
+  doc.close();
+
+  setTimeout(function() {
+    iframe.contentWindow.focus();
+    iframe.contentWindow.print();
+  }, 250);
 }
 
 // ── Helper: abre overlay de impressão ────────────────────────────────────────
@@ -12936,9 +13420,13 @@ function _openPrintOverlay(html, id) {
   var tb = document.createElement("div");
   tb.className = "print-overlay-toolbar";
   tb.innerHTML =
-    '<button class="btn-do-print" onclick="window.print()">&#128424; Imprimir</button>' +
+    '<button class="btn-do-print" id="btn-trigger-print">&#128424; Imprimir</button>' +
     '<button class="btn-close-print" onclick="document.getElementById(\'' + id + '\').remove()">Fechar preview</button>';
   po.appendChild(tb);
+
+  tb.querySelector("#btn-trigger-print").onclick = function() {
+    _printViaIframe(html);
+  };
 
   var sd = document.createElement("div");
   sd.innerHTML = html;
