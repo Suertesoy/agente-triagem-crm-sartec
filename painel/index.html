@@ -1,4 +1,4 @@
-<!DOCTYPE html>
+﻿<!DOCTYPE html>
 <html lang="pt-BR">
 <head>
   <meta charset="UTF-8" />
@@ -2193,17 +2193,123 @@
       margin: 3px 8px; gap: 4px; user-select: none;
     }
 
-    /* ══════ LISTA ESCOLAR — IMPRESSÃO ══════ */
-    .btn-print-lista {
+    /* ══════ LISTA ESCOLAR — ORGANIZAR / IMPRESSÃO ══════ */
+
+    /* Linha de ações abaixo da bolha (fora da bolha) */
+    .msg-actions-row {
+      display: flex; gap: 8px; margin-top: 6px;
+      flex-wrap: wrap; padding-left: 2px;
+    }
+
+    .btn-organizar-lista {
       display: inline-flex; align-items: center; gap: 5px;
-      margin-top: 10px; padding: 6px 13px;
+      padding: 5px 12px;
       background: #eef2ff; border: 1px solid #c7d2ee;
       color: #2d3a8c; border-radius: 7px;
-      font-size: .78rem; font-weight: 600; cursor: pointer;
+      font-size: .76rem; font-weight: 600; cursor: pointer;
       transition: background .15s, border-color .15s;
+      white-space: nowrap;
     }
-    .btn-print-lista:hover { background: #dde5ff; border-color: #a5b4e0; }
+    .btn-organizar-lista:hover { background: #dde5ff; border-color: #a5b4e0; }
 
+    /* Modal de lista organizada */
+    .org-modal-overlay {
+      position: fixed; inset: 0; background: rgba(0,0,0,.55);
+      z-index: 9900; display: flex; align-items: flex-start;
+      justify-content: center; padding: 20px 12px;
+      overflow-y: auto;
+    }
+    .org-modal-box {
+      background: #fff; border-radius: 14px;
+      width: 780px; max-width: calc(100vw - 24px);
+      box-shadow: 0 8px 40px rgba(0,0,0,.22);
+      display: flex; flex-direction: column;
+      overflow: hidden;
+    }
+    .org-modal-header {
+      background: #1a2a5e; color: #fff;
+      padding: 16px 20px 14px;
+      display: flex; align-items: center; gap: 12px;
+    }
+    .org-modal-title { font-size: 1rem; font-weight: 700; flex: 1; }
+    .org-modal-subtitle { font-size: .72rem; opacity: .7; margin-top: 2px; }
+    .org-modal-body { padding: 18px 20px; flex: 1; overflow-y: auto; max-height: 70vh; }
+    .org-modal-footer {
+      padding: 12px 20px; border-top: 1px solid #e5e7eb;
+      display: flex; gap: 10px; justify-content: flex-end;
+      background: #f8f9fc;
+    }
+    .org-modal-btn {
+      padding: 8px 18px; border-radius: 7px; border: none;
+      font-size: .85rem; font-weight: 600; cursor: pointer;
+      transition: background .15s;
+    }
+    .org-modal-btn.primary { background: #1a2a5e; color: #fff; }
+    .org-modal-btn.primary:hover { background: #243880; }
+    .org-modal-btn.secondary { background: #e5e7eb; color: #374151; }
+    .org-modal-btn.secondary:hover { background: #d1d5db; }
+    .org-modal-btn.danger { background: #fee2e2; color: #b91c1c; border: 1px solid #fca5a5; }
+    .org-modal-btn.danger:hover { background: #fecaca; }
+
+    /* Campos do cabeçalho */
+    .org-fields-grid {
+      display: grid; grid-template-columns: 1fr 1fr; gap: 6px 20px;
+      margin-bottom: 16px; font-size: .84rem;
+    }
+    .org-field { display: flex; gap: 6px; align-items: baseline; }
+    .org-field-full { grid-column: 1 / -1; }
+    .org-field-lbl { font-weight: 700; color: #333; white-space: nowrap; font-size: .8rem; flex-shrink: 0; }
+    .org-field-val { color: #444; }
+
+    /* Tabela de itens editável */
+    .org-tbl { width: 100%; border-collapse: collapse; font-size: .84rem; margin-bottom: 10px; }
+    .org-tbl th {
+      background: #1a2a5e; color: #fff;
+      padding: 6px 8px; text-align: left; font-size: .78rem;
+    }
+    .org-tbl td { padding: 4px 5px; border-bottom: 1px solid #e5e7eb; vertical-align: middle; }
+    .org-tbl tr:nth-child(even) td { background: #f8f9fc; }
+    .org-tbl input[type=text] {
+      width: 100%; border: 1px solid transparent; border-radius: 4px;
+      padding: 3px 5px; font-size: .82rem; background: transparent;
+      font-family: inherit; outline: none;
+    }
+    .org-tbl input[type=text]:hover { border-color: #c7d2ee; background: #fff; }
+    .org-tbl input[type=text]:focus { border-color: #2d3a8c; background: #fff; box-shadow: 0 0 0 2px rgba(45,58,140,.12); }
+    .org-tbl input[type=number] {
+      width: 52px; border: 1px solid transparent; border-radius: 4px;
+      padding: 3px 5px; font-size: .82rem; background: transparent;
+      font-family: inherit; outline: none; text-align: center;
+    }
+    .org-tbl input[type=number]:hover { border-color: #c7d2ee; background: #fff; }
+    .org-tbl input[type=number]:focus { border-color: #2d3a8c; background: #fff; }
+    .org-tbl-actions { display: flex; gap: 6px; margin-top: 8px; }
+    .org-rm-row {
+      background: none; border: none; color: #ef4444;
+      cursor: pointer; font-size: .8rem; padding: 2px 6px;
+      border-radius: 4px; transition: background .12s;
+    }
+    .org-rm-row:hover { background: #fee2e2; }
+
+    /* Nota de orientações de cor */
+    .org-orient {
+      background: #f0f4ff; border: 1px solid #c7d2ee;
+      border-left: 3px solid #2d3a8c; border-radius: 5px;
+      padding: 8px 12px; margin-bottom: 14px; font-size: .82rem;
+    }
+    .org-orient-ttl { font-weight: 700; color: #2d3a8c; margin-bottom: 4px; }
+    .org-orient-row { margin: 2px 0; }
+
+    /* Itens Não quero */
+    .org-noquero {
+      background: #fef2f2; border: 1px solid #fca5a5;
+      border-radius: 5px; padding: 8px 12px; margin-top: 10px;
+      font-size: .82rem;
+    }
+    .org-nq-ttl { font-weight: 700; color: #b91c1c; margin-bottom: 4px; }
+    .org-nq-note { font-size: .76rem; color: #7f1d1d; font-style: italic; margin-bottom: 6px; }
+
+    /* ── Print overlay (preview antes de imprimir) ── */
     .print-overlay {
       position: fixed; inset: 0; background: rgba(0,0,0,.58);
       z-index: 9900; display: flex; flex-direction: column;
@@ -2231,6 +2337,7 @@
     .ps-hdr { text-align: center; border-bottom: 2px solid #1a1a2e; padding-bottom: 8px; margin-bottom: 14px; }
     .ps-hdr-name  { font-size: 16pt; font-weight: 700; color: #1a1a2e; }
     .ps-hdr-sub   { font-size: 10pt; color: #555; margin-top: 2px; }
+    .ps-hdr-note  { font-size: 8.5pt; color: #777; margin-top: 3px; font-style: italic; }
     .ps-hdr-badge { display: inline-block; margin-top: 5px; padding: 2px 11px; background: #e0e7ff; color: #1a1a2e; border-radius: 20px; font-size: 9pt; font-weight: 600; }
     .ps-fields { display: grid; grid-template-columns: 1fr 1fr; gap: 4px 20px; margin-bottom: 12px; font-size: 10pt; }
     .ps-field {} .ps-field-full { grid-column: 1 / -1; }
@@ -2252,10 +2359,11 @@
     .ps-uline { display: inline-block; min-width: 160px; border-bottom: 1px solid #999; }
     .page-break { page-break-after: always; break-after: page; }
     @media print {
+      @page { size: A4 portrait; margin: 12mm; }
       body > *:not(.print-overlay) { display: none !important; }
       .print-overlay { position: static !important; background: none !important; padding: 0 !important; display: block !important; overflow: visible !important; }
       .print-overlay-toolbar { display: none !important; }
-      .print-sheet-wrap { box-shadow: none !important; margin: 0 !important; width: 100% !important; padding: 8mm 10mm !important; }
+      .print-sheet-wrap { box-shadow: none !important; margin: 0 !important; width: 100% !important; padding: 0 !important; }
     }
 
     .composer-row { display: flex; gap: 7px; align-items: flex-end; }
@@ -8240,15 +8348,7 @@ function appendBubble(container, msg, optimistic = false, history = null, histor
     bubble.appendChild(_textNode);
   }
 
-  // ── Botão "Imprimir separação" — lista escolar do site ──
-  if (role === "user" && !optimistic && isSiteSchoolListMessage(content)) {
-    const _printBtn = document.createElement("button");
-    _printBtn.className = "btn-print-lista";
-    _printBtn.textContent = "🖨 Imprimir separação";
-    _printBtn.title = "Gerar folha de separação e conferência para a equipe";
-    _printBtn.onclick = (e) => { e.stopPropagation(); openSchoolListPrint(content, msg); };
-    bubble.appendChild(_printBtn);
-  }
+
 
   // ── Botão "Remover mídia" ────────────────────────────────────────────────────
   if (!optimistic && historyIndex !== null && !mediaDeleted && !mediaUnavailable &&
@@ -8280,6 +8380,19 @@ function appendBubble(container, msg, optimistic = false, history = null, histor
   }
 
   wrap.appendChild(bubble);
+
+  // ── Linha de ações abaixo da bolha (fora da bolha) ──
+  if (role === "user" && !optimistic && isSiteSchoolListMessage(content)) {
+    const _actRow = document.createElement("div");
+    _actRow.className = "msg-actions-row";
+    const _orgBtn = document.createElement("button");
+    _orgBtn.className = "btn-organizar-lista";
+    _orgBtn.innerHTML = "&#128203; Organizar lista";
+    _orgBtn.title = "Visualizar e organizar a lista recebida antes de lançar no sistema da loja";
+    _orgBtn.onclick = (e) => { e.stopPropagation(); openSchoolListOrganize(content, msg); };
+    _actRow.appendChild(_orgBtn);
+    wrap.appendChild(_actRow);
+  }
 
   // Botão Responder: apenas em mensagens do cliente com metaMessageId
   if (role === "user" && msg.metaMessageId && !optimistic) {
@@ -12113,23 +12226,31 @@ async function openContactResult(contact) {
 })();
 
 // ════════════════════════════════════════════════════════════════════════════
-// FOLHA DE SEPARAÇÃO — Lista Escolar enviada pelo site
+// ════════════════════════════════════════════════════════════════════════════
+// LISTA ESCOLAR — Organizar e imprimir
 // ════════════════════════════════════════════════════════════════════════════
 
 function isSiteSchoolListMessage(content) {
   return typeof content === "string" && content.includes("[SITE_LISTA_ESCOLAR]");
 }
 
-// Extrai valor de campo "Nome do Campo: valor" dentro de um bloco de texto
+// Extrai valor de campo "Nome do Campo: valor" ou "*Nome do Campo:* valor"
+// Suporta tanto formato simples quanto markdown bold (*Campo:*)
 function _sslField(block, fieldName) {
-  // Escapa chars especiais para uso em regex (ex: "/" em "Ano/Série")
   const escaped = fieldName.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-  const re = new RegExp(escaped + "\\s*:\\s*([^\\n]+)");
+  // Tenta: *Campo:* valor (markdown) ou Campo: valor (simples) — case-insensitive
+  const re = new RegExp(
+    "\\*?" + escaped + "\\*?\\s*:\\*?\\s*([^\\n]+)",
+    "i"
+  );
   const m = block.match(re);
-  return m ? m[1].trim() : "";
+  if (!m) return "";
+  // Remove markdown bold asteriscos do resultado
+  return m[1].trim().replace(/^\*+|\*+$/g, "").trim();
 }
 
 // Parser de itens: linhas "Nx Item" com sub-linhas de observação
+// Tolera caracteres lixo/quebrados antes da quantidade (ex: "  1x Item", "\uFFFD 1x Item")
 function _sslParseItems(block, startMarker, endMarker) {
   const si = block.indexOf(startMarker);
   if (si === -1) return [];
@@ -12143,7 +12264,8 @@ function _sslParseItems(block, startMarker, endMarker) {
   for (const line of section.split("\n")) {
     const t = line.trim();
     if (!t) continue;
-    const m = t.match(/^(\d+)\s*[xX]\s+(.+)/);
+    // Tolerante: ignora chars não-dígito no início da linha (inclui \uFFFD, emojis, bullets)
+    const m = t.match(/^[^\d]*(\d+)\s*[xX]\s+(.+)/);
     if (m) {
       if (cur) items.push(cur);
       cur = { qty: m[1], name: m[2].trim(), obs: [] };
@@ -12159,16 +12281,27 @@ function _sslParseItems(block, startMarker, endMarker) {
   return items;
 }
 
+function _esc(s) {
+  return String(s || "").replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;");
+}
+
 function parseSiteSchoolList(content) {
   const result = { clientName: "", whatsapp: "", lists: [] };
 
-  // Nome do cliente: "Sou *Nome*"
-  const nameM = content.match(/[Ss]ou\s+\*([^*]+)\*/);
-  if (nameM) result.clientName = nameM[1].trim();
+  // Nome do cliente: "Sou *Nome*" ou "*Cliente:* Nome"
+  const nameM1 = content.match(/[Ss]ou\s+\*([^*]+)\*/);
+  const nameM2 = content.match(/\*?[Cc]liente:\*?\s*([^\n*]+)/);
+  if (nameM1) result.clientName = nameM1[1].trim();
+  else if (nameM2) result.clientName = nameM2[1].trim().replace(/^\*+|\*+$/g,"").trim();
 
-  // WhatsApp informado no site
-  const wppM = content.match(/\*WhatsApp informado no site:\*\s*\n([^\n]+)/);
-  if (wppM) result.whatsapp = wppM[1].trim();
+  // WhatsApp: várias formas possíveis
+  // Forma 1: "*WhatsApp informado no site:*\nValor"
+  // Forma 2: "*WhatsApp:* (12) 3934-1666" (na mesma linha)
+  // Forma 3: "WhatsApp: valor"
+  const wppM1 = content.match(/\*WhatsApp informado no site:\*\s*\n([^\n]+)/i);
+  const wppM2 = content.match(/\*?WhatsApp:?\*?\s*([+\d()\s\-\u2013\u2014]{7,})/i);
+  if (wppM1) result.whatsapp = wppM1[1].trim();
+  else if (wppM2) result.whatsapp = wppM2[1].trim().replace(/^\*+|\*+$/g,"").trim();
 
   // Divide nos blocos *Lista N*
   const blocks = content.split(/(?=\*Lista\s+\d+\*)/i);
@@ -12179,23 +12312,31 @@ function parseSiteSchoolList(content) {
     const listNumM = block.match(/^\*Lista\s+(\d+)\*/i);
     const listNum  = listNumM ? parseInt(listNumM[1]) : result.lists.length + 1;
 
+    // Extrai nome do aluno de "*Lista N · NomeAluno*" se presente
+    const alunoNomeM = block.match(/^\*Lista\s+\d+\s*[·\-\u2013]\s*([^*\n]+)\*/i);
+
     const escola    = _sslField(block, "Escola");
-    const anoSerie  = _sslField(block, "Ano/Série");
+    const anoSerie  = _sslField(block, "Ano/Série") || _sslField(block, "Ano/Serie");
     const segmento  = _sslField(block, "Segmento");
     const anoLetivo = _sslField(block, "Ano letivo");
 
-    const alunoNome    = _sslField(block, "Nome");
-    const prefCor      = _sslField(block, "Preferência de cor quando a lista não indicar");
-    const obsCorModelo = _sslField(block, "Observações sobre cores/modelos");
+    const alunoNome    = _sslField(block, "Nome") || (alunoNomeM ? alunoNomeM[1].trim() : "");
+    const prefCor      = _sslField(block, "Preferência de cor quando a lista não indicar")
+                      || _sslField(block, "Preferencia de cor quando a lista nao indicar");
+    const obsCorModelo = _sslField(block, "Observações sobre cores/modelos")
+                      || _sslField(block, "Observacoes sobre cores/modelos");
 
     // Linha "Quando a lista indicar..." (orientação de cor geral)
     const regaCorM = block.match(/Quando a lista indicar[^\n]+/);
     const regaCor  = regaCorM ? regaCorM[0].trim() : "";
 
     // Preferência de orçamento (pode vir em duas formas no texto)
-    const prefOrcM = block.match(/\*Preferência para o orçamento:\*\s*\n([^\n]+)/);
+    const prefOrcM = block.match(/\*Preferência para o orçamento:\*\s*\n([^\n]+)/i)
+                  || block.match(/\*Preferencia para o orcamento:\*\s*\n([^\n]+)/i);
     const prefOrcamento = prefOrcM ? prefOrcM[1].trim()
-                                   : _sslField(block, "Preferência para o orçamento");
+                                   : _sslField(block, "Preferência para o orçamento")
+                                  || _sslField(block, "Critério para orçamento")
+                                  || _sslField(block, "Criterio para orcamento");
 
     const items    = _sslParseItems(block, "*Itens que quero comprar:*",        "*Itens marcados como Não quero:*");
     const naoQuero = _sslParseItems(block, "*Itens marcados como Não quero:*",  null);
@@ -12206,30 +12347,38 @@ function parseSiteSchoolList(content) {
   }
 
   // Fallback: marcador presente mas nenhum bloco *Lista N* encontrado
+  // Tenta extrair itens diretamente do conteúdo completo
   if (result.lists.length === 0) {
-    result.lists.push({ listNum: 1, escola: "", anoSerie: "", segmento: "", anoLetivo: "",
-                        alunoNome: "", prefCor: "", obsCorModelo: "", regaCor: "",
-                        prefOrcamento: "", items: [], naoQuero: [] });
+    const fallbackItems = [];
+    for (const line of content.split("\n")) {
+      const t = line.trim();
+      if (!t) continue;
+      const m = t.match(/^[^\d]*(\d+)\s*[xX]\s+(.+)/);
+      if (m) fallbackItems.push({ qty: m[1], name: m[2].trim(), obs: [] });
+    }
+    result.lists.push({
+      listNum: 1, escola: "", anoSerie: "", segmento: "", anoLetivo: "",
+      alunoNome: "", prefCor: "", obsCorModelo: "", regaCor: "",
+      prefOrcamento: "", items: fallbackItems, naoQuero: []
+    });
   }
 
   return result;
 }
 
-function _sslSheetHtml(parsed, lst, isLast, receivedAt) {
+// ── Etapa 1: HTML da folha de impressão (Lista organizada recebida) ──
+function _sslPrintSheetHtml(parsed, lst, isLast, receivedAt) {
   // Linhas da tabela principal
   let itemRows = "";
   if (lst.items.length === 0) {
-    itemRows = `<tr><td colspan="6" style="font-style:italic;color:#888;padding:7px;">Nenhum item identificado</td></tr>`;
+    itemRows = `<tr><td colspan="3" style="font-style:italic;color:#888;padding:7px;">Nenhum item na lista</td></tr>`;
   } else {
     for (const item of lst.items) {
-      const obs = item.obs.length > 0 ? esc(item.obs.join("; ")) : "";
+      const obs = item.obs.length > 0 ? _esc(item.obs.join("; ")) : "";
       itemRows += `<tr>
-        <td style="width:38px;text-align:center;">${esc(item.qty)}</td>
-        <td>${esc(item.name)}</td>
+        <td style="width:42px;text-align:center;">${_esc(item.qty)}</td>
+        <td>${_esc(item.name)}</td>
         <td style="font-size:9pt;color:#555;">${obs}</td>
-        <td class="tc" style="width:48px;">&#9744;</td>
-        <td class="tc" style="width:48px;">&#9744;</td>
-        <td style="width:90px;">&nbsp;</td>
       </tr>`;
     }
   }
@@ -12237,22 +12386,22 @@ function _sslSheetHtml(parsed, lst, isLast, receivedAt) {
   // Linhas dos itens "Não quero"
   let nqRows = "";
   for (const item of lst.naoQuero) {
-    const obs = item.obs.length > 0 ? esc(item.obs.join("; ")) : "";
+    const obs = item.obs.length > 0 ? _esc(item.obs.join("; ")) : "";
     nqRows += `<tr>
-      <td style="width:38px;text-align:center;">${esc(item.qty)}</td>
-      <td>${esc(item.name)}</td>
+      <td style="width:42px;text-align:center;">${_esc(item.qty)}</td>
+      <td>${_esc(item.name)}</td>
       <td style="font-size:9pt;color:#555;">${obs}</td>
     </tr>`;
   }
 
-  const alunoLabel = esc(lst.alunoNome || `Lista ${lst.listNum}`);
+  const alunoLabel = _esc(lst.alunoNome || `Lista ${lst.listNum}`);
 
   const orientBlock = (lst.prefCor || lst.obsCorModelo || lst.regaCor) ? `
     <div class="ps-orient">
       <div class="ps-orient-ttl">Orientações de cor e modelo</div>
-      ${lst.prefCor      ? `<div class="ps-orient-row"><strong>Preferência de cor:</strong> ${esc(lst.prefCor)}</div>` : ""}
-      ${lst.obsCorModelo ? `<div class="ps-orient-row"><strong>Observações sobre cores/modelos:</strong> ${esc(lst.obsCorModelo)}</div>` : ""}
-      ${lst.regaCor      ? `<div class="ps-orient-row"><strong>Regra:</strong> ${esc(lst.regaCor)}</div>` : ""}
+      ${lst.prefCor      ? `<div class="ps-orient-row"><strong>Preferência de cor:</strong> ${_esc(lst.prefCor)}</div>` : ""}
+      ${lst.obsCorModelo ? `<div class="ps-orient-row"><strong>Observações sobre cores/modelos:</strong> ${_esc(lst.obsCorModelo)}</div>` : ""}
+      ${lst.regaCor      ? `<div class="ps-orient-row"><strong>Regra:</strong> ${_esc(lst.regaCor)}</div>` : ""}
     </div>` : "";
 
   const nqBlock = lst.naoQuero.length > 0 ? `
@@ -12260,7 +12409,7 @@ function _sslSheetHtml(parsed, lst, isLast, receivedAt) {
       <div class="ps-nq-ttl">Itens marcados como NÃO QUERO</div>
       <div class="ps-nq-note">Não separar estes itens, a menos que o cliente solicite depois.</div>
       <table class="ps-tbl">
-        <thead><tr><th style="width:38px;">Qtd.</th><th>Item</th><th>Observações</th></tr></thead>
+        <thead><tr><th style="width:42px;">Qtd.</th><th>Item</th><th>Observações</th></tr></thead>
         <tbody>${nqRows}</tbody>
       </table>
     </div>` : "";
@@ -12268,34 +12417,32 @@ function _sslSheetHtml(parsed, lst, isLast, receivedAt) {
   return `<div class="print-sheet-wrap${!isLast ? " page-break" : ""}">
     <div class="ps-hdr">
       <div class="ps-hdr-name">Sartec Papelaria</div>
-      <div class="ps-hdr-sub">Folha de separação e conferência</div>
-      <div class="ps-hdr-badge">Lista escolar enviada pelo site</div>
+      <div class="ps-hdr-sub">Lista organizada recebida</div>
+      <div class="ps-hdr-note">Use esta folha para conferir os itens antes de lançar o orçamento no sistema da loja.</div>
+      <div class="ps-hdr-badge">Etapa 1 — Consulta e organização</div>
     </div>
 
     <div class="ps-fields">
-      <div class="ps-field"><span class="ps-lbl">Cliente:</span> ${esc(parsed.clientName || "Não informado")}</div>
-      <div class="ps-field"><span class="ps-lbl">WhatsApp:</span> ${esc(parsed.whatsapp || "Não informado")}</div>
-      <div class="ps-field"><span class="ps-lbl">Aluno:</span> ${alunoLabel}</div>
-      <div class="ps-field"><span class="ps-lbl">Escola:</span> ${esc(lst.escola || "Não informado")}</div>
-      <div class="ps-field"><span class="ps-lbl">Ano/Série:</span> ${esc(lst.anoSerie || "Não informado")}</div>
-      <div class="ps-field"><span class="ps-lbl">Segmento:</span> ${esc(lst.segmento || "Não informado")}</div>
-      <div class="ps-field"><span class="ps-lbl">Ano letivo:</span> ${esc(lst.anoLetivo || "Não informado")}</div>
-      <div class="ps-field-full"><span class="ps-lbl">Preferência de orçamento:</span> ${esc(lst.prefOrcamento || "Não informado")}</div>
-      ${receivedAt ? `<div class="ps-field-full"><span class="ps-lbl">Recebido em:</span> ${esc(receivedAt)}</div>` : ""}
+      ${parsed.clientName ? `<div class="ps-field"><span class="ps-lbl">Cliente:</span> ${_esc(parsed.clientName)}</div>` : ""}
+      ${parsed.whatsapp   ? `<div class="ps-field"><span class="ps-lbl">WhatsApp:</span> ${_esc(parsed.whatsapp)}</div>` : ""}
+      <div class="ps-field"><span class="ps-lbl">Aluno/Lista:</span> ${alunoLabel}</div>
+      ${lst.escola    ? `<div class="ps-field"><span class="ps-lbl">Escola:</span> ${_esc(lst.escola)}</div>` : ""}
+      ${lst.anoSerie  ? `<div class="ps-field"><span class="ps-lbl">Ano/Série:</span> ${_esc(lst.anoSerie)}</div>` : ""}
+      ${lst.segmento  ? `<div class="ps-field"><span class="ps-lbl">Segmento:</span> ${_esc(lst.segmento)}</div>` : ""}
+      ${lst.anoLetivo ? `<div class="ps-field"><span class="ps-lbl">Ano letivo:</span> ${_esc(lst.anoLetivo)}</div>` : ""}
+      ${lst.prefOrcamento ? `<div class="ps-field-full"><span class="ps-lbl">Critério para orçamento:</span> ${_esc(lst.prefOrcamento)}</div>` : ""}
+      ${receivedAt        ? `<div class="ps-field-full"><span class="ps-lbl">Recebido em:</span> ${_esc(receivedAt)}</div>` : ""}
     </div>
 
     ${orientBlock}
 
-    <div class="ps-sec-ttl">Itens para separar</div>
+    <div class="ps-sec-ttl">Itens da lista (${lst.items.length} ${lst.items.length === 1 ? "item" : "itens"})</div>
     <table class="ps-tbl">
       <thead>
         <tr>
-          <th style="width:38px;">Qtd.</th>
+          <th style="width:42px;">Qtd.</th>
           <th>Item</th>
-          <th style="width:130px;">Observações</th>
-          <th style="width:48px;text-align:center;">Separado</th>
-          <th style="width:48px;text-align:center;">Conferido</th>
-          <th style="width:90px;">Falta/Substituição</th>
+          <th style="width:160px;">Observações</th>
         </tr>
       </thead>
       <tbody>${itemRows}</tbody>
@@ -12304,57 +12451,251 @@ function _sslSheetHtml(parsed, lst, isLast, receivedAt) {
     ${nqBlock}
 
     <div class="ps-footer">
-      <div class="ps-field">Separado por: <span class="ps-uline">&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;</span></div>
-      <div class="ps-field">Conferido por: <span class="ps-uline">&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;</span></div>
-      <div class="ps-field">Cliente avisado: &#9744; Sim &nbsp; &#9744; Não</div>
+      <div class="ps-field ps-footer-full" style="font-style:italic;font-size:9pt;color:#666;margin-bottom:8px;">
+        Esta é a lista recebida do cliente, ainda NÃO é a lista final aprovada. Lance os itens no sistema da loja para gerar o orçamento.
+      </div>
+      <div class="ps-field">Consultado por: <span class="ps-uline">&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;</span></div>
       <div class="ps-field">Data: ____/____/____</div>
     </div>
   </div>`;
 }
 
-function openSchoolListPrint(content, msg) {
+// ── Etapa 1: Abre modal editável com a lista organizada ──
+function openSchoolListOrganize(content, msg) {
   const parsed = parseSiteSchoolList(content);
 
   let receivedAt = "";
-  if (msg?.createdAt) {
+  if (msg && msg.createdAt) {
     try {
       const d = new Date(msg.createdAt);
       receivedAt = d.toLocaleString("pt-BR", {
         timeZone: "America/Sao_Paulo", day: "2-digit", month: "2-digit",
         year: "numeric", hour: "2-digit", minute: "2-digit", hour12: false
       });
-    } catch {}
+    } catch(e) {}
   }
 
-  const sheetsHtml = parsed.lists
-    .map((lst, i) => _sslSheetHtml(parsed, lst, i === parsed.lists.length - 1, receivedAt))
-    .join("\n");
-
-  // Remove overlay anterior se houver
-  document.getElementById("ssl-print-overlay")?.remove();
+  // Remove modal anterior se houver
+  var prevModal = document.getElementById("ssl-org-modal");
+  if (prevModal) prevModal.remove();
 
   const overlay = document.createElement("div");
-  overlay.className = "print-overlay";
-  overlay.id = "ssl-print-overlay";
+  overlay.className = "org-modal-overlay";
+  overlay.id = "ssl-org-modal";
+
+  const allLists = parsed.lists;
+
+  // Constrói o HTML das listas
+  let listsHtml = "";
+  allLists.forEach(function(lst, listIdx) {
+    const alunoLabel = lst.alunoNome || ("Lista " + lst.listNum);
+
+    // Cabeçalho de orientações
+    const orientHtml = (lst.prefCor || lst.obsCorModelo || lst.regaCor) ? (
+      '<div class="org-orient">' +
+      '<div class="org-orient-ttl">Orientações de cor e modelo</div>' +
+      (lst.prefCor      ? '<div class="org-orient-row"><strong>Preferência de cor:</strong> ' + _esc(lst.prefCor) + '</div>' : '') +
+      (lst.obsCorModelo ? '<div class="org-orient-row"><strong>Observações:</strong> ' + _esc(lst.obsCorModelo) + '</div>' : '') +
+      (lst.regaCor      ? '<div class="org-orient-row"><strong>Regra:</strong> ' + _esc(lst.regaCor) + '</div>' : '') +
+      '</div>'
+    ) : "";
+
+    // Linhas editáveis da tabela
+    let rowsHtml = "";
+    lst.items.forEach(function(item, rowIdx) {
+      rowsHtml += '<tr data-list="' + listIdx + '" data-row="' + rowIdx + '">' +
+        '<td style="width:58px;"><input type="number" min="1" max="9999" value="' + _esc(item.qty) + '" class="org-item-qty" /></td>' +
+        '<td><input type="text" value="' + _esc(item.name) + '" class="org-item-name" /></td>' +
+        '<td style="width:200px;"><input type="text" value="' + _esc(item.obs.join("; ")) + '" class="org-item-obs" /></td>' +
+        '<td style="width:36px;text-align:center;"><button class="org-rm-row" onclick="orgRemoveRow(this)" title="Remover item">&#215;</button></td>' +
+        '</tr>';
+    });
+
+    // Itens Não quero (somente leitura no modal)
+    let nqHtml = "";
+    if (lst.naoQuero.length > 0) {
+      nqHtml = '<div class="org-noquero"><div class="org-nq-ttl">&#9940; Itens marcados como NÃO QUERO</div>' +
+        '<div class="org-nq-note">Não separar estes itens, salvo instrução contrária do cliente.</div>';
+      lst.naoQuero.forEach(function(it) {
+        nqHtml += '<div style="font-size:.82rem;padding:2px 0;">' + _esc(it.qty) + '&times; ' + _esc(it.name) +
+          (it.obs.length ? ' <em>(' + _esc(it.obs.join("; ")) + ')</em>' : '') + '</div>';
+      });
+      nqHtml += '</div>';
+    }
+
+    const listTitle = allLists.length > 1
+      ? '<div style="font-size:.9rem;font-weight:700;color:#1a2a5e;margin-bottom:10px;padding-bottom:6px;border-bottom:1px solid #e5e7eb;">&#128203; Lista ' +
+        lst.listNum + (lst.alunoNome ? ' — ' + _esc(lst.alunoNome) : '') + '</div>'
+      : "";
+
+    listsHtml += '<div class="org-list-section" data-list-idx="' + listIdx + '">' +
+      listTitle +
+      '<div class="org-fields-grid">' +
+      (parsed.clientName ? '<div class="org-field"><span class="org-field-lbl">Cliente:</span><span class="org-field-val">' + _esc(parsed.clientName) + '</span></div>' : '') +
+      (parsed.whatsapp   ? '<div class="org-field"><span class="org-field-lbl">WhatsApp:</span><span class="org-field-val">' + _esc(parsed.whatsapp) + '</span></div>' : '') +
+      (alunoLabel        ? '<div class="org-field"><span class="org-field-lbl">Aluno/Lista:</span><span class="org-field-val">' + _esc(alunoLabel) + '</span></div>' : '') +
+      (lst.escola    ? '<div class="org-field"><span class="org-field-lbl">Escola:</span><span class="org-field-val">' + _esc(lst.escola) + '</span></div>' : '') +
+      (lst.anoSerie  ? '<div class="org-field"><span class="org-field-lbl">Ano/Série:</span><span class="org-field-val">' + _esc(lst.anoSerie) + '</span></div>' : '') +
+      (lst.segmento  ? '<div class="org-field"><span class="org-field-lbl">Segmento:</span><span class="org-field-val">' + _esc(lst.segmento) + '</span></div>' : '') +
+      (lst.anoLetivo ? '<div class="org-field"><span class="org-field-lbl">Ano letivo:</span><span class="org-field-val">' + _esc(lst.anoLetivo) + '</span></div>' : '') +
+      (lst.prefOrcamento ? '<div class="org-field org-field-full"><span class="org-field-lbl">Critério para orçamento:</span><span class="org-field-val">' + _esc(lst.prefOrcamento) + '</span></div>' : '') +
+      (receivedAt        ? '<div class="org-field org-field-full"><span class="org-field-lbl">Recebido em:</span><span class="org-field-val">' + _esc(receivedAt) + '</span></div>' : '') +
+      '</div>' +
+      orientHtml +
+      '<div style="font-size:.8rem;font-weight:700;color:#374151;margin-bottom:6px;">Itens da lista — editável antes de imprimir</div>' +
+      '<table class="org-tbl" id="org-tbl-' + listIdx + '">' +
+      '<thead><tr><th style="width:58px;">Qtd.</th><th>Item</th><th style="width:200px;">Observações</th><th style="width:36px;"></th></tr></thead>' +
+      '<tbody id="org-tbody-' + listIdx + '">' + rowsHtml + '</tbody>' +
+      '</table>' +
+      '<div class="org-tbl-actions"><button class="org-modal-btn secondary" style="font-size:.78rem;padding:5px 12px;" onclick="orgAddRow(' + listIdx + ')">+ Adicionar item</button></div>' +
+      nqHtml +
+      '</div>';
+  });
+
+  overlay.innerHTML = '<div class="org-modal-box" onclick="event.stopPropagation()">' +
+    '<div class="org-modal-header">' +
+    '<div>' +
+    '<div class="org-modal-title">&#128203; Lista organizada recebida</div>' +
+    '<div class="org-modal-subtitle">Etapa 1 — Consulta antes de lançar no sistema da loja</div>' +
+    '</div>' +
+    '<button class="org-modal-btn secondary" style="margin-left:auto;padding:6px 14px;font-size:.8rem;" onclick="document.getElementById(\'ssl-org-modal\')?.remove()">&#10005; Fechar</button>' +
+    '</div>' +
+    '<div class="org-modal-body" id="org-modal-body">' + listsHtml + '</div>' +
+    '<div class="org-modal-footer">' +
+    '<button class="org-modal-btn secondary" onclick="document.getElementById(\'ssl-org-modal\')?.remove()">Fechar</button>' +
+    '<button class="org-modal-btn primary" onclick="orgPrintList()">&#128424; Imprimir lista organizada</button>' +
+    '</div>' +
+    '</div>';
+
+  // Fecha ao clicar fora do modal
+  overlay.addEventListener("click", function(e) {
+    if (e.target === overlay) overlay.remove();
+  });
+
+  // Fecha com Escape
+  var onEsc = function(e) {
+    if (e.key === "Escape") {
+      overlay.remove();
+      document.removeEventListener("keydown", onEsc);
+    }
+  };
+  document.addEventListener("keydown", onEsc);
+
+  // Guarda dados parsed para uso no print
+  overlay._parsedData = parsed;
+  overlay._receivedAt = receivedAt;
+
+  document.body.appendChild(overlay);
+}
+
+// ── Lê os dados atuais da tabela editável ──
+function orgGetCurrentItems(listIdx) {
+  const tbody = document.getElementById("org-tbody-" + listIdx);
+  if (!tbody) return [];
+  const items = [];
+  const rows = tbody.querySelectorAll("tr[data-row], tr");
+  for (var i = 0; i < rows.length; i++) {
+    const tr = rows[i];
+    const qty  = (tr.querySelector(".org-item-qty")  || {}).value || "1";
+    const name = (tr.querySelector(".org-item-name") || {}).value || "";
+    const obs  = (tr.querySelector(".org-item-obs")  || {}).value || "";
+    if (name.trim()) items.push({ qty: qty.trim(), name: name.trim(), obs: obs.trim() ? [obs.trim()] : [] });
+  }
+  return items;
+}
+
+// ── Adiciona linha na tabela editável ──
+function orgAddRow(listIdx) {
+  const tbody = document.getElementById("org-tbody-" + listIdx);
+  if (!tbody) return;
+  const rowIdx = tbody.querySelectorAll("tr").length;
+  const tr = document.createElement("tr");
+  tr.dataset.list = listIdx;
+  tr.dataset.row  = rowIdx;
+  tr.innerHTML = '<td style="width:58px;"><input type="number" min="1" max="9999" value="1" class="org-item-qty" /></td>' +
+    '<td><input type="text" value="" class="org-item-name" placeholder="Descrição do item" /></td>' +
+    '<td style="width:200px;"><input type="text" value="" class="org-item-obs" placeholder="Observações" /></td>' +
+    '<td style="width:36px;text-align:center;"><button class="org-rm-row" onclick="orgRemoveRow(this)" title="Remover item">&#215;</button></td>';
+  tbody.appendChild(tr);
+  const nameInput = tr.querySelector(".org-item-name");
+  if (nameInput) nameInput.focus();
+}
+
+// ── Remove linha da tabela editável ──
+function orgRemoveRow(btn) {
+  const tr = btn.closest("tr");
+  if (tr) tr.remove();
+}
+
+// ── Imprime a lista organizada usando os dados atuais da tabela ──
+function orgPrintList() {
+  const overlay = document.getElementById("ssl-org-modal");
+  if (!overlay) return;
+  const parsed     = overlay._parsedData;
+  const receivedAt = overlay._receivedAt || "";
+
+  // Atualiza parsed.lists com os dados editados
+  const updatedParsed = JSON.parse(JSON.stringify(parsed));
+  updatedParsed.lists.forEach(function(lst, idx) {
+    lst.items = orgGetCurrentItems(idx);
+  });
+
+  const sheetsHtml = updatedParsed.lists
+    .map(function(lst, i) {
+      return _sslPrintSheetHtml(updatedParsed, lst, i === updatedParsed.lists.length - 1, receivedAt);
+    })
+    .join("\n");
+
+  // Remove overlay de impressão anterior se houver
+  var prevPrintOverlay = document.getElementById("ssl-print-overlay");
+  if (prevPrintOverlay) prevPrintOverlay.remove();
+
+  const printOverlay = document.createElement("div");
+  printOverlay.className = "print-overlay";
+  printOverlay.id = "ssl-print-overlay";
 
   const toolbar = document.createElement("div");
   toolbar.className = "print-overlay-toolbar";
-  toolbar.innerHTML = `
-    <button class="btn-do-print" onclick="window.print()">🖨 Imprimir</button>
-    <button class="btn-close-print" onclick="document.getElementById('ssl-print-overlay')?.remove()">Fechar</button>
-  `;
-  overlay.appendChild(toolbar);
+  toolbar.innerHTML = '<button class="btn-do-print" onclick="window.print()">&#128424; Imprimir</button>' +
+    '<button class="btn-close-print" onclick="document.getElementById(\'ssl-print-overlay\')?.remove()">Fechar preview</button>';
+  printOverlay.appendChild(toolbar);
 
   const sheetsDiv = document.createElement("div");
   sheetsDiv.innerHTML = sheetsHtml;
-  overlay.appendChild(sheetsDiv);
+  printOverlay.appendChild(sheetsDiv);
 
-  const onEsc = (e) => { if (e.key === "Escape") { overlay.remove(); document.removeEventListener("keydown", onEsc); } };
-  document.addEventListener("keydown", onEsc);
+  var onEscPrint = function(e) {
+    if (e.key === "Escape") {
+      printOverlay.remove();
+      document.removeEventListener("keydown", onEscPrint);
+    }
+  };
+  document.addEventListener("keydown", onEscPrint);
 
-  document.body.appendChild(overlay);
-  overlay.scrollTop = 0;
+  document.body.appendChild(printOverlay);
+  printOverlay.scrollTop = 0;
 }
+
+// ════════════════════════════════════════════════════════════════════════════
+// ETAPA 2 (STUB) — Folha de separação a partir do orçamento aprovado
+// Será implementada quando a atendente tiver o PDF do orçamento aprovado.
+// Colunas planejadas:
+//   Código | Descrição | Qtd. | Valor Unit. | Separado | Conferido | Falta/Substituição | Obs.
+// O Valor Unit. tem função operacional: ajuda a localizar o produto pela etiqueta de preço.
+// ════════════════════════════════════════════════════════════════════════════
+function openSeparationSheet(pdfText) {
+  // TODO: parsear PDF de orçamento aprovado (pdfText extraído via FileReader + pdf.js ou similar)
+  // Layout planejado da folha:
+  //   Cabeçalho: Nº orçamento | Data | Cliente | Telefone | Vendedor
+  //   Tabela: Código | Descrição | Qtd. | Valor Unit. | Separado | Conferido | Falta/Substituição | Observações
+  //   Rodapé: Separado por / Conferido por / Cliente avisado / Data
+  console.warn("[Sartec CRM] openSeparationSheet: funcionalidade em desenvolvimento.");
+  alert("Gerar folha de separação\n\nEsta funcionalidade será disponibilizada após o orçamento ser aprovado no sistema da loja.\n\nO PDF do orçamento aprovado será importado aqui para gerar a folha de separação com: Código, Descrição, Qtd., Valor Unit., Separado, Conferido, Falta/Substituição.");
+}
+
+// Mantém compatibilidade com qualquer chamada legada ao nome antigo
+function openSchoolListPrint(content, msg) { openSchoolListOrganize(content, msg); }
+
 </script>
 <div id="toast-container"></div>
 
