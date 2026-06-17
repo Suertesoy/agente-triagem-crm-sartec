@@ -395,10 +395,12 @@
     .pipeline {
       display: flex;
       gap: 12px;
-      width: 100%;
+      width: max-content;
+      min-width: 100%;
     }
     .pipe-col {
       flex: 1 1 220px;
+      min-width: 220px;
       max-width: 400px;
       display: flex;
       flex-direction: column;
@@ -3665,6 +3667,25 @@
 
       /* Cards: leve compactação sem perder informação */
       .card { padding: 14px 13px 12px; border-radius: 16px; }
+
+      /* Rodapé do card: PF/PJ + tempo na linha 1, Finalizar abaixo (linha 2)
+         para não estourar a base do card em telas compactas */
+      .card-footer-row {
+        grid-template-columns: 1fr auto;
+        grid-template-rows: auto auto;
+        row-gap: 6px;
+      }
+      .card-footer-row .pf-pj-toggle      { grid-column: 1; grid-row: 1; justify-self: start; }
+      .card-footer-row .card-footer-timer { grid-column: 2; grid-row: 1; justify-self: end; }
+      .card-footer-row .btn-resolve-inline {
+        grid-column: 1 / -1;
+        grid-row: 2;
+        justify-self: stretch;
+        width: 100%;
+        margin-left: 0;
+        padding: 6px 10px;
+        text-align: center;
+      }
     }
 
     /* ── Telas compactas de desktop com pouca altura ─────────── */
@@ -7107,10 +7128,12 @@ document.addEventListener("visibilitychange", () => {
 // ╚══════════════════════════════════════════════════════════════╝
 async function openChat(phone) {
   openModalPhone = phone;
-  _cardUnreadCount[phone]   = 0;
-  _cardNewJustArrived.delete(phone);
-  _newlyArrivedPhones.delete(phone); // remove badge de card novo ao abrir
-  _cardLastUserMsgAt[phone] = new Date().toISOString(); // marca como visto
+  if (!shouldPreserveUnreadOnOpen()) {
+    _cardUnreadCount[phone]   = 0;
+    _cardNewJustArrived.delete(phone);
+    _newlyArrivedPhones.delete(phone); // remove badge de card novo ao abrir
+    _cardLastUserMsgAt[phone] = new Date().toISOString(); // marca como visto
+  }
   if (isConvLockedByOther(phone)) showDupeWarning("modal");
   else hideDupeWarning("modal");
   lockConvTab(phone);
@@ -7686,14 +7709,17 @@ function buildConvItem(c) {
 
 async function openConvsChat(phone, redisKey, isArchive) {
   clearReplyTarget("convs");
-  _cardUnreadCount[phone]   = 0;
-  _cardLastUserMsgAt[phone] = new Date().toISOString();
+  const _preserveUnread = shouldPreserveUnreadOnOpen();
+  if (!_preserveUnread) {
+    _cardUnreadCount[phone]   = 0;
+    _cardLastUserMsgAt[phone] = new Date().toISOString();
+  }
   if (openConvsPhone && openConvsPhone !== phone) unlockConvTab(openConvsPhone);
   openConvsPhone    = phone;
   openConvsRedisKey = redisKey || `sartec:${phone}`;
 
-  // Marca como lida ao abrir (apenas para sessões ativas)
-  if (!isArchive) markAsRead(phone);
+  // Marca como lida ao abrir (apenas para sessões ativas) — exceto perfil Lucas (auditoria)
+  if (!isArchive && !_preserveUnread) markAsRead(phone);
 
   // Marca ativo na lista (usa convKey para diferenciar archives do mesmo phone)
   document.querySelectorAll(".conv-item").forEach(el => {
@@ -11661,6 +11687,12 @@ function getCurrentAttendant() {
   const raw = localStorage.getItem("sartec_current_attendant");
   if (!raw) return null;
   try { return JSON.parse(raw); } catch { return null; }
+}
+
+// Perfil "Lucas" é usado para auditoria/teste, não é atendente efetivo:
+// abrir uma conversa não deve marcar como lida nem limpar badge/notificação.
+function shouldPreserveUnreadOnOpen() {
+  return getCurrentAttendant()?.id === "lucas";
 }
 
 function getAttendantFabColors(color) {
