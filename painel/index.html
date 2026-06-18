@@ -8462,7 +8462,7 @@ function appendBubble(container, msg, optimistic = false, history = null, histor
     _sepBtn.innerHTML = "&#128203; Organizar separação";
     _sepBtn.title = "Visualizar e organizar a separação a partir do orçamento enviado";
     const _sepPhone = container.id === "modal-messages" ? openModalPhone : openConvsPhone;
-    _sepBtn.onclick = (e) => { e.stopPropagation(); openBudgetFromSentPdf(msg, _sepPhone); };
+    _sepBtn.onclick = (e) => { e.stopPropagation(); openBudgetFromSentPdf(msg, _sepPhone, history); };
     _actRow.appendChild(_sepBtn);
     wrap.appendChild(_actRow);
   }
@@ -12404,6 +12404,38 @@ function parseSiteSchoolList(content) {
   return result;
 }
 
+// ── Detecta todas as listas escolares ([SITE_LISTA_ESCOLAR]) no histórico da
+// conversa — usado para vincular o orçamento/separação ao contexto escolar.
+// Cada bloco "*Lista N · Nome*" dentro de uma mesma mensagem vira uma opção própria.
+function parseSchoolListsFromConversation(messages) {
+  const result = [];
+  (messages || []).forEach(function(m, idx) {
+    if (m.role !== "user") return;
+    if (!isSiteSchoolListMessage(m.content)) return;
+    const parsed = parseSiteSchoolList(m.content);
+    (parsed.lists || []).forEach(function(lst) {
+      const label = "Lista " + lst.listNum + (lst.alunoNome ? " · " + lst.alunoNome : "");
+      result.push({
+        id: "schoollist_" + idx + "_" + lst.listNum,
+        sourceMessageIndex: idx,
+        sourceCreatedAt: m.createdAt || null,
+        label: label,
+        studentName: lst.alunoNome || "",
+        school: lst.escola || "",
+        grade: lst.anoSerie || "",
+        segment: lst.segmento || "",
+        schoolYear: lst.anoLetivo || "",
+        colorPreference: lst.prefCor || "",
+        notes: lst.obsCorModelo || "",
+        budgetCriteria: lst.prefOrcamento || "",
+        clientName: parsed.clientName || "",
+        whatsapp: parsed.whatsapp || ""
+      });
+    });
+  });
+  return result;
+}
+
 // ════════════════════════════════════════════════════════════════════════════
 // PARSER DO ORÇAMENTO OFICIAL (Etapa 2)
 // Formato: "Código Descrição ... Quant. ValorUnit. Total"
@@ -12574,7 +12606,7 @@ function _sslPrintSheetHtml(parsed, lst, isLast, receivedAt) {
 // ════════════════════════════════════════════════════════════════════════════
 // ETAPA 3 — HTML da folha de separação (a partir do orçamento aprovado)
 // ════════════════════════════════════════════════════════════════════════════
-function _sepSheetHtml(budget) {
+function _sepSheetHtml(budget, schoolList) {
   let itemRows = "";
   if (!budget.items || budget.items.length === 0) {
     itemRows = '<tr><td colspan="8" style="font-style:italic;color:#888;padding:10px;">Nenhum item identificado no orçamento.</td></tr>';
@@ -12594,6 +12626,20 @@ function _sepSheetHtml(budget) {
     });
   }
 
+  const schoolBlock = schoolList
+    ? '<div class="ps-sec-ttl">Dados da lista escolar</div>' +
+      '<div class="ps-fields">' +
+      '<div class="ps-field ps-field-full"><span class="ps-lbl">Aluno/lista:</span> ' + _esc(schoolList.label) + "</div>" +
+      (schoolList.school          ? '<div class="ps-field"><span class="ps-lbl">Escola:</span> ' + _esc(schoolList.school) + "</div>" : "") +
+      (schoolList.grade           ? '<div class="ps-field"><span class="ps-lbl">Ano/Série:</span> ' + _esc(schoolList.grade) + "</div>" : "") +
+      (schoolList.segment         ? '<div class="ps-field"><span class="ps-lbl">Segmento:</span> ' + _esc(schoolList.segment) + "</div>" : "") +
+      (schoolList.schoolYear      ? '<div class="ps-field"><span class="ps-lbl">Ano letivo:</span> ' + _esc(schoolList.schoolYear) + "</div>" : "") +
+      (schoolList.colorPreference ? '<div class="ps-field ps-field-full"><span class="ps-lbl">Preferências:</span> ' + _esc(schoolList.colorPreference) + "</div>" : "") +
+      (schoolList.notes           ? '<div class="ps-field ps-field-full"><span class="ps-lbl">Observações:</span> ' + _esc(schoolList.notes) + "</div>" : "") +
+      (schoolList.budgetCriteria  ? '<div class="ps-field ps-field-full"><span class="ps-lbl">Critério do orçamento:</span> ' + _esc(schoolList.budgetCriteria) + "</div>" : "") +
+      "</div>"
+    : '<div class="ps-field-full" style="font-style:italic;color:#777;margin-bottom:10px;">Separação gerada sem vínculo com lista escolar.</div>';
+
   return '<div class="print-sheet-wrap">' +
     '<div class="ps-hdr">' +
     '<div class="ps-hdr-name">Sartec Papelaria</div>' +
@@ -12601,6 +12647,9 @@ function _sepSheetHtml(budget) {
     '<div class="ps-hdr-note">Gerada a partir do orçamento aprovado</div>' +
     '<div class="ps-hdr-badge">Etapa 3 — Separação e conferência</div>' +
     "</div>" +
+    '<div class="ps-field-full" style="font-style:italic;font-size:8.5pt;color:#7f1d1d;margin-bottom:10px;">Conferir se a lista escolar vinculada corresponde ao orçamento aprovado antes de separar.</div>' +
+    schoolBlock +
+    '<div class="ps-sec-ttl">Dados do orçamento</div>' +
     '<div class="ps-fields">' +
     (budget.numOrc   ? '<div class="ps-field"><span class="ps-lbl">Orçamento nº:</span> ' + _esc(budget.numOrc) + "</div>" : "") +
     (budget.data     ? '<div class="ps-field"><span class="ps-lbl">Data:</span> ' + _esc(budget.data) + "</div>" : "") +
@@ -12977,11 +13026,11 @@ function orgGetBudgetPreviewItems() {
 }
 
 // ── Fluxo de Orçamento Enviado para Separação ────────────────────────────────
-function openBudgetFromSentPdf(msg, phone) {
-  openBudgetSeparationModal(msg, phone);
+function openBudgetFromSentPdf(msg, phone, history) {
+  openBudgetSeparationModal(msg, phone, history);
 }
 
-function openBudgetSeparationModal(msg, phone) {
+function openBudgetSeparationModal(msg, phone, history) {
   var prevModal = document.getElementById("ssl-sep-modal");
   if (prevModal) prevModal.remove();
 
@@ -13030,6 +13079,8 @@ function openBudgetSeparationModal(msg, phone) {
   overlay.addEventListener("click", function(e) { if (e.target === overlay) overlay.remove(); });
   var onEsc = function(e) { if (e.key === "Escape") { overlay.remove(); document.removeEventListener("keydown", onEsc); } };
   document.addEventListener("keydown", onEsc);
+
+  overlay._schoolLists = parseSchoolListsFromConversation(history);
 
   document.body.appendChild(overlay);
 
@@ -13177,8 +13228,11 @@ function sepHandleBudgetSuccess(budgetData) {
     (budget.totalProd ? '<div class="org-field"><span class="org-field-lbl">Total do orçamento:</span><span class="org-field-val">R$ ' + _esc(budget.totalProd) + "</span></div>" : "") +
     "</div>";
 
+  var schoolLinkHtml = sepBuildSchoolLinkBlockHtml(overlay ? (overlay._schoolLists || []) : []);
+
   contentDiv.innerHTML =
     headerInfo +
+    schoolLinkHtml +
     '<div style="font-size:.8rem;font-weight:700;color:#374151;margin-bottom:5px;">' +
     "Itens extraídos — edite se necessário antes de gerar</div>" +
     '<div style="overflow-x:auto;">' +
@@ -13197,6 +13251,88 @@ function sepHandleBudgetSuccess(budgetData) {
     '<div style="margin-top:8px;">' +
     '<button class="org-modal-btn secondary" style="font-size:.76rem;padding:4px 10px;" onclick="orgAddBudgetRow()">+ Adicionar linha</button>' +
     "</div>";
+
+  sepUpdateGenButtonState();
+}
+
+// ── Bloco "Vincular orçamento à lista escolar" — exibido entre os dados do
+// orçamento e a tabela de itens, dentro do modal de Organizar separação.
+function sepBuildSchoolLinkBlockHtml(lists) {
+  var html =
+    '<div class="org-orient" style="margin-bottom:14px;">' +
+    '<div class="org-orient-ttl">Vincular orçamento à lista escolar</div>' +
+    '<div class="org-orient-row" style="margin-bottom:8px;">Confirme qual lista escolar este orçamento representa antes de gerar a separação.</div>';
+
+  if (!lists || lists.length === 0) {
+    html +=
+      '<div style="color:#b45309;font-weight:600;margin-bottom:6px;">&#9888; Nenhuma lista escolar do site foi detectada nesta conversa.</div>' +
+      '<label style="display:flex;align-items:center;gap:6px;font-size:.84rem;cursor:pointer;">' +
+      '<input type="checkbox" id="sep-no-school-link-confirm" onchange="sepUpdateGenButtonState()" /> Gerar separação sem vínculo escolar' +
+      "</label>";
+  } else {
+    lists.forEach(function(lst) {
+      var checked = lists.length === 1 ? "checked" : "";
+      html +=
+        '<label class="sep-school-card" style="display:block;border:1px solid #c7d2ee;border-radius:6px;padding:8px 10px;margin-bottom:6px;cursor:pointer;background:#fff;">' +
+        '<div style="display:flex;align-items:flex-start;gap:8px;">' +
+        '<input type="radio" name="sep-school-link-choice" value="' + _esc(lst.id) + '" ' + checked + ' onchange="sepUpdateGenButtonState()" style="margin-top:3px;" />' +
+        "<div>" +
+        '<div style="font-weight:700;color:#1a2a5e;">' + _esc(lst.label) + "</div>" +
+        (lst.school        ? '<div style="font-size:.8rem;color:#444;">Escola: ' + _esc(lst.school) + "</div>" : "") +
+        (lst.grade         ? '<div style="font-size:.8rem;color:#444;">Ano/Série: ' + _esc(lst.grade) + "</div>" : "") +
+        (lst.segment       ? '<div style="font-size:.8rem;color:#444;">Segmento: ' + _esc(lst.segment) + "</div>" : "") +
+        (lst.schoolYear    ? '<div style="font-size:.8rem;color:#444;">Ano letivo: ' + _esc(lst.schoolYear) + "</div>" : "") +
+        (lst.colorPreference ? '<div style="font-size:.8rem;color:#444;">Preferências: ' + _esc(lst.colorPreference) + "</div>" : "") +
+        (lst.notes         ? '<div style="font-size:.8rem;color:#444;">Observações: ' + _esc(lst.notes) + "</div>" : "") +
+        (lst.budgetCriteria ? '<div style="font-size:.8rem;color:#444;">Critério: ' + _esc(lst.budgetCriteria) + "</div>" : "") +
+        "</div></div></label>";
+    });
+    html +=
+      '<label style="display:flex;align-items:center;gap:6px;font-size:.84rem;cursor:pointer;margin-top:4px;">' +
+      '<input type="radio" name="sep-school-link-choice" value="__none__" onchange="sepUpdateGenButtonState()" /> Nenhuma — gerar sem vínculo escolar' +
+      "</label>";
+  }
+
+  html +=
+    '<div id="sep-school-link-warning" style="display:none;color:#b91c1c;font-size:.8rem;margin-top:6px;font-weight:600;">Selecione qual lista escolar corresponde a este orçamento antes de gerar a separação.</div>' +
+    '<div style="font-size:.76rem;color:#6b7280;font-style:italic;margin-top:8px;">Conferir se a lista escolar vinculada corresponde ao orçamento aprovado antes de separar.</div>' +
+    "</div>";
+
+  return html;
+}
+
+// Habilita/desabilita "Gerar folha de separação" conforme o vínculo escolar
+// já tenha sido escolhido (ou explicitamente recusado, quando não há listas).
+function sepUpdateGenButtonState() {
+  var overlay = document.getElementById("ssl-sep-modal");
+  var genBtn  = document.getElementById("sep-btn-gen-sep");
+  var warning = document.getElementById("sep-school-link-warning");
+  if (!overlay || !genBtn) return;
+
+  var lists = overlay._schoolLists || [];
+  var valid;
+  if (lists.length === 0) {
+    var cb = document.getElementById("sep-no-school-link-confirm");
+    valid = !!(cb && cb.checked);
+  } else {
+    valid = !!document.querySelector('input[name="sep-school-link-choice"]:checked');
+  }
+
+  genBtn.disabled = !valid;
+  genBtn.style.opacity = valid ? "1" : ".55";
+  genBtn.style.cursor = valid ? "pointer" : "not-allowed";
+  if (warning) warning.style.display = (!valid && lists.length > 0) ? "block" : "none";
+}
+
+// Retorna a lista escolar atualmente selecionada no vínculo, ou null
+// (sem listas detectadas, ou atendente escolheu "gerar sem vínculo").
+function sepGetSelectedSchoolList() {
+  var overlay = document.getElementById("ssl-sep-modal");
+  var lists = (overlay && overlay._schoolLists) || [];
+  if (lists.length === 0) return null;
+  var checkedRadio = document.querySelector('input[name="sep-school-link-choice"]:checked');
+  if (!checkedRadio || checkedRadio.value === "__none__") return null;
+  return lists.find(function(l) { return l.id === checkedRadio.value; }) || null;
 }
 
 function sepHandleBudgetFailure(errMsg) {
@@ -13268,6 +13404,22 @@ function sepGenerateSepSheet() {
     return;
   }
 
+  var schoolLists = overlay._schoolLists || [];
+  if (schoolLists.length > 0 && !document.querySelector('input[name="sep-school-link-choice"]:checked')) {
+    sepUpdateGenButtonState();
+    alert("Selecione qual lista escolar corresponde a este orçamento antes de gerar a separação.");
+    return;
+  }
+  if (schoolLists.length === 0) {
+    var _noLinkCb = document.getElementById("sep-no-school-link-confirm");
+    if (!_noLinkCb || !_noLinkCb.checked) {
+      sepUpdateGenButtonState();
+      alert('Confirme a opção "Gerar separação sem vínculo escolar" antes de continuar.');
+      return;
+    }
+  }
+  var selectedSchoolList = sepGetSelectedSchoolList();
+
   var editedItems = orgGetBudgetPreviewItems();
   var budget = Object.assign({}, overlay._budgetData, { items: editedItems.length > 0 ? editedItems : overlay._budgetData.items });
 
@@ -13291,7 +13443,7 @@ function sepGenerateSepSheet() {
     totalAprovado: totalAprovadoStr
   });
 
-  var sheetHtml = _sepSheetHtml(approvedBudget);
+  var sheetHtml = _sepSheetHtml(approvedBudget, selectedSchoolList);
   _openPrintOverlay(sheetHtml, "ssl-sep-print-overlay");
 }
 
