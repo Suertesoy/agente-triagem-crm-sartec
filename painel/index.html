@@ -12332,22 +12332,42 @@ function _sslParseItems(block, startMarker, endMarker) {
     if (ei !== -1) section = section.slice(0, ei);
   }
   const items = [];
-  let cur = null;
+  // Qtd. só conta quando vier em formato claro "Nx Item" — números soltos no
+  // nome do item (ex: "100 folhas de sulfite", "Régua de 30 cm") não viram qtd.
+  const qtyRe = /^[^\d]*(\d{1,3})\s*[xX]\s+(.+)/;
+  // Linhas de observação conhecidas sobre o item anterior (não são produto novo).
+  const obsPrefixRe = /^(Preferência do cliente|Sugestão da escola)\s*:\s*/i;
+
   for (const line of section.split("\n")) {
-    const t = line.trim();
+    const t = line.trim().replace(/^\*+|\*+$/g, "").trim();
     if (!t) continue;
-    const m = t.match(/^[^\d]*(\d+)\s*[xX]\s+(.+)/);
-    if (m) {
-      if (cur) items.push(cur);
-      cur = { qty: m[1], name: m[2].trim(), obs: [] };
-    } else if (cur) {
+
+    // Cabeçalho de seção (ex: "Material de Artes:", "Uso diário:") — não é
+    // produto: vira uma linha de seção própria, sem qtd. e sem virar
+    // observação do item anterior/seguinte.
+    if (/:$/.test(t) && t.length <= 60 && !qtyRe.test(t)) {
+      items.push({ qty: "", name: t.replace(/:$/, "").trim(), obs: [], isSection: true });
+      continue;
+    }
+
+    const lastItem = items[items.length - 1];
+    if (obsPrefixRe.test(t) && lastItem && !lastItem.isSection) {
       const obs = t
         .replace(/^Preferência do cliente:\s*/i, "preferência: ")
         .replace(/^Sugestão da escola:\s*/i, "sugestão da escola: ");
-      cur.obs.push(obs);
+      lastItem.obs.push(obs);
+      continue;
+    }
+
+    const m = t.match(qtyRe);
+    if (m) {
+      items.push({ qty: m[1], name: m[2].trim(), obs: [] });
+    } else {
+      // Sem "Nx" explícito — não inventar quantidade: item próprio com qtd. 1,
+      // preservando números internos do nome (ex: "100 folhas de sulfite").
+      items.push({ qty: "1", name: t, obs: [] });
     }
   }
-  if (cur) items.push(cur);
   return items;
 }
 
@@ -12365,11 +12385,13 @@ function parseSiteSchoolList(content) {
   if (wppM1) result.whatsapp = wppM1[1].trim();
   else if (wppM2) result.whatsapp = wppM2[1].trim().replace(/^\*+|\*+$/g,"").trim();
 
-  const blocks = content.split(/(?=\*Lista\s+\d+\*)/i);
+  // Cabeçalho da lista pode vir como "*Lista 1*" ou "*Lista 1 · Nome*" — o
+  // fechamento do "*" não é imediato ao número, por isso [^\n*]* antes dele.
+  const blocks = content.split(/(?=\*Lista\s+\d+[^\n*]*\*)/i);
 
   for (const block of blocks) {
-    if (!/^\*Lista\s+\d+\*/i.test(block.trim())) continue;
-    const listNumM = block.match(/^\*Lista\s+(\d+)\*/i);
+    if (!/^\*Lista\s+\d+[^\n*]*\*/i.test(block.trim())) continue;
+    const listNumM = block.match(/^\*Lista\s+(\d+)[^\n*]*\*/i);
     const listNum  = listNumM ? parseInt(listNumM[1]) : result.lists.length + 1;
     const alunoNomeM = block.match(/^\*Lista\s+\d+\s*[·\-\u2013]\s*([^*\n]+)\*/i);
 
@@ -12396,7 +12418,7 @@ function parseSiteSchoolList(content) {
     for (const line of content.split("\n")) {
       const t = line.trim();
       if (!t) continue;
-      const m = t.match(/^[^\d]*(\d+)\s*[xX]\s+(.+)/);
+      const m = t.match(/^[^\d]*(\d{1,3})\s*[xX]\s+(.+)/);
       if (m) fallbackItems.push({ qty: m[1], name: m[2].trim(), obs: [] });
     }
     result.lists.push({ listNum: 1, escola: "", anoSerie: "", segmento: "", anoLetivo: "", alunoNome: "", prefCor: "", obsCorModelo: "", regaCor: "", prefOrcamento: "", items: fallbackItems, naoQuero: [] });
@@ -12535,6 +12557,10 @@ function _sslPrintSheetHtml(parsed, lst, isLast, receivedAt) {
     itemRows = '<tr><td colspan="3" style="font-style:italic;color:#888;padding:7px;">Nenhum item na lista</td></tr>';
   } else {
     for (const item of lst.items) {
+      if (item.isSection) {
+        itemRows += '<tr><td colspan="3" style="font-weight:700;background:#eef1fa;padding:5px 7px;">' + _esc(item.name) + "</td></tr>";
+        continue;
+      }
       const obs = item.obs.length > 0 ? _esc(item.obs.join("; ")) : "";
       itemRows += "<tr>" +
         '<td style="width:42px;text-align:center;">' + _esc(item.qty) + "</td>" +
@@ -12556,13 +12582,9 @@ function _sslPrintSheetHtml(parsed, lst, isLast, receivedAt) {
 
   const alunoLabel = _esc(lst.alunoNome || ("Lista " + lst.listNum));
 
-  const orientBlock = (lst.prefCor || lst.obsCorModelo || lst.regaCor) ?
-    '<div class="ps-orient">' +
-    '<div class="ps-orient-ttl">Orientações de cor e modelo</div>' +
-    (lst.prefCor      ? '<div class="ps-orient-row"><strong>Preferência de cor:</strong> ' + _esc(lst.prefCor) + "</div>" : "") +
-    (lst.obsCorModelo ? '<div class="ps-orient-row"><strong>Observações sobre cores/modelos:</strong> ' + _esc(lst.obsCorModelo) + "</div>" : "") +
-    (lst.regaCor      ? '<div class="ps-orient-row"><strong>Regra:</strong> ' + _esc(lst.regaCor) + "</div>" : "") +
-    "</div>" : "";
+  const regraBlock = lst.regaCor
+    ? '<div class="ps-orient"><div class="ps-orient-row"><strong>Regra de cor:</strong> ' + _esc(lst.regaCor) + "</div></div>"
+    : "";
 
   const nqBlock = lst.naoQuero.length > 0 ?
     '<div class="ps-noquero">' +
@@ -12578,18 +12600,21 @@ function _sslPrintSheetHtml(parsed, lst, isLast, receivedAt) {
     '<div class="ps-hdr-note">Arquivo de apoio para revisar os itens recebidos antes de lançar o orçamento no sistema da loja.</div>' +
     '<div class="ps-hdr-badge">Etapa 1 — Organização para orçamento</div>' +
     "</div>" +
+    '<div class="ps-sec-ttl">Dados da lista escolar</div>' +
     '<div class="ps-fields">' +
+    '<div class="ps-field"><span class="ps-lbl">Aluno/Lista:</span> ' + alunoLabel + "</div>" +
     (parsed.clientName ? '<div class="ps-field"><span class="ps-lbl">Cliente:</span> ' + _esc(parsed.clientName) + "</div>" : "") +
     (parsed.whatsapp   ? '<div class="ps-field"><span class="ps-lbl">WhatsApp:</span> ' + _esc(parsed.whatsapp) + "</div>" : "") +
-    '<div class="ps-field"><span class="ps-lbl">Aluno/Lista:</span> ' + alunoLabel + "</div>" +
     (lst.escola    ? '<div class="ps-field"><span class="ps-lbl">Escola:</span> ' + _esc(lst.escola) + "</div>" : "") +
     (lst.anoSerie  ? '<div class="ps-field"><span class="ps-lbl">Ano/Série:</span> ' + _esc(lst.anoSerie) + "</div>" : "") +
     (lst.segmento  ? '<div class="ps-field"><span class="ps-lbl">Segmento:</span> ' + _esc(lst.segmento) + "</div>" : "") +
     (lst.anoLetivo ? '<div class="ps-field"><span class="ps-lbl">Ano letivo:</span> ' + _esc(lst.anoLetivo) + "</div>" : "") +
-    (lst.prefOrcamento ? '<div class="ps-field-full"><span class="ps-lbl">Critério para orçamento:</span> ' + _esc(lst.prefOrcamento) + "</div>" : "") +
+    (lst.prefCor   ? '<div class="ps-field-full"><span class="ps-lbl">Preferências:</span> ' + _esc(lst.prefCor) + "</div>" : "") +
+    (lst.obsCorModelo ? '<div class="ps-field-full"><span class="ps-lbl">Observações:</span> ' + _esc(lst.obsCorModelo) + "</div>" : "") +
+    (lst.prefOrcamento ? '<div class="ps-field-full"><span class="ps-lbl">Critério do orçamento:</span> ' + _esc(lst.prefOrcamento) + "</div>" : "") +
     (receivedAt        ? '<div class="ps-field-full"><span class="ps-lbl">Recebido em:</span> ' + _esc(receivedAt) + "</div>" : "") +
     "</div>" +
-    orientBlock +
+    regraBlock +
     '<div class="ps-sec-ttl">Itens da lista (' + lst.items.length + " " + (lst.items.length === 1 ? "item" : "itens") + ")</div>" +
     '<table class="ps-tbl"><thead><tr>' +
     '<th style="width:42px;">Qtd.</th><th>Item</th><th style="width:180px;">Observações</th>' +
@@ -12713,16 +12738,20 @@ function openSchoolListOrganize(content, msg) {
   allLists.forEach(function(lst, listIdx) {
     var alunoLabel = lst.alunoNome || ("Lista " + lst.listNum);
 
-    var orientHtml = (lst.prefCor || lst.obsCorModelo || lst.regaCor) ?
-      '<div class="org-orient">' +
-      '<div class="org-orient-ttl">Orientações de cor e modelo</div>' +
-      (lst.prefCor      ? '<div class="org-orient-row"><strong>Preferência de cor:</strong> ' + _esc(lst.prefCor) + "</div>" : "") +
-      (lst.obsCorModelo ? '<div class="org-orient-row"><strong>Observações:</strong> ' + _esc(lst.obsCorModelo) + "</div>" : "") +
-      (lst.regaCor      ? '<div class="org-orient-row"><strong>Regra:</strong> ' + _esc(lst.regaCor) + "</div>" : "") +
-      "</div>" : "";
+    var regraHtml = lst.regaCor
+      ? '<div class="org-orient" style="margin-top:-4px;"><div class="org-orient-row"><strong>Regra de cor:</strong> ' + _esc(lst.regaCor) + "</div></div>"
+      : "";
 
     var rowsHtml = "";
     lst.items.forEach(function(item, rowIdx) {
+      if (item.isSection) {
+        rowsHtml +=
+          '<tr data-list="' + listIdx + '" data-row="' + rowIdx + '" data-section="true">' +
+          '<td colspan="3" style="background:#eef1fa;font-weight:700;color:#1a2a5e;padding:6px 8px;font-size:.82rem;">' + _esc(item.name) + '</td>' +
+          '<td style="width:36px;text-align:center;"><button class="org-rm-row" onclick="orgRemoveRow(this)" title="Remover seção">&#215;</button></td>' +
+          "</tr>";
+        return;
+      }
       rowsHtml +=
         '<tr data-list="' + listIdx + '" data-row="' + rowIdx + '">' +
         '<td style="width:58px;"><input type="number" min="1" max="9999" value="' + _esc(item.qty) + '" class="org-item-qty" /></td>' +
@@ -12751,6 +12780,7 @@ function openSchoolListOrganize(content, msg) {
     listsHtml +=
       '<div class="org-list-section" data-list-idx="' + listIdx + '">' +
       listTitle +
+      '<div style="font-size:.8rem;font-weight:700;color:#374151;margin-bottom:6px;">Dados da lista escolar</div>' +
       '<div class="org-fields-grid">' +
       (parsed.clientName ? '<div class="org-field"><span class="org-field-lbl">Cliente:</span><span class="org-field-val">' + _esc(parsed.clientName) + "</span></div>" : "") +
       (parsed.whatsapp   ? '<div class="org-field"><span class="org-field-lbl">WhatsApp:</span><span class="org-field-val">' + _esc(parsed.whatsapp) + "</span></div>" : "") +
@@ -12759,11 +12789,13 @@ function openSchoolListOrganize(content, msg) {
       (lst.anoSerie  ? '<div class="org-field"><span class="org-field-lbl">Ano/Série:</span><span class="org-field-val">' + _esc(lst.anoSerie) + "</span></div>" : "") +
       (lst.segmento  ? '<div class="org-field"><span class="org-field-lbl">Segmento:</span><span class="org-field-val">' + _esc(lst.segmento) + "</span></div>" : "") +
       (lst.anoLetivo ? '<div class="org-field"><span class="org-field-lbl">Ano letivo:</span><span class="org-field-val">' + _esc(lst.anoLetivo) + "</span></div>" : "") +
-      (lst.prefOrcamento ? '<div class="org-field org-field-full"><span class="org-field-lbl">Critério p/ orçamento:</span><span class="org-field-val">' + _esc(lst.prefOrcamento) + "</span></div>" : "") +
+      (lst.prefCor   ? '<div class="org-field org-field-full"><span class="org-field-lbl">Preferências:</span><span class="org-field-val">' + _esc(lst.prefCor) + "</span></div>" : "") +
+      (lst.obsCorModelo ? '<div class="org-field org-field-full"><span class="org-field-lbl">Observações:</span><span class="org-field-val">' + _esc(lst.obsCorModelo) + "</span></div>" : "") +
+      (lst.prefOrcamento ? '<div class="org-field org-field-full"><span class="org-field-lbl">Critério do orçamento:</span><span class="org-field-val">' + _esc(lst.prefOrcamento) + "</span></div>" : "") +
       (receivedAt        ? '<div class="org-field org-field-full"><span class="org-field-lbl">Recebido em:</span><span class="org-field-val">' + _esc(receivedAt) + "</span></div>" : "") +
       "</div>" +
-      orientHtml +
-      '<div style="font-size:.8rem;font-weight:700;color:#374151;margin-bottom:6px;">Itens da lista — editável antes de gerar</div>' +
+      regraHtml +
+      '<div style="font-size:.8rem;font-weight:700;color:#374151;margin-bottom:6px;margin-top:10px;">Itens da lista — editável antes de gerar</div>' +
       '<table class="org-tbl" id="org-tbl-' + listIdx + '">' +
       '<thead><tr><th style="width:58px;">Qtd.</th><th>Item</th><th style="width:200px;">Observações</th><th style="width:36px;"></th></tr></thead>' +
       '<tbody id="org-tbody-' + listIdx + '">' + rowsHtml + "</tbody>" +
@@ -12809,6 +12841,11 @@ function orgGetCurrentItems(listIdx) {
   var rows = tbody.querySelectorAll("tr");
   for (var i = 0; i < rows.length; i++) {
     var tr = rows[i];
+    if (tr.dataset.section === "true") {
+      var label = (tr.querySelector("td") || {}).textContent || "";
+      if (label.trim()) items.push({ qty: "", name: label.trim(), obs: [], isSection: true });
+      continue;
+    }
     var qty  = (tr.querySelector(".org-item-qty")  || {}).value || "1";
     var name = (tr.querySelector(".org-item-name") || {}).value || "";
     var obs  = (tr.querySelector(".org-item-obs")  || {}).value || "";
