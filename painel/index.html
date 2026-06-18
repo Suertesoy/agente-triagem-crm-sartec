@@ -13426,7 +13426,7 @@ function _openPrintOverlay(html, id) {
 
 // ── Compatibilidade legada ──────────────────────────────────────────────────
 function openSchoolListPrint(content, msg) { openSchoolListOrganize(content, msg); }
-function openSeparationSheet(pdfText)     { orgReadBudget(); }
+function openSeparationSheet(msg)         { openBudgetSeparationModal(msg); }
 // ── alias legado de orgPrintList → orgGenerateOrgFile
 function orgPrintList() { orgGenerateOrgFile(); }
 
