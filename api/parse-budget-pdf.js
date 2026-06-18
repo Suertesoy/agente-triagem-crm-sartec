@@ -1,76 +1,108 @@
 // ============================================================
 // Sartec Papelaria — Parser de orçamento via PDF/Texto com IA
-// POST /api/parse-budget-pdf  { pdfBase64, extractedText, pdfUrl }
+// POST /api/parse-budget-pdf
+//   { mediaStorageKey, messageId, phone }   → preferencial: PDF no storage R2
+//   { messageId, phone }                    → backend localiza a mensagem/storageKey no histórico
+//   { extractedText, messageId?, phone? }   → texto já extraído no navegador (pdf.js)
+//   { pdfBase64, messageId?, phone? }       → fallback legado, PDF inline em base64
+//
+// Cache leve: quando messageId+phone são informados, o JSON estruturado é
+// salvo no Redis (sartec:budget_draft:{phone}:{messageId}) e reaproveitado
+// em cliques futuros — evita reler o PDF e rechamar a IA para a mesma mensagem.
 // ============================================================
 
 import Anthropic from "@anthropic-ai/sdk";
+import Redis from "ioredis";
+import { downloadMedia } from "./media-storage.js";
 
-// Aceita apenas URLs do nosso próprio storage R2 (mesma fonte usada pelos
-// botões "Visualizar"/"Baixar" do painel) — evita SSRF para hosts arbitrários.
-function isAllowedMediaUrl(rawUrl) {
+let redisClient = null;
+
+function getRedis() {
+  if (!redisClient) {
+    redisClient = new Redis(process.env.REDIS_URL, {
+      connectTimeout: 5000,
+      maxRetriesPerRequest: 2,
+    });
+    redisClient.on("error", (err) => console.error("[Redis/parse-budget-pdf] ❌", err.message));
+  }
+  return redisClient;
+}
+
+const BUDGET_DRAFT_TTL = 60 * 60 * 24 * 60; // 60 dias — rascunho leve, não o PDF
+
+function budgetDraftKey(phone, messageId) {
+  return `sartec:budget_draft:${phone}:${messageId}`;
+}
+
+async function getCachedBudget(phone, messageId) {
+  if (!phone || !messageId) return null;
   try {
-    const u = new URL(rawUrl);
-    if (u.protocol !== "https:") return false;
-    const r2Endpoint = process.env.R2_ENDPOINT ? new URL(process.env.R2_ENDPOINT).hostname : null;
-    if (r2Endpoint && u.hostname === r2Endpoint) return true;
-    return /\.r2\.cloudflarestorage\.com$/.test(u.hostname);
-  } catch (_e) {
-    return false;
+    const raw = await getRedis().get(budgetDraftKey(phone, messageId));
+    if (!raw) return null;
+    const cached = JSON.parse(raw);
+    return cached?.budget || null;
+  } catch (err) {
+    console.warn("[parse-budget-pdf] ⚠️ leitura de cache falhou:", err.message);
+    return null;
   }
 }
 
-export default async function handler(req, res) {
-  if (req.method !== "POST") {
-    return res.status(405).json({ error: "Method Not Allowed" });
-  }
-
-  let { pdfBase64, extractedText, pdfUrl } = req.body || {};
-
-  if (!pdfBase64 && !extractedText && !pdfUrl) {
-    return res.status(400).json({ error: "Parâmetros inválidos. Envie pdfBase64, extractedText ou pdfUrl." });
-  }
-
-  if (!pdfBase64 && !extractedText && pdfUrl) {
-    if (!isAllowedMediaUrl(pdfUrl)) {
-      return res.status(400).json({ error: "URL de mídia não permitida." });
-    }
-    try {
-      const mediaRes = await fetch(pdfUrl);
-      if (!mediaRes.ok) throw new Error(`HTTP ${mediaRes.status}`);
-      const arrayBuffer = await mediaRes.arrayBuffer();
-      pdfBase64 = Buffer.from(arrayBuffer).toString("base64");
-    } catch (fetchErr) {
-      console.error("[parse-budget-pdf] ❌ Erro ao buscar PDF via pdfUrl:", fetchErr);
-      return res.status(502).json({ error: "Não foi possível baixar o PDF da fonte do painel.", details: fetchErr.message });
-    }
-  }
-
-  const apiKey = process.env.ANTHROPIC_API_KEY;
-  if (!apiKey) {
-    return res.status(500).json({ error: "Chave ANTHROPIC_API_KEY não configurada no servidor." });
-  }
-
-  const anthropic = new Anthropic({ apiKey });
-
+async function saveCachedBudget(phone, messageId, budget) {
+  if (!phone || !messageId) return;
   try {
-    let content = [];
+    await getRedis().set(
+      budgetDraftKey(phone, messageId),
+      JSON.stringify({ sourceMessageId: messageId, parsedAt: new Date().toISOString(), budget }),
+      "EX", BUDGET_DRAFT_TTL
+    );
+  } catch (err) {
+    console.warn("[parse-budget-pdf] ⚠️ gravação de cache falhou:", err.message);
+  }
+}
 
-    if (extractedText) {
-      content.push({
-        type: "text",
-        text: `Extraia os dados estruturados de orçamento do seguinte texto extraído de um PDF:
+// Localiza a mensagem no histórico (sessão ativa) pelo metaMessageId e retorna seu mediaStorageKey.
+async function findStorageKeyByMessage(phone, messageId) {
+  if (!phone || !messageId) return null;
+  try {
+    const raw = await getRedis().get(`sartec:${phone}`);
+    if (!raw) return null;
+    const session = JSON.parse(raw);
+    const msg = (session.history || []).find((m) => m.metaMessageId === messageId);
+    return msg?.mediaStorageKey || null;
+  } catch (err) {
+    console.warn("[parse-budget-pdf] ⚠️ busca da mensagem no histórico falhou:", err.message);
+    return null;
+  }
+}
 
----
-${extractedText}
----
+const FORMAT_GUIDE = `O texto de orçamentos da loja pode aparecer em dois formatos diferentes — reconheça ambos:
+
+1) Em linha — código, descrição, quantidade, valor unitário e total na mesma linha:
+   "9999 COPO 200ML COPAZA TRANSP C/100 4 19,68 78,72"
+   → code=9999, description="COPO 200ML COPAZA TRANSP C/100", quantity=4, unitValue=19,68, total=78,72
+
+2) Quebrado por coluna — cada campo do item em uma linha separada, sempre na ordem
+   código, descrição, quantidade, valor unitário, total:
+   "9999"
+   "COPO 200ML COPAZA TRANSP C/100"
+   "4"
+   "19,68"
+   "78,72"
+   → mesma interpretação do exemplo anterior.`;
+
+function buildPrompt(isPdfDocument) {
+  const sourceLabel = isPdfDocument ? "deste PDF de orçamento" : "do seguinte texto extraído de um PDF";
+  return `Extraia os dados estruturados de orçamento ${sourceLabel}.
+
+${FORMAT_GUIDE}
 
 Instruções importantes:
-1. Extraia APENAS o que aparece no texto, sem inventar produtos, códigos, quantidades, valores ou totais.
-2. Se algum campo (como endereço, telefones, vendedor, etc.) não for encontrado, retorne string vazia.
-3. Se algum item estiver ambíguo ou necessitar de revisão (por exemplo, informações incompletas ou truncadas), marque o item correspondente adicionando "needsReview": true.
+1. Extraia APENAS o que aparece no documento, sem inventar produtos, códigos, quantidades, valores ou totais.
+2. Se algum campo (endereço, telefones, vendedor, etc.) não for encontrado, retorne string vazia.
+3. Se algum item estiver ambíguo ou incompleto (ex: truncado, valores que não fecham, descrição cortada), marque-o com "needsReview": true.
 4. Para cada item, extraia:
-   - code: Código do produto (normalmente o primeiro bloco numérico da linha).
-   - description: Descrição do produto (tudo entre o código e a quantidade).
+   - code: Código do produto (normalmente o primeiro bloco numérico do item).
+   - description: Descrição do produto.
    - quantity: Quantidade do produto.
    - unitValue: Valor unitário do produto.
    - total: Valor total do produto.
@@ -93,96 +125,89 @@ Retorne um objeto JSON exatamente no seguinte formato:
       "quantity": "...",
       "unitValue": "...",
       "total": "...",
-      "approved": true
+      "approved": true,
+      "needsReview": false
     }
   ]
 }
 
-Responda APENAS com o JSON válido, sem qualquer texto explicativo ou marcação de bloco de código markdown.`
-      });
-    } else {
-      // PDF base64
-      content.push(
-        {
-          type: "document",
-          source: {
-            type: "base64",
-            media_type: "application/pdf",
-            data: pdfBase64
-          }
-        },
-        {
-          type: "text",
-          text: `Extraia os dados estruturados deste PDF de orçamento.
-
-Instruções importantes:
-1. Extraia APENAS o que aparece no PDF, sem inventar produtos, códigos, quantidades, valores ou totais.
-2. Se algum campo não for encontrado, retorne string vazia.
-3. Se algum item estiver ambíguo ou necessitar de revisão, adicione "needsReview": true nele.
-4. Para cada item, extraia:
-   - code: Código do produto.
-   - description: Descrição do produto.
-   - quantity: Quantidade.
-   - unitValue: Valor unitário.
-   - total: Valor total.
-   - approved: true.
-
-Retorne um objeto JSON exatamente no seguinte formato:
-{
-  "number": "número do orçamento",
-  "date": "data",
-  "client": "cliente",
-  "address": "endereço",
-  "phones": "telefones",
-  "seller": "vendedor",
-  "totalProducts": "total de produtos",
-  "billedTotal": "total faturado",
-  "items": [
-    {
-      "code": "...",
-      "description": "...",
-      "quantity": "...",
-      "unitValue": "...",
-      "total": "...",
-      "approved": true
-    }
-  ]
+Responda APENAS com o JSON válido, sem qualquer texto explicativo ou marcação de bloco de código markdown.`;
 }
 
-Responda APENAS com o JSON válido, sem qualquer texto explicativo ou marcação de bloco de código markdown.`
-        }
-      );
+async function parseWithAI({ pdfBase64, extractedText }) {
+  const apiKey = process.env.ANTHROPIC_API_KEY;
+  if (!apiKey) {
+    throw Object.assign(new Error("Chave ANTHROPIC_API_KEY não configurada no servidor."), { statusCode: 500 });
+  }
+
+  const anthropic = new Anthropic({ apiKey });
+  const content = extractedText
+    ? [{ type: "text", text: `${buildPrompt(false)}\n\n---\n${extractedText}\n---` }]
+    : [
+        { type: "document", source: { type: "base64", media_type: "application/pdf", data: pdfBase64 } },
+        { type: "text", text: buildPrompt(true) },
+      ];
+
+  const response = await anthropic.messages.create({
+    model: "claude-3-5-sonnet-20241022",
+    max_tokens: 4000,
+    system: "Você é um assistente especializado em extração de dados estruturados de PDFs e textos de orçamentos de papelaria. Você deve retornar estritamente um JSON válido no formato solicitado. Não adicione observações, explicações ou blocos de código markdown como ```json.",
+    messages: [{ role: "user", content }],
+  });
+
+  const replyText = response.content[0]?.text || "";
+  let cleanJsonStr = replyText.trim();
+  if (cleanJsonStr.startsWith("```")) {
+    cleanJsonStr = cleanJsonStr.replace(/^```(json)?/, "").replace(/```$/, "").trim();
+  }
+  return JSON.parse(cleanJsonStr);
+}
+
+export default async function handler(req, res) {
+  if (req.method !== "POST") {
+    return res.status(405).json({ error: "Method Not Allowed" });
+  }
+
+  const { mediaStorageKey, messageId, phone, pdfBase64: pdfBase64In, extractedText } = req.body || {};
+  let pdfBase64 = pdfBase64In;
+
+  // 1. Cache leve — mesma mensagem já processada antes: nem reler o PDF nem chamar IA de novo.
+  if (messageId && phone) {
+    const cached = await getCachedBudget(phone, messageId);
+    if (cached) {
+      console.log(`[parse-budget-pdf] cache hit messageId=${messageId}`);
+      return res.status(200).json({ success: true, budget: cached, cached: true });
     }
+  }
 
-    const response = await anthropic.messages.create({
-      model: "claude-3-5-sonnet-20241022",
-      max_tokens: 4000,
-      system: "Você é um assistente especializado em extração de dados estruturados de PDFs e textos de orçamentos de papelaria. Você deve retornar estritamente um JSON válido no formato solicitado. Não adicione observações, explicações ou blocos de código markdown como ```json.",
-      messages: [
-        {
-          role: "user",
-          content: content
-        }
-      ]
-    });
+  // 2. Resolve a fonte do PDF — preferência: mediaStorageKey explícito > localizar pela mensagem.
+  let resolvedStorageKey = mediaStorageKey || null;
+  if (!resolvedStorageKey && !pdfBase64 && !extractedText && messageId && phone) {
+    resolvedStorageKey = await findStorageKeyByMessage(phone, messageId);
+  }
 
-    const replyText = response.content[0]?.text || "";
-    let cleanJsonStr = replyText.trim();
-    
-    // Limpeza de blocos markdown ```json ... ``` se existirem
-    if (cleanJsonStr.startsWith("```")) {
-      cleanJsonStr = cleanJsonStr.replace(/^```(json)?/, "").replace(/```$/, "").trim();
+  if (resolvedStorageKey && !pdfBase64 && !extractedText) {
+    try {
+      const buffer = await downloadMedia(resolvedStorageKey);
+      pdfBase64 = buffer.toString("base64");
+    } catch (downloadErr) {
+      console.error("[parse-budget-pdf] ❌ Erro ao buscar PDF no storage:", downloadErr);
+      return res.status(502).json({ error: "Não foi possível buscar o PDF no storage do painel.", details: downloadErr.message });
     }
+  }
 
-    const budget = JSON.parse(cleanJsonStr);
+  if (!pdfBase64 && !extractedText) {
+    return res.status(400).json({ error: "Parâmetros inválidos. Envie mediaStorageKey, messageId+phone, pdfBase64 ou extractedText." });
+  }
 
-    return res.status(200).json({
-      success: true,
-      budget: budget
-    });
+  try {
+    const budget = await parseWithAI({ pdfBase64, extractedText });
 
+    if (messageId && phone) await saveCachedBudget(phone, messageId, budget);
+
+    return res.status(200).json({ success: true, budget });
   } catch (err) {
     console.error("[parse-budget-pdf] ❌ Erro ao processar com IA:", err);
-    return res.status(500).json({ error: "Erro ao ler PDF de orçamento com IA", details: err.message });
+    return res.status(err.statusCode || 500).json({ error: "Erro ao ler PDF de orçamento com IA", details: err.message });
   }
 }

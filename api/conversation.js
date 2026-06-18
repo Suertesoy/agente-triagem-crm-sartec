@@ -186,6 +186,9 @@ export default async function handler(req, res) {
         item.mediaType     = mediaType || m.mediaType;
         item.mediaMimeType = mediaMimeType;
         if (mediaFilename) item.mediaFilename = mediaFilename;
+        // Referência leve do objeto no R2 — permite que o painel peça ao backend
+        // para buscar/processar o PDF (ex: separação) sem depender da URL presigned.
+        item.mediaStorageKey = m.mediaStorageKey;
         try {
           item.mediaUrl = await getMediaUrl(m.mediaStorageKey, 86400);
         } catch (_presignErr) {

@@ -141,6 +141,26 @@ export async function getMediaUrl(storageKey, expiresIn = 3600) {
 }
 
 /**
+ * Baixa um objeto do R2 direto pelo backend (sem URL presigned/CORS).
+ * Usado pelo parser de orçamento para ler o PDF enviado pelo atendente.
+ *
+ * @param {string} storageKey  chave do objeto (deve começar com "media/")
+ * @returns {Promise<Buffer>}
+ */
+export async function downloadMedia(storageKey) {
+  if (!storageKey || !String(storageKey).startsWith("media/")) {
+    throw new Error("storageKey inválida — deve começar com media/");
+  }
+  const result = await getS3().send(new GetObjectCommand({
+    Bucket: process.env.R2_BUCKET,
+    Key:    storageKey,
+  }));
+  const chunks = [];
+  for await (const chunk of result.Body) chunks.push(chunk);
+  return Buffer.concat(chunks);
+}
+
+/**
  * Apaga um objeto do Cloudflare R2.
  *
  * @param {string} storageKey  chave do objeto (deve começar com "media/")

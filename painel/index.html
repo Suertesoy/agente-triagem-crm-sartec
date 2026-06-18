@@ -8461,7 +8461,8 @@ function appendBubble(container, msg, optimistic = false, history = null, histor
     _sepBtn.className = "btn-organizar-lista";
     _sepBtn.innerHTML = "&#128203; Organizar separação";
     _sepBtn.title = "Visualizar e organizar a separação a partir do orçamento enviado";
-    _sepBtn.onclick = (e) => { e.stopPropagation(); openBudgetFromSentPdf(msg); };
+    const _sepPhone = container.id === "modal-messages" ? openModalPhone : openConvsPhone;
+    _sepBtn.onclick = (e) => { e.stopPropagation(); openBudgetFromSentPdf(msg, _sepPhone); };
     _actRow.appendChild(_sepBtn);
     wrap.appendChild(_actRow);
   }
@@ -12909,7 +12910,8 @@ function normalizeBudget(budget) {
       qty: String(it.qty !== undefined ? it.qty : (it.quantity !== undefined ? it.quantity : "")),
       valorUnit: String(it.valorUnit !== undefined ? it.valorUnit : (it.unitValue !== undefined ? it.unitValue : "")),
       total: String(it.total !== undefined ? it.total : ""),
-      approved: it.approved !== false
+      approved: it.approved !== false,
+      needsReview: it.needsReview === true
     };
   });
 
@@ -12948,12 +12950,38 @@ function orgRemoveBudgetRow(btn) {
   if (tr) tr.remove();
 }
 
-// ── Fluxo de Orçamento Enviado para Separação ────────────────────────────────
-function openBudgetFromSentPdf(msg) {
-  openBudgetSeparationModal(msg);
+// Lê o estado atual da tabela editável de itens do orçamento (Etapa 3),
+// já refletindo edições/aprovação/remoção feitas pela atendente.
+function orgGetBudgetPreviewItems() {
+  var tbody = document.getElementById("bud-preview-tbody");
+  if (!tbody) return [];
+  var items = [];
+  tbody.querySelectorAll("tr").forEach(function(tr) {
+    var cod  = tr.querySelector(".bud-cod");
+    var desc = tr.querySelector(".bud-desc");
+    if (!cod && !desc) return; // linha de mensagem ("nenhum item reconhecido")
+    var approvedEl = tr.querySelector(".bud-approved");
+    var qty  = tr.querySelector(".bud-qty");
+    var vu   = tr.querySelector(".bud-vu");
+    var tot  = tr.querySelector(".bud-tot");
+    items.push({
+      codigo: cod ? cod.value.trim() : "",
+      descricao: desc ? desc.value.trim() : "",
+      qty: qty ? qty.value.trim() : "",
+      valorUnit: vu ? vu.value.trim() : "",
+      total: tot ? tot.value.trim() : "",
+      approved: approvedEl ? approvedEl.checked : true
+    });
+  });
+  return items;
 }
 
-function openBudgetSeparationModal(msg) {
+// ── Fluxo de Orçamento Enviado para Separação ────────────────────────────────
+function openBudgetFromSentPdf(msg, phone) {
+  openBudgetSeparationModal(msg, phone);
+}
+
+function openBudgetSeparationModal(msg, phone) {
   var prevModal = document.getElementById("ssl-sep-modal");
   if (prevModal) prevModal.remove();
 
@@ -13005,7 +13033,7 @@ function openBudgetSeparationModal(msg) {
 
   document.body.appendChild(overlay);
 
-  orgProcessMessagePdf(msg);
+  orgProcessMessagePdf(msg, phone);
 }
 
 // Mesma fonte usada pelos botões "Visualizar"/"Baixar": dados inline em base64
@@ -13031,9 +13059,9 @@ function orgGetArrayBufferFromBase64(base64Source) {
   });
 }
 
-// Envia o orçamento (texto, base64 ou a mesma URL do botão "Visualizar"/"Baixar")
-// para o backend processar com IA. A leitura de mediaUrl acontece no servidor
-// para evitar bloqueio de CORS ao buscar os bytes direto do navegador.
+// Envia ao backend a referência leve do orçamento (mediaStorageKey/messageId+phone,
+// com base64/texto como fallback legado) para processar com IA e cachear o resultado.
+// O backend busca o PDF no storage externo — o navegador nunca lê os bytes direto.
 function orgSendBudgetToBackend(payload, onFail) {
   fetch("/api/parse-budget-pdf", {
     method: "POST",
@@ -13052,38 +13080,55 @@ function orgSendBudgetToBackend(payload, onFail) {
   });
 }
 
-function orgProcessMessagePdf(msg) {
-  var base64Source = orgGetCleanBase64FromMsg(msg);
+function orgProcessMessagePdf(msg, phone) {
+  var messageId = msg.metaMessageId || null;
   var fallbackMsg = "Não consegui ler este PDF automaticamente. Tente colar o texto do orçamento manualmente.";
 
+  // Caminho principal: PDF vive no storage externo (R2) — o backend busca e processa,
+  // e cacheia o JSON estruturado associado a esta mensagem (messageId+phone).
+  if (msg.mediaStorageKey) {
+    orgSendBudgetToBackend({ mediaStorageKey: msg.mediaStorageKey, messageId: messageId, phone: phone || null }, function() {
+      sepHandleBudgetFailure(fallbackMsg);
+    });
+    return;
+  }
+
+  // Fallback legado: PDF ainda inline em base64 na própria mensagem (mediaData/mediaBase64).
+  var base64Source = orgGetCleanBase64FromMsg(msg);
   if (base64Source) {
     orgGetArrayBufferFromBase64(base64Source).then(function(buffer) {
       orgExtractTextFromPdf(buffer).then(function(extractedText) {
         var cleanText = (extractedText || "").trim();
         if (cleanText) {
-          orgSendBudgetToBackend({ extractedText: cleanText }, function() {
+          orgSendBudgetToBackend({ extractedText: cleanText, messageId: messageId, phone: phone || null }, function() {
             sepHandleBudgetSuccess(parseBudgetText(cleanText));
           });
         } else {
-          orgSendBudgetToBackend({ pdfBase64: base64Source }, function() {
+          orgSendBudgetToBackend({ pdfBase64: base64Source, messageId: messageId, phone: phone || null }, function() {
             sepHandleBudgetFailure(fallbackMsg);
           });
         }
       }).catch(function() {
-        orgSendBudgetToBackend({ pdfBase64: base64Source }, function() {
+        orgSendBudgetToBackend({ pdfBase64: base64Source, messageId: messageId, phone: phone || null }, function() {
           sepHandleBudgetFailure(fallbackMsg);
         });
       });
-    }).catch(function(err) {
-      sepHandleBudgetFailure("Não consegui carregar o arquivo PDF: " + err.message);
-    });
-  } else if (msg.mediaUrl) {
-    orgSendBudgetToBackend({ pdfUrl: msg.mediaUrl }, function() {
+    }).catch(function() {
       sepHandleBudgetFailure(fallbackMsg);
     });
-  } else {
-    sepHandleBudgetFailure("PDF do orçamento não foi localizado nesta mensagem.");
+    return;
   }
+
+  // Sem referência direta no front: deixa o backend localizar a mensagem no histórico
+  // (por phone+messageId) e resolver o storageKey a partir dela.
+  if (messageId && phone) {
+    orgSendBudgetToBackend({ messageId: messageId, phone: phone }, function() {
+      sepHandleBudgetFailure(fallbackMsg);
+    });
+    return;
+  }
+
+  sepHandleBudgetFailure("PDF do orçamento não foi localizado nesta mensagem.");
 }
 
 function sepHandleBudgetSuccess(budgetData) {
@@ -13106,11 +13151,12 @@ function sepHandleBudgetSuccess(budgetData) {
   if (hasItems) {
     budget.items.forEach(function(it, idx) {
       var approvedChecked = it.approved !== false ? "checked" : "";
+      var _needsReview = it.needsReview === true;
       editRows +=
-        '<tr>' +
+        '<tr' + (_needsReview ? ' style="background:#fffbeb;" title="Item ambíguo no PDF — confira antes de aprovar"' : '') + '>' +
         '<td style="width:36px;text-align:center;"><input type="checkbox" class="bud-approved" data-idx="' + idx + '" ' + approvedChecked + ' /></td>' +
         '<td style="width:70px;"><input type="text" class="bud-cod" data-idx="' + idx + '" value="' + _esc(it.codigo) + '" /></td>' +
-        '<td><input type="text" class="bud-desc" data-idx="' + idx + '" value="' + _esc(it.descricao) + '" /></td>' +
+        '<td>' + (_needsReview ? '<span style="color:#b45309;margin-right:3px;" title="Confira este item">&#9888;</span>' : '') + '<input type="text" class="bud-desc" data-idx="' + idx + '" value="' + _esc(it.descricao) + '" /></td>' +
         '<td style="width:42px;"><input type="text" class="bud-qty" data-idx="' + idx + '" value="' + _esc(it.qty) + '" /></td>' +
         '<td style="width:70px;"><input type="text" class="bud-vu" data-idx="' + idx + '" value="' + _esc(it.valorUnit) + '" /></td>' +
         '<td style="width:70px;"><input type="text" class="bud-tot" data-idx="' + idx + '" value="' + _esc(it.total) + '" /></td>' +
@@ -13126,8 +13172,9 @@ function sepHandleBudgetSuccess(budgetData) {
     (budget.numOrc   ? '<div class="org-field"><span class="org-field-lbl">Orçamento nº:</span><span class="org-field-val">' + _esc(budget.numOrc) + "</span></div>" : "") +
     (budget.data     ? '<div class="org-field"><span class="org-field-lbl">Data:</span><span class="org-field-val">' + _esc(budget.data) + "</span></div>" : "") +
     (budget.cliente  ? '<div class="org-field org-field-full"><span class="org-field-lbl">Cliente:</span><span class="org-field-val">' + _esc(budget.cliente) + "</span></div>" : "") +
+    (budget.telefones ? '<div class="org-field"><span class="org-field-lbl">Telefones:</span><span class="org-field-val">' + _esc(budget.telefones) + "</span></div>" : "") +
     (budget.vendedor ? '<div class="org-field"><span class="org-field-lbl">Vendedor:</span><span class="org-field-val">' + _esc(budget.vendedor) + "</span></div>" : "") +
-    (budget.totalProd ? '<div class="org-field"><span class="org-field-lbl">Total:</span><span class="org-field-val">R$ ' + _esc(budget.totalProd) + "</span></div>" : "") +
+    (budget.totalProd ? '<div class="org-field"><span class="org-field-lbl">Total do orçamento:</span><span class="org-field-val">R$ ' + _esc(budget.totalProd) + "</span></div>" : "") +
     "</div>";
 
   contentDiv.innerHTML =
@@ -13380,7 +13427,7 @@ function _openPrintOverlay(html, id) {
 
 // ── Compatibilidade legada ──────────────────────────────────────────────────
 function openSchoolListPrint(content, msg) { openSchoolListOrganize(content, msg); }
-function openSeparationSheet(msg)         { openBudgetSeparationModal(msg); }
+function openSeparationSheet(msg, phone)  { openBudgetSeparationModal(msg, phone); }
 // ── alias legado de orgPrintList → orgGenerateOrgFile
 function orgPrintList() { orgGenerateOrgFile(); }
 
