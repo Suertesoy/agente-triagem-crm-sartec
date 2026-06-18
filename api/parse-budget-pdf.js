@@ -1,19 +1,48 @@
 // ============================================================
 // Sartec Papelaria — Parser de orçamento via PDF/Texto com IA
-// POST /api/parse-budget-pdf  { pdfBase64, extractedText }
+// POST /api/parse-budget-pdf  { pdfBase64, extractedText, pdfUrl }
 // ============================================================
 
 import Anthropic from "@anthropic-ai/sdk";
+
+// Aceita apenas URLs do nosso próprio storage R2 (mesma fonte usada pelos
+// botões "Visualizar"/"Baixar" do painel) — evita SSRF para hosts arbitrários.
+function isAllowedMediaUrl(rawUrl) {
+  try {
+    const u = new URL(rawUrl);
+    if (u.protocol !== "https:") return false;
+    const r2Endpoint = process.env.R2_ENDPOINT ? new URL(process.env.R2_ENDPOINT).hostname : null;
+    if (r2Endpoint && u.hostname === r2Endpoint) return true;
+    return /\.r2\.cloudflarestorage\.com$/.test(u.hostname);
+  } catch (_e) {
+    return false;
+  }
+}
 
 export default async function handler(req, res) {
   if (req.method !== "POST") {
     return res.status(405).json({ error: "Method Not Allowed" });
   }
 
-  const { pdfBase64, extractedText } = req.body || {};
+  let { pdfBase64, extractedText, pdfUrl } = req.body || {};
 
-  if (!pdfBase64 && !extractedText) {
-    return res.status(400).json({ error: "Parâmetros inválidos. Envie pdfBase64 ou extractedText." });
+  if (!pdfBase64 && !extractedText && !pdfUrl) {
+    return res.status(400).json({ error: "Parâmetros inválidos. Envie pdfBase64, extractedText ou pdfUrl." });
+  }
+
+  if (!pdfBase64 && !extractedText && pdfUrl) {
+    if (!isAllowedMediaUrl(pdfUrl)) {
+      return res.status(400).json({ error: "URL de mídia não permitida." });
+    }
+    try {
+      const mediaRes = await fetch(pdfUrl);
+      if (!mediaRes.ok) throw new Error(`HTTP ${mediaRes.status}`);
+      const arrayBuffer = await mediaRes.arrayBuffer();
+      pdfBase64 = Buffer.from(arrayBuffer).toString("base64");
+    } catch (fetchErr) {
+      console.error("[parse-budget-pdf] ❌ Erro ao buscar PDF via pdfUrl:", fetchErr);
+      return res.status(502).json({ error: "Não foi possível baixar o PDF da fonte do painel.", details: fetchErr.message });
+    }
   }
 
   const apiKey = process.env.ANTHROPIC_API_KEY;

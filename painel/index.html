@@ -12980,10 +12980,7 @@ function openBudgetSeparationModal(msg) {
     // Error feedback
     '<div id="sep-budget-error" style="display:none; color:#ef4444; background:#fef2f2; border:1px solid #fee2e2; border-radius:6px; padding:10px; margin-bottom:12px; font-size:0.82rem;"></div>' +
 
-    // Textarea fallback (hidden by default)
-    '<div id="sep-fallback-toggle-area" style="text-align: right; margin-bottom: 8px; display:none;">' +
-    '  <a href="#" onclick="event.preventDefault(); sepToggleTextareaFallback()" style="font-size: 0.76rem; color: #0ea5e9; text-decoration: none; font-weight: 600;">[Ou colar texto do orçamento manualmente]</a>' +
-    '</div>' +
+    // Textarea fallback (aberto automaticamente quando a leitura automática falha)
     '<textarea id="sep-budget-textarea" class="org-budget-textarea" style="display:none;" placeholder="Cole aqui o texto do orçamento oficial (copie do sistema da loja ou do PDF)..."></textarea>' +
     '<div id="sep-fallback-actions" style="display:none; margin-top:8px; margin-bottom:12px;">' +
     '  <button class="org-modal-btn primary" style="font-size:.76rem;padding:6px 12px;" onclick="sepReadBudgetManual()">&#128270; Ler texto colado</button>' +
@@ -13011,131 +13008,82 @@ function openBudgetSeparationModal(msg) {
   orgProcessMessagePdf(msg);
 }
 
-function sepToggleTextareaFallback() {
-  var ta = document.getElementById("sep-budget-textarea");
-  var acts = document.getElementById("sep-fallback-actions");
-  if (!ta) return;
-  var isHidden = ta.style.display === "none";
-  ta.style.display = isHidden ? "block" : "none";
-  if (acts) acts.style.display = isHidden ? "block" : "none";
+// Mesma fonte usada pelos botões "Visualizar"/"Baixar": dados inline em base64
+// (mediaData / mediaBase64), quando presentes na própria mensagem.
+function orgGetCleanBase64FromMsg(msg) {
+  var base64Source = msg.mediaData || msg.mediaBase64 || null;
+  if (!base64Source) return null;
+  return base64Source.replace(/^data:application\/pdf;base64,/, "");
 }
 
-function orgGetArrayBufferFromMsg(msg) {
+function orgGetArrayBufferFromBase64(base64Source) {
   return new Promise(function(resolve, reject) {
-    if (msg.mediaData) {
-      try {
-        var byteCharacters = atob(msg.mediaData);
-        var byteNumbers = new Array(byteCharacters.length);
-        for (var i = 0; i < byteCharacters.length; i++) {
-          byteNumbers[i] = byteCharacters.charCodeAt(i);
-        }
-        var byteArray = new Uint8Array(byteNumbers);
-        resolve(byteArray.buffer);
-      } catch(e) {
-        reject(new Error("Erro ao decodificar base64 do PDF: " + e.message));
+    try {
+      var byteCharacters = atob(base64Source);
+      var byteNumbers = new Array(byteCharacters.length);
+      for (var i = 0; i < byteCharacters.length; i++) {
+        byteNumbers[i] = byteCharacters.charCodeAt(i);
       }
-    } else if (msg.mediaUrl) {
-      fetch(msg.mediaUrl).then(function(res) {
-        if (!res.ok) throw new Error("Erro de rede ao buscar PDF do link.");
-        return res.arrayBuffer();
-      }).then(resolve).catch(reject);
-    } else {
-      reject(new Error("PDF do orçamento não localizado na mensagem."));
+      resolve(new Uint8Array(byteNumbers).buffer);
+    } catch(e) {
+      reject(new Error("Erro ao decodificar base64 do PDF: " + e.message));
     }
   });
 }
 
-function orgProcessMessagePdf(msg) {
-  var loadingDiv = document.getElementById("sep-budget-loading");
-  var errorDiv = document.getElementById("sep-budget-error");
-  var fallbackToggle = document.getElementById("sep-fallback-toggle-area");
-
-  orgGetArrayBufferFromMsg(msg).then(function(buffer) {
-    orgExtractTextFromPdf(buffer).then(function(extractedText) {
-      var cleanText = (extractedText || "").trim();
-      if (cleanText) {
-        fetch("/api/parse-budget-pdf", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ extractedText: cleanText })
-        }).then(function(res) {
-          if (res.ok) {
-            res.json().then(function(data) {
-              if (data.success && data.budget) {
-                sepHandleBudgetSuccess(data.budget);
-              } else {
-                var localBudget = parseBudgetText(cleanText);
-                sepHandleBudgetSuccess(localBudget);
-              }
-            }).catch(function() {
-              var localBudget = parseBudgetText(cleanText);
-              sepHandleBudgetSuccess(localBudget);
-            });
-          } else {
-            var localBudget = parseBudgetText(cleanText);
-            sepHandleBudgetSuccess(localBudget);
-          }
-        }).catch(function() {
-          var localBudget = parseBudgetText(cleanText);
-          sepHandleBudgetSuccess(localBudget);
-        });
+// Envia o orçamento (texto, base64 ou a mesma URL do botão "Visualizar"/"Baixar")
+// para o backend processar com IA. A leitura de mediaUrl acontece no servidor
+// para evitar bloqueio de CORS ao buscar os bytes direto do navegador.
+function orgSendBudgetToBackend(payload, onFail) {
+  fetch("/api/parse-budget-pdf", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(payload)
+  }).then(function(res) {
+    return res.json().catch(function() { return null; }).then(function(data) {
+      if (res.ok && data && data.success && data.budget) {
+        sepHandleBudgetSuccess(data.budget);
       } else {
-        if (msg.mediaData) {
-          fetch("/api/parse-budget-pdf", {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ pdfBase64: msg.mediaData })
-          }).then(function(res) {
-            if (res.ok) {
-              res.json().then(function(data) {
-                if (data.success && data.budget) {
-                  sepHandleBudgetSuccess(data.budget);
-                } else {
-                  sepHandleBudgetFailure("Não consegui ler este PDF automaticamente. Tente colar o texto do orçamento manualmente.");
-                }
-              }).catch(function() {
-                sepHandleBudgetFailure("Não consegui ler este PDF automaticamente. Tente colar o texto do orçamento manualmente.");
-              });
-            } else {
-              sepHandleBudgetFailure("Não consegui ler este PDF automaticamente. Tente colar o texto do orçamento manualmente.");
-            }
-          }).catch(function() {
-            sepHandleBudgetFailure("Não consegui ler este PDF automaticamente. Tente colar o texto do orçamento manualmente.");
-          });
-        } else {
-          sepHandleBudgetFailure("PDF sem texto extraível e sem dados locais para análise visual.");
-        }
-      }
-    }).catch(function(err) {
-      if (msg.mediaData) {
-        fetch("/api/parse-budget-pdf", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ pdfBase64: msg.mediaData })
-        }).then(function(res) {
-          if (res.ok) {
-            res.json().then(function(data) {
-              if (data.success && data.budget) {
-                sepHandleBudgetSuccess(data.budget);
-              } else {
-                sepHandleBudgetFailure("Falha ao extrair texto do PDF. Tente colar o texto manualmente.");
-              }
-            }).catch(function() {
-              sepHandleBudgetFailure("Falha ao extrair texto do PDF. Tente colar o texto manualmente.");
-            });
-          } else {
-            sepHandleBudgetFailure("Falha ao extrair texto do PDF. Tente colar o texto manualmente.");
-          }
-        }).catch(function() {
-          sepHandleBudgetFailure("Falha ao extrair texto do PDF. Tente colar o texto manualmente.");
-        });
-      } else {
-        sepHandleBudgetFailure("Erro ao extrair conteúdo do PDF: " + err.message);
+        onFail();
       }
     });
-  }).catch(function(err) {
-    sepHandleBudgetFailure("Não consegui carregar o arquivo PDF: " + err.message);
+  }).catch(function() {
+    onFail();
   });
+}
+
+function orgProcessMessagePdf(msg) {
+  var base64Source = orgGetCleanBase64FromMsg(msg);
+  var fallbackMsg = "Não consegui ler este PDF automaticamente. Tente colar o texto do orçamento manualmente.";
+
+  if (base64Source) {
+    orgGetArrayBufferFromBase64(base64Source).then(function(buffer) {
+      orgExtractTextFromPdf(buffer).then(function(extractedText) {
+        var cleanText = (extractedText || "").trim();
+        if (cleanText) {
+          orgSendBudgetToBackend({ extractedText: cleanText }, function() {
+            sepHandleBudgetSuccess(parseBudgetText(cleanText));
+          });
+        } else {
+          orgSendBudgetToBackend({ pdfBase64: base64Source }, function() {
+            sepHandleBudgetFailure(fallbackMsg);
+          });
+        }
+      }).catch(function() {
+        orgSendBudgetToBackend({ pdfBase64: base64Source }, function() {
+          sepHandleBudgetFailure(fallbackMsg);
+        });
+      });
+    }).catch(function(err) {
+      sepHandleBudgetFailure("Não consegui carregar o arquivo PDF: " + err.message);
+    });
+  } else if (msg.mediaUrl) {
+    orgSendBudgetToBackend({ pdfUrl: msg.mediaUrl }, function() {
+      sepHandleBudgetFailure(fallbackMsg);
+    });
+  } else {
+    sepHandleBudgetFailure("PDF do orçamento não foi localizado nesta mensagem.");
+  }
 }
 
 function sepHandleBudgetSuccess(budgetData) {
@@ -13207,14 +13155,20 @@ function sepHandleBudgetSuccess(budgetData) {
 function sepHandleBudgetFailure(errMsg) {
   var loadingDiv = document.getElementById("sep-budget-loading");
   var errorDiv = document.getElementById("sep-budget-error");
-  var fallbackToggle = document.getElementById("sep-fallback-toggle-area");
+  var ta = document.getElementById("sep-budget-textarea");
+  var acts = document.getElementById("sep-fallback-actions");
+
+  if (errMsg) console.warn("[sepHandleBudgetFailure]", errMsg);
 
   if (loadingDiv) loadingDiv.style.display = "none";
   if (errorDiv) {
-    errorDiv.textContent = errMsg;
+    errorDiv.innerHTML =
+      '<div style="font-weight:700;margin-bottom:4px;">Não consegui ler o PDF automaticamente</div>' +
+      '<div>Você ainda pode colar abaixo o texto do orçamento ou usar Visualizar/Baixar para conferir o arquivo.</div>';
     errorDiv.style.display = "block";
   }
-  if (fallbackToggle) fallbackToggle.style.display = "block";
+  if (ta) ta.style.display = "block";
+  if (acts) acts.style.display = "block";
 }
 
 function sepReadBudgetManual() {
