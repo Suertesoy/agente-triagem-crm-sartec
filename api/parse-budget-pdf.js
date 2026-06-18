@@ -149,7 +149,7 @@ async function parseWithAI({ pdfBase64, extractedText }) {
       ];
 
   const response = await anthropic.messages.create({
-    model: "claude-3-5-sonnet-20241022",
+    model: "claude-sonnet-4-6",
     max_tokens: 4000,
     system: "Você é um assistente especializado em extração de dados estruturados de PDFs e textos de orçamentos de papelaria. Você deve retornar estritamente um JSON válido no formato solicitado. Não adicione observações, explicações ou blocos de código markdown como ```json.",
     messages: [{ role: "user", content }],
