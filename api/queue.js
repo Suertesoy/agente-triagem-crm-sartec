@@ -262,6 +262,10 @@ export default async function handler(req, res) {
         operationalSummary:  buildOperationalSummary(session),
         operationalDetails:  buildOperationalDetails(session),
         lastMessage:         lastMessage.substring(0, 200),
+        // Chave estável da última mensagem inbound do cliente (metaMessageId) —
+        // usada pelo painel para decidir notificação sem depender de messageCount.
+        // lastUserMessageAt (já exposto via computeWindowInfo) serve de fallback.
+        lastUserMsgId:       lastUserMsg?.metaMessageId || null,
         messageCount:   (session.history || []).length,
         priorityManual: session.priorityManual  || null,
         dataLimite:     session.dataLimite      || null,

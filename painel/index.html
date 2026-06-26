@@ -249,6 +249,18 @@
       transition: border-color .15s, color .15s;
     }
     .btn-introduce:hover { border-color: var(--brand-navy); color: var(--brand-navy); }
+    /* Linha "Me apresentar" full-width — só aparece no mobile (ver media query
+       ≤768px), onde o botão dentro do composer fica escondido para não disputar
+       espaço com o campo de digitação/Enviar. */
+    .mob-introduce-row { display: none; }
+    .mob-introduce-btn {
+      box-sizing: border-box;
+      width: 100%; padding: 8px 12px; border-radius: 8px;
+      border: 1px solid rgba(26,42,94,.25); background: rgba(26,42,94,.05);
+      color: var(--brand-navy); font-size: .82rem; font-weight: 600;
+      cursor: pointer; transition: background .12s, border-color .12s;
+    }
+    .mob-introduce-btn:active { background: rgba(26,42,94,.16); }
     .att-initial {
       display: inline-flex; align-items: center; justify-content: center;
       width: 17px; height: 17px; border-radius: 50%;
@@ -3939,6 +3951,7 @@
       .attendant-chip { padding:4px 5px; }
       .btn-camera { display:flex; }
       .btn-introduce { display:none; }
+      .mob-introduce-row { display:block; padding:6px 12px; flex-shrink:0; }
       .stats-strip, .tab-bar { display:none; }
       .view.active { display:flex;flex-direction:column; }
       #view-pf.active, #view-pj.active { height:calc(100dvh - 52px - 56px);overflow:hidden; }
@@ -5086,6 +5099,7 @@
 
       <div class="composer">
         <div class="active-attendant-bar hidden" id="modal-aa-bar"></div>
+        <div class="mob-introduce-row"><button class="mob-introduce-btn" onclick="introduceAttendant('modal')">Me apresentar</button></div>
         <!-- Lock da janela de 24h — aparece quando janela está fechada/aguardando -->
         <div class="composer-lock-bar" id="modal-composer-lock" style="display:none"></div>
         <div class="reply-bar" id="modal-reply-bar" style="display:none">
@@ -5385,24 +5399,93 @@ const pendingImages   = { modal: [], convs: [] };    // fila de até 10 imagens 
 const pendingDocuments = { modal: [], convs: [] };   // fila de PDFs para envio sequencial
 const _isSending      = { modal: false, convs: false }; // trava contra envio concorrente
 const _replyTarget  = { modal: null, convs: null };
-const _cardLastUserMsgAt   = {};       // phone → ISO do último lastUserMessageAt registrado
-const _cardUnreadCount     = {};       // phone → contador de msgs novas não lidas
-const _cardNewJustArrived  = new Set(); // phones com nova msg detectada neste tick
+const _cardUnreadCount    = {};        // phone → 0 ou 1 (há msg do cliente ainda não vista)
+const _cardLastSeenKey    = {};        // phone → última chave inbound processada nesta aba (memória)
+const _cardNewJustArrived = new Set(); // phones com nova msg detectada neste tick (som/flash/Notification)
 
-function processCardNewMsg(phone, lastUserMessageAt) {
-  if (!lastUserMessageAt) return _cardUnreadCount[phone] || 0;
-  if (_cardLastUserMsgAt[phone] === undefined) {
-    _cardLastUserMsgAt[phone] = lastUserMessageAt;
-    // Card novo de handoff/triagem: iniciar com badge 1 para chamar atenção
-    _cardUnreadCount[phone] = _newlyArrivedPhones.has(phone) ? 1 : 0;
-    return _cardUnreadCount[phone];
+// ╔══════════════════════════════════════════════════════════════╗
+// ║  NOTIFICAÇÃO — chave estável da última msg INBOUND do cliente ║
+// ╚══════════════════════════════════════════════════════════════╝
+// Nunca usa messageCount/history.length nem lastActivityAt isolado (resposta
+// humana também altera lastActivityAt) — só a identidade da própria mensagem
+// do cliente (role "user"), nunca de role "assistant"/bot/template.
+function _simpleHash(str) {
+  let h = 0;
+  const s = String(str || "");
+  for (let i = 0; i < s.length; i++) { h = (h * 31 + s.charCodeAt(i)) | 0; }
+  return h.toString(36);
+}
+
+// Chave a partir do payload resumido de /api/queue ou /api/conversations.
+// Preferência: metaMessageId (estável mesmo se a Meta reentregar o webhook).
+// Fallback: timestamp do cliente + hash do texto (nunca o messageCount).
+function lastInboundKeyFromConv(c) {
+  if (!c) return null;
+  if (c.lastUserMsgId) return c.lastUserMsgId;
+  if (!c.lastUserMessageAt) return null;
+  return `t_${c.lastUserMessageAt}_${_simpleHash(c.lastMessage || "")}`;
+}
+
+// Mesma lógica a partir do histórico completo (/api/conversation) — usada ao
+// abrir o chat, onde já temos cada mensagem com seu metaMessageId/createdAt.
+function lastInboundKeyFromHistory(history) {
+  for (let i = (history || []).length - 1; i >= 0; i--) {
+    const m = history[i];
+    if (m.role !== "user") continue;
+    if (m.metaMessageId) return m.metaMessageId;
+    const contentStr = typeof m.content === "string" ? m.content : JSON.stringify(m.content || "");
+    return `t_${m.createdAt || ""}_${_simpleHash(contentStr)}`;
   }
-  if (lastUserMessageAt > _cardLastUserMsgAt[phone]) {
-    _cardLastUserMsgAt[phone] = lastUserMessageAt;
-    _cardUnreadCount[phone]   = (_cardUnreadCount[phone] || 0) + 1;
+  return null;
+}
+
+// ── Persistência local (por atendente/navegador) da última msg do cliente já
+// vista/tratada por telefone — sobrevive a reload, troca de aba e re-poll. ──
+let _seenInboundByPhone = {};
+try { _seenInboundByPhone = JSON.parse(localStorage.getItem("sartec_seen_inbound") || "{}"); } catch {}
+
+function isInboundSeen(phone, key) {
+  if (!key) return true; // sem mensagem do cliente identificável — nada a notificar
+  return _seenInboundByPhone[phone] === key;
+}
+
+function markInboundSeen(phone, key) {
+  if (!phone || !key) return;
+  if (_seenInboundByPhone[phone] === key) return;
+  _seenInboundByPhone[phone] = key;
+  try { localStorage.setItem("sartec_seen_inbound", JSON.stringify(_seenInboundByPhone)); } catch {}
+  _cardLastSeenKey[phone] = key;
+  _cardUnreadCount[phone] = 0;
+  _cardNewJustArrived.delete(phone);
+}
+
+// Marca a última msg inbound conhecida deste telefone (a partir das listas já
+// carregadas em memória) como vista — usado ao abrir o chat e ao enviar uma
+// resposta, sem precisar esperar o próximo fetch do histórico completo.
+function markCurrentChatInboundSeen(phone) {
+  const conv = allConvs.find(c => c.phone === phone) || allConversationsList.find(c => c.phone === phone);
+  const key = conv ? lastInboundKeyFromConv(conv) : null;
+  if (key) markInboundSeen(phone, key);
+}
+
+// Decide se o card/linha deve mostrar "não lida" e marca para notificar
+// (som + Notification API + flash) só quando a chave muda DENTRO desta sessão
+// de navegador e ainda não foi marcada como vista — nunca por re-render/poll
+// isolado, nunca por reload (1ª leitura desta aba apenas estabelece a base).
+function processCardNewMsg(phone, conv) {
+  const key = lastInboundKeyFromConv(conv);
+  if (!key) { _cardUnreadCount[phone] = 0; return 0; }
+
+  const alreadySeen = isInboundSeen(phone, key);
+  _cardUnreadCount[phone] = alreadySeen ? 0 : 1;
+
+  const prevKey = _cardLastSeenKey[phone];
+  _cardLastSeenKey[phone] = key;
+
+  if (!alreadySeen && prevKey !== undefined && prevKey !== key) {
     _cardNewJustArrived.add(phone);
   }
-  return _cardUnreadCount[phone] || 0;
+  return _cardUnreadCount[phone];
 }
 let countdownVal    = 30;
 let countdownTimer  = null;
@@ -6798,7 +6881,7 @@ function buildCard(c, col, cols) {
   if (_summaryExpanded.has(c.phone)) cls += " card-summary-expanded";
   card.className = cls;
 
-  const unreadCount = !isResolved ? processCardNewMsg(c.phone, c.lastUserMessageAt) : 0;
+  const unreadCount = !isResolved ? processCardNewMsg(c.phone, c) : 0;
 
   const colsForStatus = cols.filter(col => !col.resolved);
   const statusOptions = colsForStatus.map(col =>
@@ -7307,10 +7390,8 @@ document.addEventListener("visibilitychange", () => {
 async function openChat(phone) {
   openModalPhone = phone;
   if (!shouldPreserveUnreadOnOpen()) {
-    _cardUnreadCount[phone]   = 0;
-    _cardNewJustArrived.delete(phone);
     _newlyArrivedPhones.delete(phone); // remove badge de card novo ao abrir
-    _cardLastUserMsgAt[phone] = new Date().toISOString(); // marca como visto
+    markCurrentChatInboundSeen(phone); // marca a última msg do cliente como vista
   }
   if (isConvLockedByOther(phone)) showDupeWarning("modal");
   else hideDupeWarning("modal");
@@ -7664,6 +7745,13 @@ function renderModal(data) {
   const container  = document.getElementById("modal-messages");
   const atBottom   = isNearBottom(container);
   const history    = data.history || [];
+
+  // Chat aberto: a última msg do cliente está sendo vista agora — marca como
+  // tratada para não notificar de novo (exceto perfil de auditoria "lucas").
+  if (!shouldPreserveUnreadOnOpen()) {
+    markInboundSeen(data.phone, lastInboundKeyFromHistory(history));
+  }
+
   const prevCount  = _lastMsgCountByPhone[data.phone] || 0;
   const currentAtt = getCurrentAttendant();
   const newMsgs    = history.slice(prevCount);
@@ -7828,12 +7916,8 @@ function buildConvItem(c) {
   const isPinned   = !isArchiveConv && pinnedConvs.includes(c.phone);
   const isHandoff  = c.status === "aguardando_humano";
   const isResolved = c.status === "resolvido";
-  // Inicializa tracking de nova msg para este phone se ainda não foi feito
-  if (c.lastUserMessageAt && _cardLastUserMsgAt[c.phone] === undefined) {
-    _cardLastUserMsgAt[c.phone] = c.lastUserMessageAt;
-    _cardUnreadCount[c.phone]   = 0;
-  }
-  const convNewCount = !isArchiveConv ? (_cardUnreadCount[c.phone] || 0) : 0;
+  // Mesma lógica de detecção do Kanban — sem lógica paralela.
+  const convNewCount = !isArchiveConv ? processCardNewMsg(c.phone, c) : 0;
   const newMsgBadge  = convNewCount > 0
     ? `<span class="conv-new-msg-badge">${convNewCount} nova${convNewCount > 1 ? "s" : ""}</span>`
     : "";
@@ -7889,8 +7973,7 @@ async function openConvsChat(phone, redisKey, isArchive) {
   clearReplyTarget("convs");
   const _preserveUnread = shouldPreserveUnreadOnOpen();
   if (!_preserveUnread) {
-    _cardUnreadCount[phone]   = 0;
-    _cardLastUserMsgAt[phone] = new Date().toISOString();
+    markCurrentChatInboundSeen(phone); // marca a última msg do cliente como vista
   }
   if (openConvsPhone && openConvsPhone !== phone) unlockConvTab(openConvsPhone);
   openConvsPhone    = phone;
@@ -7941,6 +8024,7 @@ async function openConvsChat(phone, redisKey, isArchive) {
       <div class="messages" id="convs-messages" style="flex:1;overflow-y:auto;"></div>
       ${!isArchive ? `<div class="composer">
         <div class="active-attendant-bar hidden" id="convs-aa-bar"></div>
+        <div class="mob-introduce-row"><button class="mob-introduce-btn" onclick="introduceAttendant('convs')">Me apresentar</button></div>
         <div class="img-preview-bar" id="convs-img-preview-bar">
           <img id="convs-img-thumb" src="" alt="preview">
           <input class="caption-input" id="convs-img-caption" placeholder="Legenda (opcional)">
@@ -8028,6 +8112,13 @@ function renderConvsChat(data) {
   if (!container) return;
 
   const history   = data.history || [];
+
+  // Chat aberto: a última msg do cliente está sendo vista agora — marca como
+  // tratada para não notificar de novo (exceto perfil de auditoria "lucas").
+  if (!shouldPreserveUnreadOnOpen()) {
+    markInboundSeen(data.phone, lastInboundKeyFromHistory(history));
+  }
+
   const newCount  = history.length;
   const prevCount = _lastMsgCountByPhone[data.phone] || 0;
   const wasAtBottom = container.scrollHeight - container.scrollTop - container.clientHeight < 120;
@@ -9089,6 +9180,9 @@ function getPhoneForPrefix(prefix) {
 async function sendMessage(prefix) {
   const phone = getPhoneForPrefix(prefix);
   if (!phone) return;
+
+  // Responder à conversa trata a última msg do cliente — não deve voltar a notificar.
+  markCurrentChatInboundSeen(phone);
 
   // ── Guard de janela de 24h ─────────────────────────────────────────────────
   // Impede envio de mensagem livre quando a janela está fechada ou aguardando template.

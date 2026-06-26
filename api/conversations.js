@@ -118,6 +118,9 @@ export default async function handler(req, res) {
         pipelineStatus: session.pipelineStatus || "novo",
         cardTitle:      session.cardTitle      || "",
         lastMessage:    lastMessage.substring(0, 200),
+        // Chave estável da última mensagem inbound do cliente (metaMessageId) —
+        // usada pelo painel para decidir notificação sem depender de messageCount.
+        lastUserMsgId:  lastMsg?.metaMessageId || null,
         lastActivity,
         messageCount: (session.history || []).length,
         handoffAt:    session.handoffAt    || null,
