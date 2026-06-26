@@ -5078,6 +5078,7 @@
           <div class="dados-save-row">
             <button class="btn-save" id="modal-btn-save" onclick="saveCardData('modal')">Salvar dados</button>
           </div>
+          <div id="modal-schoollist-section" style="display:none;"></div>
         </div>
       </details>
 
@@ -5583,9 +5584,11 @@ function resumoOperacional(c) {
 
   // 5. Dados do pedido combinados
   if (c.escola) {
-    if (fe === "entrega") return "Separar e entregar material escolar";
-    if (fe === "retirada") return "Separar material para retirada";
-    return "Separar material escolar";
+    const _slItemCount = c.schoolList?.items?.length || 0;
+    const _itemsSfx = _slItemCount > 0 ? ` — ${_slItemCount} ${_slItemCount === 1 ? "item" : "itens"}` : "";
+    if (fe === "entrega") return `Separar e entregar material escolar${_itemsSfx}`;
+    if (fe === "retirada") return `Separar material para retirada${_itemsSfx}`;
+    return `Separar material escolar${_itemsSfx}`;
   }
   if (fe === "entrega" && !end) return "Falta endereço de entrega";
   if (fe === "entrega" && end)  return "Pedido com entrega confirmada";
@@ -5659,7 +5662,12 @@ function buildExpandBody(c, clientType) {
   const od = c.operationalDetails;
   if (od) {
     od.context.forEach((ctx, i) => add(i === 0 ? "Contexto" : "", ctx));
-    od.items.forEach((item, i) => add(i === 0 ? "Pedido" : "", item));
+    od.items.forEach((item, i) => add(i === 0 ? "Itens identificados" : "", item));
+    // Lista escolar com escola/série mas sem nenhum item lido ainda — sempre
+    // informar isso explicitamente, em vez de simplesmente omitir a seção.
+    if (c.demandType === "lista" && c.schoolList && od.items.length === 0) {
+      add("Itens identificados", "Nenhum item identificado ainda — conferir arquivo original.");
+    }
   }
 
   // ── Dados do pedido preenchidos pelo atendente ──
@@ -8092,7 +8100,51 @@ function populateDadosForm(prefix, data) {
   const camposLista = document.getElementById(`${prefix}-campos-lista`);
   if (camposLista) camposLista.style.display = data.demandType === "lista" ? "contents" : "none";
 
+  renderSchoolListSection(prefix, data.schoolList);
+
   toggleEndereco(prefix);
+}
+
+// ── Seção "Lista escolar transcrita" — fonte única usada tanto na etapa de
+// orçamento/pré-orçamento quanto na de separação (não há lógica duplicada;
+// é o mesmo session.schoolList vindo do backend, só renderizado aqui). ──────
+function renderSchoolListSection(prefix, schoolList) {
+  const sec = document.getElementById(`${prefix}-schoollist-section`);
+  if (!sec) return;
+
+  if (!schoolList) {
+    sec.style.display = "none";
+    sec.innerHTML = "";
+    return;
+  }
+
+  const rows = [];
+  if (schoolList.studentName) rows.push(["Aluno", schoolList.studentName]);
+  if (schoolList.school)       rows.push(["Escola", schoolList.school]);
+  if (schoolList.grade)         rows.push(["Série", schoolList.grade]);
+
+  const items = schoolList.items || [];
+  const itemsHtml = items.length > 0
+    ? "<ul style=\"margin:4px 0 0;padding-left:18px;\">" +
+        items.map((it) => `<li>${esc(String(it))}</li>`).join("") +
+      "</ul>"
+    : "<div style=\"font-style:italic;color:var(--text-muted);margin-top:2px;\">Nenhum item identificado ainda — conferir arquivo original.</div>";
+
+  const lowConfWarning = (schoolList.confidence === "low" || schoolList.confidence === "medium")
+    ? '<div style="margin-top:8px;padding:6px 9px;background:#fff7ed;border:1px solid #fdba74;border-radius:5px;font-size:.78rem;color:#9a3412;">' +
+      "⚠ Leitura automática incompleta. Conferir arquivo original antes de separar." +
+      "</div>"
+    : "";
+
+  sec.style.display = "block";
+  sec.innerHTML =
+    '<div class="form-row full" style="margin-top:4px;border-top:1px solid var(--border-light,#e5e7eb);padding-top:10px;">' +
+    '<label style="font-weight:700;">📋 Lista escolar transcrita</label>' +
+    rows.map(([lbl, val]) => `<div style="font-size:.84rem;margin-top:2px;"><strong>${lbl}:</strong> ${esc(val)}</div>`).join("") +
+    `<div style="font-size:.84rem;margin-top:6px;"><strong>Itens:</strong>${itemsHtml}</div>` +
+    (schoolList.notes ? `<div style="font-size:.84rem;margin-top:6px;"><strong>Observações:</strong> ${esc(schoolList.notes)}</div>` : "") +
+    lowConfWarning +
+    "</div>";
 }
 
 function toggleEndereco(prefix) {

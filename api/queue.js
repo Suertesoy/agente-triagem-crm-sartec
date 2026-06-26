@@ -30,7 +30,33 @@ const _QUEUE_MEAS    = /\d+\s*[x×]\s*\d+|\d+\s*m\s*[x×]\s*\d+/i;
 const _QUEUE_URGENT  = /urgent|urgência|urgencia|o\s+quanto\s+antes|para\s+hoje|preciso.*hoje|rápido|rapido/i;
 const _QUEUE_NOCAD   = /ainda\s+não|ainda\s+nao|não\s+(?:tenho|temos)\s+cadastro|nao\s+(?:tenho|temos)\s+cadastro|só\s+orçamento|so\s+orcamento|sem\s+cadastro/i;
 
+// ── Resumo combinando contexto escolar + itens transcritos (session.schoolList) ──
+function buildSchoolListOperationalText(session) {
+  const sl = session.schoolList;
+  if (!sl) return null;
+
+  const parts = [];
+  if (sl.studentName) parts.push(sl.studentName);
+  if (sl.school)       parts.push(sl.school);
+  if (sl.grade)         parts.push(sl.grade);
+
+  const itemCount  = sl.items?.length || 0;
+  const itemsLabel = itemCount > 0 ? `${itemCount} ${itemCount === 1 ? "item" : "itens"}` : null;
+
+  if (parts.length > 0 && itemsLabel) return `Lista escolar — ${parts.join(" · ")} · ${itemsLabel}`;
+  if (parts.length > 0)               return `Lista escolar — ${parts.join(" · ")} (itens não identificados)`;
+  if (itemsLabel)                     return `Lista escolar — ${itemsLabel} identificados`;
+  return null;
+}
+
 function buildOperationalSummary(session) {
+  // Lista escolar: combina contexto (aluno/escola/série) + quantidade de itens —
+  // sempre recalculado a partir de schoolList, nunca trava num cardTitle antigo.
+  if (session.demandType === "lista") {
+    const slSummary = buildSchoolListOperationalText(session);
+    if (slSummary) return slSummary;
+  }
+
   if (session.cardTitle && session.cardTitle.trim().length > 5) return session.cardTitle.trim();
 
   const history = session.history || [];
@@ -70,6 +96,20 @@ function buildOperationalSummary(session) {
 
 // ── Detalhes complementares (contexto + itens de pedido) ────────────────────
 function buildOperationalDetails(session) {
+  // Lista escolar: aluno/observações + itens completos da lista (sem limitar a
+  // 4 — o painel decide como truncar visualmente no card fechado). Escola/série
+  // já têm linha dedicada no card expandido (c.escola/c.serie), não repete aqui.
+  if (session.demandType === "lista" && session.schoolList) {
+    const sl = session.schoolList;
+    const context = [];
+    if (sl.studentName) context.push(`Aluno: ${sl.studentName}`);
+    if (sl.notes)         context.push(`Observações da lista: ${sl.notes}`);
+    if (sl.confidence === "low" || sl.confidence === "medium") {
+      context.push("Leitura automática incompleta — conferir arquivo original antes de separar.");
+    }
+    return { context, items: sl.items || [] };
+  }
+
   const history = session.history || [];
   const isPJ = session.clientType === "pj" || session.demandType === "cotacao_pj";
 
@@ -230,6 +270,7 @@ export default async function handler(req, res) {
         observacoes:    session.observacoes     || null,
         escola:            session.escola             || null,
         serie:             session.serie              || null,
+        schoolList:        session.schoolList         || null,
         activeAttendant:           session.activeAttendant           || null,
         activeAttendantAt:         session.activeAttendantAt         || null,
         lastTemplateType:           session.lastTemplateType           || null,

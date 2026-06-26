@@ -402,6 +402,8 @@ function createEmptySession() {
     // Janela de atendimento WhatsApp (24h a partir da última msg do cliente)
     lastUserMessageAt: null,
     windowExpiresAt:   null,
+    // Fonte única e persistente da lista escolar (texto, imagem ou PDF)
+    schoolList: null,
   };
 }
 
@@ -569,6 +571,25 @@ function isHandoff(content) {
   return signals.some((s) => lower.includes(s));
 }
 
+/**
+ * Heurística de contexto escolar explícito — usada tanto por inferDemandType
+ * quanto para decidir quando vale a pena tentar extração estruturada de
+ * lista escolar (texto livre ou legenda de mídia).
+ */
+function looksLikeSchoolListText(text) {
+  if (!text) return false;
+  const t = text.toLowerCase();
+  return (
+    t.includes("lista escolar") || t.includes("lista de material") ||
+    t.includes("material escolar") || t.includes("kit escolar") ||
+    (t.includes("lista") && (
+      t.includes("escola") || t.includes("série") || t.includes("serie") ||
+      t.includes("aluno") || t.includes("ano escolar") ||
+      t.includes("colégio") || t.includes("colegio")
+    ))
+  );
+}
+
 function inferDemandType(history) {
   const text = history
     .filter((m) => m.role === "user")
@@ -595,15 +616,7 @@ function inferDemandType(history) {
     text.includes("plastificação") || text.includes("plastificacao")
   ) return "xerox";
   // Lista escolar só quando há contexto escolar explícito
-  if (
-    text.includes("lista escolar") || text.includes("lista de material") ||
-    text.includes("material escolar") || text.includes("kit escolar") ||
-    (text.includes("lista") && (
-      text.includes("escola") || text.includes("série") || text.includes("serie") ||
-      text.includes("aluno") || text.includes("ano escolar") ||
-      text.includes("colégio") || text.includes("colegio")
-    ))
-  ) return "lista";
+  if (looksLikeSchoolListText(text)) return "lista";
   // Produto: compras genéricas sem contexto escolar
   if (
     text.includes("quero") || text.includes("comprar") || text.includes("preciso de") ||
@@ -703,10 +716,26 @@ function generateCardTitle(session) {
   // Para cotação_pj o label já carrega "PJ"; para os demais, adiciona o sufixo
   const prefix = (isPJ && !label.includes("PJ")) ? `${label} PJ` : label;
 
-  // --- Para Lista Escolar: escola + série são mais relevantes que o texto livre ---
-  if (session.demandType === "lista" && session.escola) {
-    const serie = session.serie ? ` ${session.serie}` : "";
-    return `${prefix} — ${session.escola}${serie}`;
+  // --- Lista Escolar: combina aluno/escola/série com a quantidade de itens já
+  //     transcritos. Nunca usar só escola/série quando há itens identificados
+  //     sem outro lugar visível — por isso sempre soma os dois quando existem. ---
+  if (session.demandType === "lista") {
+    const sl = session.schoolList || null;
+    const parts = [];
+    if (sl?.studentName)        parts.push(sl.studentName);
+    if (sl?.school || session.escola) parts.push(sl?.school || session.escola);
+    if (sl?.grade  || session.serie)  parts.push(sl?.grade  || session.serie);
+    const itemCount = sl?.items?.length || 0;
+
+    if (parts.length > 0) {
+      const itemsSuffix = itemCount > 0 ? ` · ${itemCount} ${itemCount === 1 ? "item" : "itens"}` : "";
+      return `${prefix} — ${parts.join(" · ")}${itemsSuffix}`;
+    }
+    if (itemCount > 0) {
+      const firstItems = sl.items.slice(0, 2).join(", ");
+      return `${prefix} — ${itemCount} itens (${firstItems}${itemCount > 2 ? "…" : ""})`;
+    }
+    // Sem dados estruturados ainda — cai no heurístico genérico abaixo.
   }
 
   // --- Extrai todas as mensagens substanciais do cliente (> 12 chars) ---
@@ -979,6 +1008,7 @@ function resetToNewCycle(session) {
   session.observacoes           = null;
   session.escola                = null;
   session.serie                 = null;
+  session.schoolList            = null;
   session.templateWaitingReply  = false;
   session.lastTemplateType      = null;
   session.audioCount            = 0;
@@ -1033,6 +1063,238 @@ function sanitizeAgentReply(text) {
 }
 
 // ============================================================
+// LISTA ESCOLAR — fonte estruturada e persistente (session.schoolList)
+//
+// Duas formas de entrada:
+//   1. Texto estruturado do site ([SITE_LISTA_ESCOLAR]) → parser determinístico
+//      (mesmo formato já validado no painel, sem custo de IA).
+//   2. Texto livre ou mídia (foto/PDF) enviada direto no WhatsApp → leitura
+//      estruturada via Claude (extractSchoolListData), pedindo JSON estrito.
+//
+// As duas convergem para o mesmo formato e são mescladas de forma
+// conservadora em mergeSchoolListData — nunca apaga itens só porque uma
+// leitura nova trouxe apenas escola/série, e vice-versa.
+// ============================================================
+
+function _sslField(block, fieldName) {
+  const escaped = fieldName.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  const re = new RegExp("\\*?" + escaped + "\\*?\\s*:\\*?\\s*([^\\n]+)", "i");
+  const m = block.match(re);
+  if (!m) return "";
+  return m[1].trim().replace(/^\*+|\*+$/g, "").trim();
+}
+
+// Extrai apenas os nomes de item ("2x Caderno..." ou texto livre quando não
+// houver "Nx" explícito) de uma seção de itens do texto do site.
+function _sslParseItemLines(block, startMarker, endMarker) {
+  const si = block.indexOf(startMarker);
+  if (si === -1) return [];
+  let section = block.slice(si + startMarker.length);
+  if (endMarker) {
+    const ei = section.indexOf(endMarker);
+    if (ei !== -1) section = section.slice(0, ei);
+  }
+  const items = [];
+  const qtyRe = /^[^\d]*(\d{1,3})\s*[xX]\s+(.+)/;
+  const obsPrefixRe = /^(Preferência do cliente|Sugestão da escola)\s*:\s*/i;
+  for (const line of section.split("\n")) {
+    const t = line.trim().replace(/^\*+|\*+$/g, "").trim();
+    if (!t) continue;
+    if (/:$/.test(t) && t.length <= 60 && !qtyRe.test(t)) continue; // cabeçalho de seção
+    if (obsPrefixRe.test(t)) continue; // observação sobre o item anterior
+    const m = t.match(qtyRe);
+    items.push(m ? `${m[1]}x ${m[2].trim()}` : t);
+  }
+  return items;
+}
+
+/**
+ * Extração determinística (sem IA) de uma mensagem [SITE_LISTA_ESCOLAR].
+ * O formato já é estruturado pelo próprio site, então regex é confiável aqui
+ * — IA só é usada para texto livre/mídia (ver extractSchoolListData).
+ * Quando há mais de uma lista na mesma mensagem, os itens de todas são
+ * combinados (a visão por criança/lista completa é exibida pelo painel a
+ * partir do texto bruto, que continua preservado no histórico).
+ */
+function extractSchoolListFromSiteText(text) {
+  const blocks = text
+    .split(/(?=\*Lista\s+\d+[^\n*]*\*)/i)
+    .filter((b) => /^\*Lista\s+\d+[^\n*]*\*/i.test(b.trim()));
+  const sourceBlocks = blocks.length > 0 ? blocks : [text];
+
+  let studentName = null, school = null, grade = null;
+  const notesParts = [];
+  const allItems = [];
+
+  sourceBlocks.forEach((block, idx) => {
+    const alunoNomeM = block.match(/^\*Lista\s+\d+\s*[·\-–]\s*([^*\n]+)\*/i);
+    const escola   = _sslField(block, "Escola");
+    const serie    = _sslField(block, "Ano/Série") || _sslField(block, "Ano/Serie");
+    const aluno    = _sslField(block, "Nome") || (alunoNomeM ? alunoNomeM[1].trim() : "");
+    const prefCor  = _sslField(block, "Preferência de cor quando a lista não indicar") || _sslField(block, "Preferencia de cor quando a lista nao indicar");
+    const obs      = _sslField(block, "Observações sobre cores/modelos") || _sslField(block, "Observacoes sobre cores/modelos");
+    const criterio = _sslField(block, "Preferência para o orçamento") || _sslField(block, "Critério para orçamento") || _sslField(block, "Criterio para orcamento");
+
+    if (idx === 0) {
+      studentName = aluno || null;
+      school      = escola || null;
+      grade       = serie || null;
+    }
+    if (sourceBlocks.length > 1 && aluno) {
+      notesParts.push(`${aluno}${escola ? ` (${escola}${serie ? ", " + serie : ""})` : ""}`);
+    }
+    if (prefCor)   notesParts.push(`Preferência: ${prefCor}`);
+    if (obs)       notesParts.push(`Obs: ${obs}`);
+    if (criterio)  notesParts.push(`Critério: ${criterio}`);
+
+    allItems.push(..._sslParseItemLines(block, "*Itens que quero comprar:*", "*Itens marcados como Não quero:*"));
+  });
+
+  return {
+    studentName,
+    school,
+    grade,
+    items:      allItems,
+    notes:      notesParts.length ? notesParts.join(" | ").substring(0, 600) : null,
+    confidence: "high",
+    source:     "text",
+    rawText:    text.substring(0, 800),
+    updatedAt:  new Date().toISOString(),
+  };
+}
+
+const SCHOOL_LIST_EXTRACTION_INSTRUCTIONS =
+  "Você está lendo uma lista escolar para uso interno de CRM. Extraia separadamente " +
+  "dados de identificação e itens da lista. Não confunda nome de criança, escola ou " +
+  "série com item de compra. Não confunda item de compra com escola/série. Se não " +
+  "tiver certeza, coloque em notes ou marque confidence como \"low\". Retorne apenas " +
+  "JSON válido no formato:\n" +
+  '{\n  "studentName": null,\n  "school": null,\n  "grade": null,\n  "items": [],\n  "notes": null,\n  "confidence": "high"\n}\n' +
+  "Os itens devem preservar quantidade, cor, tamanho, marca ou especificação quando " +
+  "aparecerem (ex: \"2x Caderno universitário 10 matérias\"). Cada item do array " +
+  '"items" deve ser uma string.';
+
+/**
+ * Extração estruturada via Claude para texto livre ou mídia (foto/PDF) que
+ * pareça ser uma lista escolar. Sempre pede JSON estrito, nunca exposto ao
+ * cliente — é só para uso interno do CRM (session.schoolList).
+ */
+async function extractSchoolListData({ userText, mediaPayload, previousSchoolList }) {
+  const content = [];
+  if (mediaPayload) {
+    content.push({
+      type:   mediaPayload.mimeType === "application/pdf" ? "document" : "image",
+      source: { type: "base64", media_type: mediaPayload.mimeType, data: mediaPayload.base64 },
+    });
+  }
+
+  let instructionText = SCHOOL_LIST_EXTRACTION_INSTRUCTIONS;
+  if (previousSchoolList) {
+    instructionText += `\n\nContexto já conhecido nesta conversa (complemente se houver dado novo, não precisa repetir): ${JSON.stringify({
+      studentName: previousSchoolList.studentName,
+      school:      previousSchoolList.school,
+      grade:       previousSchoolList.grade,
+    })}`;
+  }
+  if (userText) instructionText += `\n\nTexto da mensagem do cliente:\n${userText}`;
+  content.push({ type: "text", text: instructionText });
+
+  const response = await anthropic.messages.create({
+    model:      "claude-haiku-4-5-20251001",
+    max_tokens: 1200,
+    system:     "Você extrai dados estruturados de listas escolares para uso interno de CRM. Responda apenas com JSON válido, sem texto fora do JSON, sem blocos de código markdown.",
+    messages:   [{ role: "user", content }],
+  });
+
+  const raw = response.content[0]?.type === "text" ? response.content[0].text : "";
+  let cleaned = raw.trim();
+  if (cleaned.startsWith("```")) {
+    cleaned = cleaned.replace(/^```(json)?/, "").replace(/```$/, "").trim();
+  }
+  const parsed = JSON.parse(cleaned);
+
+  return {
+    studentName: parsed.studentName || null,
+    school:      parsed.school || null,
+    grade:       parsed.grade || null,
+    items:       Array.isArray(parsed.items) ? parsed.items.filter(Boolean) : [],
+    notes:       parsed.notes || null,
+    confidence:  ["high", "medium", "low"].includes(parsed.confidence) ? parsed.confidence : "medium",
+    source:      mediaPayload ? (mediaPayload.mimeType === "application/pdf" ? "pdf" : "image") : "text",
+    rawText:     (userText || "").substring(0, 800) || null,
+    updatedAt:   new Date().toISOString(),
+  };
+}
+
+const _SCHOOL_LIST_CONF_RANK = { low: 1, medium: 2, high: 3 };
+
+/**
+ * Mescla uma leitura nova de lista escolar com a anterior de forma
+ * conservadora: nunca apaga itens só porque a leitura nova trouxe apenas
+ * escola/série (e vice-versa). Campo a campo, um valor novo não-nulo é
+ * tratado como correção do cliente e prevalece; um valor nulo nunca apaga
+ * o que já existia.
+ */
+function mergeSchoolListData(prev, incoming) {
+  if (!incoming) return prev || null;
+  if (!prev) return incoming;
+
+  const prevConf = _SCHOOL_LIST_CONF_RANK[prev.confidence] || 1;
+  const newConf  = _SCHOOL_LIST_CONF_RANK[incoming.confidence] || 1;
+
+  return {
+    studentName: incoming.studentName || prev.studentName || null,
+    school:      incoming.school      || prev.school      || null,
+    grade:       incoming.grade       || prev.grade        || null,
+    items:       (incoming.items && incoming.items.length > 0) ? incoming.items : (prev.items || []),
+    notes:       incoming.notes && incoming.notes !== prev.notes
+                   ? [prev.notes, incoming.notes].filter(Boolean).join(" | ").substring(0, 600)
+                   : (prev.notes || incoming.notes || null),
+    source:      incoming.source || prev.source || "unknown",
+    confidence:  newConf >= prevConf ? incoming.confidence : prev.confidence,
+    rawText:     incoming.rawText || prev.rawText || null,
+    updatedAt:   new Date().toISOString(),
+  };
+}
+
+/**
+ * Sincroniza session.schoolList com os campos legados (escola/serie) usados
+ * pela UI atual, e atualiza demandType/cardTitle quando ainda fizer sentido.
+ * Preserva edição manual do atendente: só regenera cardTitle quando ele
+ * ainda está vazio ou no formato auto-gerado ("Lista Escolar — ...").
+ */
+function syncSchoolListToSessionFields(session) {
+  const sl = session.schoolList;
+  if (!sl) return;
+  if (sl.school) session.escola = sl.school;
+  if (sl.grade)  session.serie  = sl.grade;
+  if (!session.demandType || session.demandType === "outro") session.demandType = "lista";
+
+  const looksAutoGenerated = !session.cardTitle || /^Lista Escolar(?:\s+PJ)?\s+—/.test(session.cardTitle);
+  if (session.demandType === "lista" && looksAutoGenerated) {
+    session.cardTitle = generateCardTitle(session);
+  }
+}
+
+/**
+ * Heurística para decidir se vale tentar extração estruturada de lista
+ * escolar nesta mensagem — evita chamar a IA em toda mensagem/mídia.
+ */
+function looksLikeSchoolListContext(text, mediaPayload, session) {
+  if (session.demandType === "lista" || session.schoolList) return true;
+  if (looksLikeSchoolListText(text)) return true;
+  if (mediaPayload) {
+    const recentUserText = (session.history || [])
+      .filter((m) => m.role === "user" && typeof m.content === "string")
+      .slice(-6)
+      .map((m) => m.content)
+      .join(" ");
+    return looksLikeSchoolListText(recentUserText);
+  }
+  return false;
+}
+
+// ============================================================
 // DETECÇÃO E ROTEAMENTO — Lista Escolar via Site
 // ============================================================
 
@@ -1072,22 +1334,14 @@ async function handleSiteSchoolList(from, text, name, msgMeta) {
     if (!session.pipelineStatus) session.pipelineStatus = "novo";
     if (!session.handoffAt)      session.handoffAt      = now.toISOString();
 
-    // Tenta extrair escola e série da estrutura do site para enriquecer o card
-    const _escolaM = text.match(/Escola:\s*(.+?)(?:\n|$)/i);
-    const _serieM  = text.match(/Ano\/S[eé]rie:\s*(.+?)(?:\n|$)/i);
-    if (_escolaM) session.escola = _escolaM[1].trim();
-    if (_serieM)  session.serie  = _serieM[1].trim();
+    // Extração estruturada (determinística — o formato do site já é confiável)
+    // e mescla conservadora com o que já existir na sessão.
+    const _incomingSchoolList = extractSchoolListFromSiteText(text);
+    session.schoolList = mergeSchoolListData(session.schoolList || null, _incomingSchoolList);
+    syncSchoolListToSessionFields(session);
 
     // Preserva a mensagem completa no histórico
     addMessage(session, "user", text, msgMeta);
-
-    // Gera título do card sem expor "PJ" — o roteamento interno continua como pj
-    if (!session.cardTitle) {
-      const _serie = session.serie ? ` ${session.serie}` : "";
-      session.cardTitle = session.escola
-        ? `Lista Escolar — ${session.escola}${_serie}`
-        : "Lista Escolar";
-    }
 
     // Nota interna visível apenas no painel (role "system" é filtrado do contexto Claude)
     session.history.push({
@@ -1500,6 +1754,34 @@ async function chatWithAgent(phone, userText, mediaPayload = null, name = "", me
   );
 
   addMessage(session, "assistant", reply);
+
+  // ── Lista escolar: extração estruturada (texto livre ou mídia) ───────────
+  // Não bloqueia nem altera a resposta ao cliente — é só persistência interna.
+  if (looksLikeSchoolListContext(textToCheck, mediaPayload, session)) {
+    try {
+      const incoming = await extractSchoolListData({
+        userText:           textToCheck,
+        mediaPayload,
+        previousSchoolList: session.schoolList || null,
+      });
+      session.schoolList = mergeSchoolListData(session.schoolList || null, incoming);
+      syncSchoolListToSessionFields(session);
+      console.log(`[SchoolList] ✅ +${phone} confidence=${incoming.confidence} itens=${incoming.items.length}`);
+    } catch (err) {
+      console.error(`[SchoolList] ❌ extração falhou +${phone}:`, err.message);
+      const fallback = {
+        studentName: null, school: null, grade: null, items: [],
+        notes:      "Lista recebida, mas extração estruturada falhou. Revisar arquivo original.",
+        confidence: "low",
+        source:     mediaPayload ? (mediaPayload.mimeType === "application/pdf" ? "pdf" : "image") : "text",
+        rawText:    (textToCheck || "").substring(0, 800) || null,
+        updatedAt:  new Date().toISOString(),
+      };
+      session.schoolList = mergeSchoolListData(session.schoolList || null, fallback);
+      syncSchoolListToSessionFields(session);
+    }
+  }
+
   await saveSession(phone, session);
 
   console.log(

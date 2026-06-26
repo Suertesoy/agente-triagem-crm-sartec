@@ -235,6 +235,7 @@ export default async function handler(req, res) {
       observacoes:    session.observacoes    || "",
       escola:         session.escola         || "",
       serie:          session.serie          || "",
+      schoolList:     session.schoolList     || null,
       // Janela de 24h
       ...windowInfo,
       // Atendente ativo
