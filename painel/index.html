@@ -403,12 +403,20 @@
       padding: 20px 24px 110px;
       width: 100%;
       box-sizing: border-box;
+      /* Barra de rolagem horizontal mais perceptível que o padrão discreto do
+         app — só importa aqui, onde o scroll é uma affordance funcional do
+         Kanban (telas compactas), não um detalhe incidental de lista. */
+      scrollbar-width: thin;
+      scrollbar-color: rgba(26,42,94,.35) rgba(26,42,94,.06);
     }
+    .pipeline-wrap::-webkit-scrollbar { height: 10px; }
+    .pipeline-wrap::-webkit-scrollbar-track { background: rgba(26,42,94,.06); border-radius: 6px; }
+    .pipeline-wrap::-webkit-scrollbar-thumb { background: rgba(26,42,94,.35); border-radius: 6px; }
+    .pipeline-wrap::-webkit-scrollbar-thumb:hover { background: rgba(26,42,94,.55); }
     .pipeline {
       display: flex;
       gap: 12px;
-      width: max-content;
-      min-width: 100%;
+      width: 100%;
     }
     .pipe-col {
       flex: 1 1 220px;
@@ -3842,7 +3850,13 @@
       .tab-btn        { padding: 9px 15px; }
 
       /* Pipeline: colunas fixas e rolagem horizontal ativada */
-      .pipeline-wrap  { padding: 16px 16px 90px; overflow-x: auto; }
+      .pipeline-wrap  {
+        padding: 16px 16px 90px; overflow-x: auto;
+        /* Sombra sutil na borda direita — pista de que há colunas fora da
+           área visível. Não usa pseudo-elemento/overlay: nunca intercepta
+           clique, drag ou scroll dos cards. */
+        box-shadow: inset -16px 0 12px -12px rgba(15,23,42,.16);
+      }
       .pipeline       { width: max-content; min-width: 100%; gap: 10px; }
       .pipe-col       { flex: 0 0 250px; min-width: 250px; max-width: 250px; }
       .pipe-col-cards { grid-template-columns: 1fr; }
