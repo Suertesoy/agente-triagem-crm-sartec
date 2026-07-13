@@ -6653,6 +6653,10 @@ function renderPipeline(convs) {
 function renderPipelineTab(tabId, cols, convs) {
   const container = document.getElementById(`pipeline-${tabId}`);
 
+  // Guard: se há um arrasto de card em andamento, pula esta re-renderização —
+  // recriar o DOM destruiria o card sendo arrastado. O próximo polling re-renderiza.
+  if (_dragPhone) return;
+
   // Guard: se um campo editável dentro deste pipeline estiver em foco,
   // adia a re-renderização para depois do blur — evita sobrescrever o que está sendo digitado.
   const active = document.activeElement;
@@ -6664,6 +6668,17 @@ function renderPipelineTab(tabId, cols, convs) {
     active.addEventListener('blur', deferred);
     return;
   }
+
+  // Preserva a rolagem do quadro (.pipeline-wrap rola em X e, em telas menores,
+  // em Y; em desktop largo quem rola é a página) — o innerHTML="" abaixo
+  // colapsa a altura momentaneamente e o navegador perderia a posição.
+  const _wrap = container.parentElement;
+  const _prevScroll = {
+    wrapLeft: _wrap ? _wrap.scrollLeft : 0,
+    wrapTop:  _wrap ? _wrap.scrollTop  : 0,
+    winX: window.scrollX,
+    winY: window.scrollY,
+  };
 
   container.innerHTML = "";
 
@@ -6904,6 +6919,15 @@ function renderPipelineTab(tabId, cols, convs) {
 
     colEl.appendChild(cardsEl);
     container.appendChild(colEl);
+  }
+
+  // Restaura a rolagem capturada antes do redesenho (mesmo tick, sem jank)
+  if (_wrap) {
+    _wrap.scrollLeft = _prevScroll.wrapLeft;
+    _wrap.scrollTop  = _prevScroll.wrapTop;
+  }
+  if (window.scrollY !== _prevScroll.winY || window.scrollX !== _prevScroll.winX) {
+    window.scrollTo(_prevScroll.winX, _prevScroll.winY);
   }
 }
 
