@@ -100,6 +100,8 @@ Detectar handoff para humano
 Controlar templateWaitingReply e lastTemplateType
 Preservar histórico por pelo menos 90 dias
 Controlar reset de teste dentro do webhook
+Baixar mídia da Meta e armazenar no Cloudflare R2 (via api/media-storage.js)
+Transcrever áudio recebido com OpenAI gpt-4o-mini-transcribe
 ```
 
 ### 4.2 CRM interno
@@ -121,6 +123,9 @@ api/resolve.js
 api/archive.js
 api/contacts.js
 api/active-attendant.js
+api/metrics.js
+api/delete-media.js
+api/parse-budget-pdf.js
 ```
 
 Principais recursos atuais:
@@ -170,19 +175,73 @@ Node.js serverless na Vercel
 Redis via ioredis
 WhatsApp Cloud API
 Anthropic Claude
+OpenAI (transcrição de áudio)
+Cloudflare R2 via SDK S3 (armazenamento de mídia)
 Frontend em HTML, CSS e JavaScript puro
 GitHub como repositório
 Vercel como deploy
 ```
 
-Dependências principais:
+Dependências principais (package.json):
 
 ```text
-@anthropic-ai/sdk
-ioredis
+@anthropic-ai/sdk               — agente de triagem e parser de orçamento
+@aws-sdk/client-s3              — Cloudflare R2 (armazenamento de mídia)
+@aws-sdk/s3-request-presigner   — URLs assinadas para mídia no R2
+ioredis                         — sessões, histórico e filas no Redis
 ```
 
 O projeto usa `type: module` no `package.json`.
+
+### 5.1 Endpoints reais em api/
+
+Hoje existem 16 arquivos `.js` em `api/`: 15 handlers serverless e 1 helper sem handler.
+
+```text
+api/active-attendant.js   — controle de atendente ativo por conversa
+api/archive.js            — arquivamento de atendimentos
+api/contacts.js           — base de contatos persistente (GET busca, POST reopen)
+api/conversation.js       — histórico de uma conversa
+api/conversations.js      — lista de conversas
+api/delete-media.js       — remoção manual de mídia (R2 e/ou Redis) pelo painel
+api/metrics.js            — métricas do CRM (período, PF/PJ, atendente, categoria)
+api/parse-budget-pdf.js   — parser de orçamento em PDF/texto com IA (Claude)
+api/queue.js              — fila/Kanban do painel
+api/resolve.js            — resolver/reabrir atendimento
+api/send-template.js      — envio de templates aprovados (janela fechada)
+api/send.js               — envio humano de mensagem e mídia
+api/update-card.js        — edição de dados do card
+api/update-status.js      — mudança de status no pipeline
+api/webhook.js            — webhook da Meta, triagem, agente, reset de teste, transcrição de áudio
+```
+
+Helper sem handler (exporta funções usadas por webhook.js, send.js, conversation.js, delete-media.js e parse-budget-pdf.js):
+
+```text
+api/media-storage.js      — upload/download/delete e URL assinada de mídia no Cloudflare R2
+```
+
+### 5.2 Variáveis de ambiente usadas pelo código
+
+```text
+REDIS_URL                        — conexão Redis (usada por quase todos os handlers)
+ANTHROPIC_API_KEY                — agente Claude (webhook.js, parse-budget-pdf.js)
+OPENAI_API_KEY                   — transcrição de áudio gpt-4o-mini-transcribe (webhook.js, ~linha 1438)
+WHATSAPP_ACCESS_TOKEN            — WhatsApp Cloud API (webhook.js, send.js, send-template.js)
+WHATSAPP_PHONE_NUMBER_ID         — número da Cloud API (webhook.js, send.js, send-template.js)
+WHATSAPP_VERIFY_TOKEN            — verificação do webhook da Meta; também é o token do reset de teste
+TEMPLATE_ATTENDANCE_RESUME_NAME  — nome do template de retomada (send-template.js)
+TEMPLATE_BUDGET_UPDATE_NAME      — nome do template de orçamento (send-template.js)
+TEMPLATE_PJ_PROSPECTING_NAME     — nome do template de prospecção PJ (send-template.js)
+TEMPLATE_LANGUAGE_CODE           — idioma dos templates (send-template.js)
+R2_ENDPOINT                      — endpoint do Cloudflare R2 (media-storage.js)
+R2_ACCESS_KEY_ID                 — credencial do R2 (media-storage.js)
+R2_SECRET_ACCESS_KEY             — credencial do R2 (media-storage.js)
+R2_BUCKET                        — bucket do R2 (media-storage.js)
+R2_DISABLED                      — desativa o armazenamento R2 (media-storage.js)
+```
+
+Scripts locais em `scripts/` (fora do deploy) usam também `R2_ACCOUNT_ID` (r2-smoke-test.js).
 
 ## 6. Vercel e rotas
 
@@ -209,9 +268,20 @@ Por isso, as pastas `painel/` e `api/` devem continuar em minúsculo.
 
 ## 7. Limite de funções serverless
 
-O plano Hobby da Vercel tem limite de 12 Serverless Functions por deployment.
+O plano Hobby da Vercel tem, historicamente, limite de 12 Serverless Functions por deployment.
 
-O projeto já opera nesse limite com os arquivos dentro de `api/`.
+Situação real hoje (atualizado em 2026-07): `api/` contém 16 arquivos `.js` — 15 handlers e o helper `media-storage.js`. Como `media-storage.js` está direto em `api/` sem prefixo `_`, a Vercel o conta como função, totalizando 16 funções no deployment — acima do limite de 12 do plano Hobby. A afirmação anterior de que o projeto "já opera nesse limite" estava desatualizada.
+
+Como os deploys recentes têm funcionado, ou o limite/plano efetivo mudou, ou a contagem real difere da esperada. Confirmar com `vercel inspect` antes de criar qualquer função nova.
+
+Recomendação registrada (ainda não executada):
+
+```text
+Mover api/media-storage.js para api/_lib/media-storage.js (ou prefixar com _)
+para que a Vercel deixe de contá-lo como função serverless.
+Ajustar os imports em webhook.js, send.js, conversation.js,
+delete-media.js e parse-budget-pdf.js.
+```
 
 Antes de criar qualquer novo arquivo `.js` dentro de `api/`, o agente deve:
 
