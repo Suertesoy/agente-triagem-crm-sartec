@@ -67,7 +67,7 @@ A prioridade do projeto é criar um MVP estável para organizar atendimentos PF 
 A raiz correta do projeto é:
 
 ```text
-C:\Users\Cabral\Desktop\PROJETOS\SARTEC\PAINEL, AGENTE E SITE
+C:\Users\USER\Desktop\PROJETOS\SARTEC - CRM_AGENTE\PAINEL, AGENTE
 ```
 
 A raiz deve conter:
@@ -470,12 +470,12 @@ agente-triagem-sartec
 
 A pasta `.vercel/` não deve ser commitada.
 
-O plano Hobby da Vercel tem limite de 12 Serverless Functions. Antes de criar qualquer arquivo novo em `api/`, contar quantas funções já existem.
+O plano Hobby da Vercel tem, historicamente, limite de 12 Serverless Functions. Hoje `api/` contém 16 arquivos `.js`: 15 handlers e o helper `media-storage.js`, que a Vercel também conta como função por estar em `api/` sem prefixo `_`. Ver seção 7 do project_context.md para a situação real e a recomendação de mover o helper para `api/_lib/`. Antes de criar qualquer arquivo novo em `api/`, contar quantas funções já existem.
 
 Regra crítica:
 
 ```text
-Não criar api/dev-reset.js ou outra função extra sem verificar limite de 12 funções.
+Não criar api/dev-reset.js ou outra função extra sem verificar o limite de funções do plano.
 ```
 
 Quando precisar adicionar funcionalidade backend, preferir integrar em API existente se fizer sentido e se não aumentar risco.
@@ -825,7 +825,7 @@ Confirmar:
 ```text
 raiz correta
 projectName = agente-triagem-sartec
-api/ com 12 funções
+api/ com 16 arquivos .js (15 handlers + helper media-storage.js)
 painel/index.html existe
 site/ não existe neste repositório (site público vive em Suertesoy/sartecpapelaria)
 AGENTE+API/ não existe
