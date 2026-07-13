@@ -5507,9 +5507,16 @@ let _refreshOkTimer = null;
 let convsPollTimer  = null;
 let resolveCallback = null;   // callback para o confirm modal
 let _dragPhone = null, _dragClientType = null;
-let _dropInFlight = false;
 let _dragInsertAfter = null;
 const _colOrder = {};
+
+// ── Controle de concorrência da fila (pipeline) ──────────────────────────
+// Evita que uma resposta antiga ou fora de ordem de /api/queue desfaça uma
+// movimentação otimista (drag, select, mobile) ainda em andamento.
+let _queueRequestSeq   = 0;    // geração monotônica: só a leitura mais recente pode ser aplicada
+let _activeQueueAbort  = null; // AbortController do GET /api/queue em andamento
+let _pendingMoveSeq    = 0;    // token único por movimentação otimista pendente
+const pendingCardMoves = new Map(); // phone -> { moveId, kind: "status"|"order", ... }
 let _priPickerPhone      = null;
 let _lastClientTypeChange = null; // { phone, oldType, oldPipelineStatus }
 const _expandedCards = new Set(); // phones com card expandido no kanban
@@ -6416,28 +6423,65 @@ function setRefreshState(state) {
   }
 }
 
+// Invalida qualquer leitura de /api/queue em andamento (chamado no início de um
+// drag): a resposta, se ainda chegar, será descartada por loadQueue() mesmo que
+// o abort não intercepte a requisição a tempo.
+function invalidateQueueRead() {
+  _queueRequestSeq++;
+  if (_activeQueueAbort) {
+    _activeQueueAbort.abort();
+    _activeQueueAbort = null;
+  }
+}
+
+// Reaplica por cima do snapshot recém-carregado do servidor qualquer
+// movimentação otimista ainda pendente — protege contra uma leitura que seja a
+// mais recente por sequência, mas cujos dados foram lidos antes da persistência
+// da movimentação terminar.
+function reapplyPendingCardMoves() {
+  for (const [phone, move] of pendingCardMoves) {
+    if (move.kind === "status") {
+      const conv = allConvs.find(c => c.phone === phone);
+      if (conv) conv.pipelineStatus = move.targetStatus;
+    } else if (move.kind === "order") {
+      _colOrder[move.orderKey] = move.newOrder;
+    }
+  }
+}
+
+// Remove uma movimentação pendente somente se ela ainda for a dona do slot
+// (evita que a conclusão tardia de uma operação antiga apague o registro de
+// uma movimentação mais recente do mesmo card).
+function clearPendingMove(phone, moveId) {
+  if (pendingCardMoves.get(phone)?.moveId === moveId) {
+    pendingCardMoves.delete(phone);
+  }
+}
+
 async function loadQueue() {
-  console.log("[loadQueue] ▶ start");
+  const mySeq = ++_queueRequestSeq;
+  if (_activeQueueAbort) _activeQueueAbort.abort();
+  const ac = new AbortController();
+  _activeQueueAbort = ac;
+
   setRefreshState("updating");
   try {
-    const res  = await fetch("/api/queue");
-    console.log("[loadQueue] status:", res.status);
+    const res = await fetch("/api/queue", { signal: ac.signal });
+    if (mySeq !== _queueRequestSeq) return; // uma leitura mais nova já assumiu — descarta esta resposta
     const data = await res.json();
-    console.log("[loadQueue] conversations:", (data.conversations||[]).length);
-    allConvs   = data.conversations || [];
+    if (mySeq !== _queueRequestSeq) return;
+
+    allConvs = data.conversations || [];
     Object.assign(_colOrder, data.pipelineOrder || {});
+    reapplyPendingCardMoves();
     // detectNewCards ANTES de renderPipeline para que _newlyArrivedPhones
     // esteja populado quando processCardNewMsg inicializar o badge dos cards novos
     detectNewCards(allConvs);
-    console.log("[loadQueue] before renderPipeline, __onboardingActive:", window.__onboardingActive);
     if (!window.__onboardingActive) {
       renderPipeline(allConvs);
-      console.log("[loadQueue] after renderPipeline");
       if (window.innerWidth <= 768) { renderMobStageCards("pf",_mobActiveStage.pf||"novo"); renderMobStageCards("pj",_mobActiveStage.pj||"novo"); }
     }
-    console.log("[loadQueue] before updateHeader");
     updateHeader(allConvs);
-    console.log("[loadQueue] ✅ done");
     updateDocTitle(allConvs);
     setRefreshState("ok");
     if (checkAndShowOnboardingAfterLogin()) {
@@ -6449,8 +6493,12 @@ async function loadQueue() {
       }
     }
   } catch (e) {
+    if (e.name === "AbortError") return; // cancelamento intencional — não é falha
+    if (mySeq !== _queueRequestSeq) return; // resposta obsoleta que rejeitou depois de já substituída
     console.error("[loadQueue] ❌", e);
     setRefreshState("error");
+  } finally {
+    if (_activeQueueAbort === ac) _activeQueueAbort = null;
   }
 }
 
@@ -6738,11 +6786,13 @@ function renderPipelineTab(tabId, cols, convs) {
         const insertIdx = _dragInsertAfter ? siblings.indexOf(_dragInsertAfter) + 1 : 0;
         const newOrder = [...siblings];
         newOrder.splice(Math.max(0, insertIdx), 0, phone);
-        _colOrder[tabId + ":" + targetKey] = newOrder;
+        const orderKey = tabId + ":" + targetKey;
+        const moveId = ++_pendingMoveSeq;
+        pendingCardMoves.set(phone, { moveId, kind: "order", orderKey, newOrder, originalOrder });
+        _colOrder[orderKey] = newOrder;
         _dragInsertAfter = null;
         cardsEl.querySelector(".drag-line")?.remove();
         renderPipeline(allConvs);
-        _dropInFlight = true;
         fetch("/api/update-card", {
           method: "PUT",
           headers: { "Content-Type": "application/json" },
@@ -6752,12 +6802,14 @@ function renderPipelineTab(tabId, cols, convs) {
           await loadQueue();
         }).catch(async () => {
           showToast(getHumanErrorMsg("reorder_card"), "t-err");
-          _colOrder[tabId + ":" + targetKey] = originalOrder;
+          if (pendingCardMoves.get(phone)?.moveId === moveId) {
+            _colOrder[orderKey] = originalOrder;
+          }
           renderPipeline(allConvs);
           await loadQueue();
         }).finally(() => {
-          _dropInFlight = false;
-          startAutoRefresh();
+          clearPendingMove(phone, moveId);
+          if (pendingCardMoves.size === 0) startAutoRefresh();
         });
         return;
       }
@@ -6765,9 +6817,10 @@ function renderPipelineTab(tabId, cols, convs) {
         quickResolveCard(phone);
       } else {
         const originalStatus = conv.pipelineStatus;
+        const moveId = ++_pendingMoveSeq;
+        pendingCardMoves.set(phone, { moveId, kind: "status", targetStatus: targetKey });
         conv.pipelineStatus = targetKey;
         renderPipeline(allConvs);
-        _dropInFlight = true;
         try {
           const res = await fetch("/api/update-status", {
             method: "PUT",
@@ -6782,12 +6835,15 @@ function renderPipelineTab(tabId, cols, convs) {
           }
         } catch {
           showToast(getHumanErrorMsg("move_card"), "t-err");
-          conv.pipelineStatus = originalStatus;
+          if (pendingCardMoves.get(phone)?.moveId === moveId) {
+            const cur = allConvs.find(c => c.phone === phone);
+            if (cur) cur.pipelineStatus = originalStatus;
+          }
           renderPipeline(allConvs);
           await loadQueue();
         } finally {
-          _dropInFlight = false;
-          startAutoRefresh();
+          clearPendingMove(phone, moveId);
+          if (pendingCardMoves.size === 0) startAutoRefresh();
         }
       }
     });
@@ -7066,13 +7122,16 @@ function buildCard(c, col, cols) {
       e.dataTransfer.effectAllowed = "move";
       setTimeout(() => card.classList.add("dragging"), 0);
       stopAutoRefresh();
+      // Uma leitura de /api/queue iniciada antes deste drag não pode mais
+      // ser aplicada — mesmo que já esteja em voo e o abort não a intercepte.
+      invalidateQueueRead();
     });
     card.addEventListener("dragend", () => {
       card.classList.remove("dragging");
       _dragPhone = null;
       _dragInsertAfter = null;
       document.querySelectorAll(".drag-line").forEach(el => el.remove());
-      if (!_dropInFlight) {
+      if (pendingCardMoves.size === 0) {
         startAutoRefresh();
       }
     });
@@ -7159,7 +7218,12 @@ async function changeStatus(select, phone, clientType) {
     }
   }
   const conv = allConvs.find(c => c.phone === phone);
-  if (conv) { conv.pipelineStatus = newStatus; renderPipeline(allConvs); }
+  const moveId = ++_pendingMoveSeq;
+  if (conv) {
+    pendingCardMoves.set(phone, { moveId, kind: "status", targetStatus: newStatus });
+    conv.pipelineStatus = newStatus;
+    renderPipeline(allConvs);
+  }
 
   try {
     await fetch("/api/update-status", {
@@ -7168,7 +7232,11 @@ async function changeStatus(select, phone, clientType) {
       body: JSON.stringify({ phone, pipelineStatus: newStatus, clientType }),
     });
     showToast("Status atualizado");
-  } catch (e) { console.error("[changeStatus]", e); }
+  } catch (e) {
+    console.error("[changeStatus]", e);
+  } finally {
+    clearPendingMove(phone, moveId);
+  }
 }
 
 async function mobChangeStage(phone, clientType, select) {
@@ -7184,6 +7252,8 @@ async function mobChangeStage(phone, clientType, select) {
     }
   }
   const oldStatus = conv.pipelineStatus || "novo";
+  const moveId = ++_pendingMoveSeq;
+  pendingCardMoves.set(phone, { moveId, kind: "status", targetStatus: newStatus });
   conv.pipelineStatus = newStatus;
   const tabId = clientType || conv.clientType || "pf";
   renderMobStageCards(tabId, _mobActiveStage[tabId] || "novo");
@@ -7196,9 +7266,13 @@ async function mobChangeStage(phone, clientType, select) {
     showToast("Etapa atualizada");
   } catch (e) {
     console.error("[mobChangeStage]", e);
-    conv.pipelineStatus = oldStatus;
+    if (pendingCardMoves.get(phone)?.moveId === moveId) {
+      conv.pipelineStatus = oldStatus;
+    }
     renderMobStageCards(tabId, _mobActiveStage[tabId] || "novo");
     showToast("Não foi possível mover a etapa. Tente novamente.", "t-err");
+  } finally {
+    clearPendingMove(phone, moveId);
   }
 }
 
