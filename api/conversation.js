@@ -4,7 +4,7 @@
 // ============================================================
 
 import Redis from "ioredis";
-import { getMediaUrl } from "./media-storage.js";
+import { getMediaUrl } from "./_lib/media-storage.js";
 
 let redisClient = null;
 

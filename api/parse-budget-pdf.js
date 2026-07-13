@@ -13,7 +13,7 @@
 
 import Anthropic from "@anthropic-ai/sdk";
 import Redis from "ioredis";
-import { downloadMedia } from "./media-storage.js";
+import { downloadMedia } from "./_lib/media-storage.js";
 
 let redisClient = null;
 

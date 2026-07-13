@@ -9,7 +9,7 @@
 // ============================================================
 
 import Redis from "ioredis";
-import { deleteMedia as r2Delete } from "./media-storage.js";
+import { deleteMedia as r2Delete } from "./_lib/media-storage.js";
 
 let redisClient = null;
 

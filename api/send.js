@@ -7,7 +7,7 @@
 // ============================================================
 
 import Redis from "ioredis";
-import { uploadMedia } from "./media-storage.js";
+import { uploadMedia } from "./_lib/media-storage.js";
 
 let redisClient = null;
 

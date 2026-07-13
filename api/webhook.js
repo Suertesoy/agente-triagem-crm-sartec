@@ -12,7 +12,7 @@
 
 import Anthropic from "@anthropic-ai/sdk";
 import Redis from "ioredis";
-import { uploadMedia, getMediaUrl } from "./media-storage.js";
+import { uploadMedia, getMediaUrl } from "./_lib/media-storage.js";
 
 // ============================================================
 // REDIS
