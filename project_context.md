@@ -32,7 +32,7 @@ Se algum arquivo antigo de regras aparecer no projeto, ele não deve ser usado c
 A raiz correta do projeto é:
 
 ```text
-C:\Users\Cabral\Desktop\PROJETOS\SARTEC\PAINEL, AGENTE E SITE
+C:\Users\USER\Desktop\PROJETOS\SARTEC - CRM_AGENTE\PAINEL, AGENTE
 ```
 
 Esta pasta deve conter o projeto completo com Git, Vercel, APIs, painel e documentação. O site público fica em repositório separado (ver SITE_OFICIAL.md).
