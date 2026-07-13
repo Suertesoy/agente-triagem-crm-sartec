@@ -9428,6 +9428,15 @@ async function sendImagesSequential(prefix, container, caption) {
   autoAdvanceAfterHumanReply(phone);
 }
 
+// Devolve o texto digitado ao campo quando o envio falha — evita redigitação.
+// Não sobrescreve se o atendente já começou a digitar outra coisa.
+function restoreComposerText(prefix, text) {
+  const input = document.getElementById(`${prefix}-msg-input`);
+  if (!input || !text || input.value) return;
+  input.value = text;
+  autoResize(input);
+}
+
 async function sendTextMessage(prefix, container, text) {
   const phone = getPhoneForPrefix(prefix);
   const att   = getCurrentAttendant();
@@ -9457,6 +9466,7 @@ async function sendTextMessage(prefix, container, text) {
       const err = await res.json();
       showToast(getHumanErrorMsg("send_text", err), "t-err");
       removeLastOptimistic(container);
+      restoreComposerText(prefix, text);
     } else {
       clearReplyTarget(prefix);
       prefix === "modal" ? await refreshModal() : await refreshConvsChat(phone);
@@ -9464,7 +9474,7 @@ async function sendTextMessage(prefix, container, text) {
       await ensureAttendantAssumedOnMessage(phone, prefix);
       autoAdvanceAfterHumanReply(phone);
     }
-  } catch (e) { showToast("Não foi possível enviar a mensagem. Verifique a conexão e tente novamente.", "t-err"); removeLastOptimistic(container); }
+  } catch (e) { showToast("Não foi possível enviar a mensagem. Verifique a conexão e tente novamente.", "t-err"); removeLastOptimistic(container); restoreComposerText(prefix, text); }
 }
 
 async function sendImageMessage(prefix, container, caption) {
