@@ -7195,15 +7195,22 @@ async function saveDemandType(select) {
   const phone      = select.dataset.phone;
   const demandType = select.value;
   try {
-    await fetch("/api/update-card", {
+    const res = await fetch("/api/update-card", {
       method: "PUT",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ phone, demandType }),
     });
+    if (!res.ok) throw new Error("HTTP " + res.status);
     const conv = allConvs.find(c => c.phone === phone);
     if (conv) { conv.demandType = demandType; renderPipeline(allConvs); }
     showToast("Categoria atualizada");
-  } catch (e) { console.error("[saveDemandType]", e); }
+  } catch (e) {
+    console.error("[saveDemandType]", e);
+    // Rollback: devolve o seletor ao valor salvo e avisa o atendente
+    const conv = allConvs.find(c => c.phone === phone);
+    if (conv) select.value = conv.demandType || "outro";
+    showToast("Não foi possível salvar a categoria. Tente novamente.", "t-err");
+  }
 }
 
 async function changeStatus(select, phone, clientType) {
@@ -7218,6 +7225,7 @@ async function changeStatus(select, phone, clientType) {
     }
   }
   const conv = allConvs.find(c => c.phone === phone);
+  const oldStatus = conv?.pipelineStatus || "novo";
   const moveId = ++_pendingMoveSeq;
   if (conv) {
     pendingCardMoves.set(phone, { moveId, kind: "status", targetStatus: newStatus });
@@ -7226,14 +7234,21 @@ async function changeStatus(select, phone, clientType) {
   }
 
   try {
-    await fetch("/api/update-status", {
+    const res = await fetch("/api/update-status", {
       method: "PUT",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ phone, pipelineStatus: newStatus, clientType }),
     });
+    if (!res.ok) throw new Error("HTTP " + res.status);
     showToast("Status atualizado");
   } catch (e) {
     console.error("[changeStatus]", e);
+    // Rollback: mesmo tratamento de mobChangeStage — reverte e avisa
+    if (conv && pendingCardMoves.get(phone)?.moveId === moveId) {
+      conv.pipelineStatus = oldStatus;
+    }
+    renderPipeline(allConvs);
+    showToast("Não foi possível mover a etapa. Tente novamente.", "t-err");
   } finally {
     clearPendingMove(phone, moveId);
   }
