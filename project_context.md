@@ -166,6 +166,55 @@ Card pode entrar no CRM já com origem = site
 
 O foco principal deste repositório continua sendo o MVP do CRM e do agente.
 
+### 4.4 CONTRATO — Formato da mensagem de lista escolar do site
+
+A ferramenta de lista escolar do site (repo `sartecpapelaria`) envia ao WhatsApp uma mensagem no formato abaixo, que o painel extrai via `parseSiteSchoolList` (painel/index.html). Estrutura atual (exemplo anonimizado):
+
+```text
+Olá, Sartec! Sou *NOME DO CLIENTE*.
+
+Organizei minha lista escolar pelo site da Sartec:
+
+[SITE_LISTA_ESCOLAR]
+*WhatsApp:* (12) 91234-5678
+
+*Lista 1 · Nome do Aluno*
+Escola: Nome da Escola
+Ano/Série: 1º ano
+Segmento: Ensino Fundamental I
+Ano letivo: 2026
+Preferência de cor: azul
+Observações: neutros, sem desenhos
+Critério para o orçamento: Mais econômico
+
+🔹 1x Caderno grande brochura (48 folhas, capa dura)
+🔹 2x Borracha branca
+🔹 3x Lápis grafite nº2
+
+A equipe pode conferir estoque, marcas e valores e me enviar o orçamento pelo WhatsApp?
+
+— Enviado pela ferramenta de lista escolar do site da Sartec
+```
+
+Regras do contrato:
+
+```text
+O marcador [SITE_LISTA_ESCOLAR] identifica a mensagem como lista do site.
+Cada lista é um bloco "*Lista N · Nome do Aluno*"; a mensagem pode ter vários blocos.
+Campos do cabeçalho: Escola, Ano/Série, Segmento, Ano letivo,
+Preferência de cor, Observações (opcional), Critério para o orçamento.
+Itens vêm direto após o cabeçalho, um por linha: "Nx Nome (observação)" —
+sem título de seção. A observação entre parênteses no fim do nome é extraída
+para o campo próprio de observações do item.
+O marcador visual antes do "Nx" (emoji) é ignorado pelo parser.
+
+REGRA OBRIGATÓRIA: qualquer mudança no formato da mensagem do site DEVE ser
+acompanhada de atualização no parseSiteSchoolList (painel/index.html) e de
+teste com uma mensagem real do Redis. O parser aceita também os rótulos
+antigos (ex.: "*Itens que quero comprar:*") para manter mensagens antigas
+do histórico parseáveis.
+```
+
 ## 5. Arquitetura técnica
 
 Stack atual:
@@ -546,6 +595,15 @@ Garantir estabilidade de histórico, templates e atendimento humano.
 Organizar documentação e arquivos locais.
 ```
 
+Investigação pendente (registrada em 2026-07, não investigar agora):
+
+```text
+Caracteres corrompidos (�) aparecem no lugar dos emojis nas mensagens de
+lista escolar vindas do site — possível problema de codificação em algum
+ponto entre o site e o webhook. Não afeta o parser (que ignora o marcador
+antes do "Nx"), mas deve ser investigado antes de operar com clientes reais.
+```
+
 ### Próximas melhorias prováveis no CRM
 
 ```text
@@ -554,6 +612,8 @@ Refinar aba Conversas, favoritos e arquivamento.
 Melhorar leitura operacional dos cards.
 Aprimorar comportamento mobile após testes reais.
 Aprimorar relatórios ou filtros por status/categoria.
+Estender busca e filtro de período dos Resolvidos para a visão mobile
+(implementado em 2026-07 apenas no Kanban desktop).
 ```
 
 ### Depois do MVP do CRM
