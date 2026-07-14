@@ -470,12 +470,13 @@ agente-triagem-sartec
 
 A pasta `.vercel/` não deve ser commitada.
 
-O plano Hobby da Vercel tem, historicamente, limite de 12 Serverless Functions. Hoje `api/` contém 16 arquivos `.js`: 15 handlers e o helper `media-storage.js`, que a Vercel também conta como função por estar em `api/` sem prefixo `_`. Ver seção 7 do project_context.md para a situação real e a recomendação de mover o helper para `api/_lib/`. Antes de criar qualquer arquivo novo em `api/`, contar quantas funções já existem.
+A conta Vercel deste projeto está no plano **Pro** (pago), não Hobby. O limite de 12 Serverless Functions por deployment era do plano Hobby; no Pro o teto é muito maior. Hoje `api/` contém 15 handlers; o helper `media-storage.js` vive em `api/_lib/` (o prefixo `_` faz a Vercel não contá-lo como função). Ver seção 7 do project_context.md. Ainda assim, antes de criar arquivo novo em `api/`, contar quantas funções já existem.
 
-Regra crítica:
+Regra:
 
 ```text
-Não criar api/dev-reset.js ou outra função extra sem verificar o limite de funções do plano.
+Não criar api/dev-reset.js ou outra função extra sem necessidade real —
+o plano Pro não é motivo para criar funções sem critério.
 ```
 
 Quando precisar adicionar funcionalidade backend, preferir integrar em API existente se fizer sentido e se não aumentar risco.
@@ -825,7 +826,7 @@ Confirmar:
 ```text
 raiz correta
 projectName = agente-triagem-sartec
-api/ com 16 arquivos .js (15 handlers + helper media-storage.js)
+api/ com 15 handlers + helper em api/_lib/media-storage.js
 painel/index.html existe
 site/ não existe neste repositório (site público vive em Suertesoy/sartecpapelaria)
 AGENTE+API/ não existe

@@ -100,7 +100,7 @@ Detectar handoff para humano
 Controlar templateWaitingReply e lastTemplateType
 Preservar histórico por pelo menos 90 dias
 Controlar reset de teste dentro do webhook
-Baixar mídia da Meta e armazenar no Cloudflare R2 (via api/media-storage.js)
+Baixar mídia da Meta e armazenar no Cloudflare R2 (via api/_lib/media-storage.js)
 Transcrever áudio recebido com OpenAI gpt-4o-mini-transcribe
 ```
 
@@ -195,11 +195,11 @@ O projeto usa `type: module` no `package.json`.
 
 ### 5.1 Endpoints reais em api/
 
-Hoje existem 16 arquivos `.js` em `api/`: 15 handlers serverless e 1 helper sem handler.
+Hoje existem 15 handlers serverless em `api/` e 1 helper em `api/_lib/`.
 
 ```text
 api/active-attendant.js   — controle de atendente ativo por conversa
-api/archive.js            — arquivamento de atendimentos
+api/archive.js            — arquivamento de atendimentos (endpoint pronto; botão no painel é feature futura — ver seção 12)
 api/contacts.js           — base de contatos persistente (GET busca, POST reopen)
 api/conversation.js       — histórico de uma conversa
 api/conversations.js      — lista de conversas
@@ -215,10 +215,10 @@ api/update-status.js      — mudança de status no pipeline
 api/webhook.js            — webhook da Meta, triagem, agente, reset de teste, transcrição de áudio
 ```
 
-Helper sem handler (exporta funções usadas por webhook.js, send.js, conversation.js, delete-media.js e parse-budget-pdf.js):
+Helper sem handler (exporta funções usadas por webhook.js, send.js, conversation.js, delete-media.js e parse-budget-pdf.js). Movido de `api/` para `api/_lib/` em 2026-07 para a Vercel não contá-lo como função:
 
 ```text
-api/media-storage.js      — upload/download/delete e URL assinada de mídia no Cloudflare R2
+api/_lib/media-storage.js — upload/download/delete e URL assinada de mídia no Cloudflare R2
 ```
 
 ### 5.2 Variáveis de ambiente usadas pelo código
@@ -268,26 +268,15 @@ Por isso, as pastas `painel/` e `api/` devem continuar em minúsculo.
 
 ## 7. Limite de funções serverless
 
-O plano Hobby da Vercel tem, historicamente, limite de 12 Serverless Functions por deployment.
+A conta Vercel deste projeto está no plano **Pro** (pago), não Hobby. O limite de 12 Serverless Functions por deployment era do plano Hobby (gratuito); no Pro o teto é muito maior, então os 15 handlers atuais em `api/` não representam risco de deploy. Confirmado em 2026-07 via `vercel inspect` no deploy de produção: status "Ready", sem nenhum aviso de limite.
 
-Situação real hoje (atualizado em 2026-07): `api/` contém 16 arquivos `.js` — 15 handlers e o helper `media-storage.js`. Como `media-storage.js` está direto em `api/` sem prefixo `_`, a Vercel o conta como função, totalizando 16 funções no deployment — acima do limite de 12 do plano Hobby. A afirmação anterior de que o projeto "já opera nesse limite" estava desatualizada.
-
-Como os deploys recentes têm funcionado, ou o limite/plano efetivo mudou, ou a contagem real difere da esperada. Confirmar com `vercel inspect` antes de criar qualquer função nova.
-
-Recomendação registrada (ainda não executada):
-
-```text
-Mover api/media-storage.js para api/_lib/media-storage.js (ou prefixar com _)
-para que a Vercel deixe de contá-lo como função serverless.
-Ajustar os imports em webhook.js, send.js, conversation.js,
-delete-media.js e parse-budget-pdf.js.
-```
+Em 2026-07 o helper `media-storage.js` foi movido de `api/` para `api/_lib/` — o prefixo `_` faz a Vercel deixar de contá-lo como função. Os imports foram atualizados em webhook.js, send.js, conversation.js, delete-media.js e parse-budget-pdf.js.
 
 Antes de criar qualquer novo arquivo `.js` dentro de `api/`, o agente deve:
 
 ```text
 Contar as funções existentes
-Verificar o limite de 12 funções
+Confirmar que a conta segue no plano Pro (ou verificar o limite do plano atual)
 Propor integração em função existente se fizer sentido
 Pedir autorização explícita antes de criar nova função
 ```
@@ -296,7 +285,7 @@ Decisão já tomada:
 
 ```text
 api/dev-reset.js não deve existir.
-A lógica de reset de teste foi integrada em api/webhook.js para manter o limite de 12 funções.
+A lógica de reset de teste foi integrada em api/webhook.js.
 ```
 
 ## 8. Redis, sessão e histórico
@@ -480,6 +469,27 @@ activeAttendant e activeAttendantAt expostos no queue.
 Chip de atendente ativo no card.
 Botão Assumir atendimento implementado e testado.
 Header, cards, modal desktop, mobile e drag and drop receberam refinamentos visuais e funcionais.
+Conta Vercel confirmada no plano Pro (2026-07) — o limite de 12 funções era do Hobby e deixou de ser restrição.
+Helper media-storage.js movido para api/_lib/ com imports atualizados (2026-07).
+```
+
+Decisão de produto sobre arquivamento (2026-07):
+
+```text
+api/archive.js fica mantido como feature futura de arquivamento — uma
+"gaveta organizadora" do painel, que não afeta a retenção de 90 dias do
+histórico. O botão de arquivar no painel será implementado quando a
+operação real gerar acúmulo de conversas resolvidas.
+```
+
+Correções de usabilidade aplicadas em 2026-07 (auditoria de UX):
+
+```text
+Mudança de status/categoria no desktop agora mostra erro e reverte o card se o salvamento falhar (antes falhava em silêncio).
+Texto digitado volta ao campo quando o envio de mensagem falha (antes era perdido).
+Loading artificial do login reduzido de ~2,2s para ~0,6s.
+Kanban não redesenha durante arrasto de card e preserva a posição de rolagem a cada polling.
+Logos do painel e do login comprimidas de ~708KB para ~72KB somados, sem perda visível.
 ```
 
 ## 13. Estado atual do MVP
@@ -491,6 +501,16 @@ CRM e agente estão em fase de MVP/testes.
 Produto ainda não está em uso por clientes reais em escala.
 Deploy da Vercel pode ser usado como ambiente principal de teste.
 Fluxos principais do CRM já começaram a ser testados no deploy.
+```
+
+Débito de segurança conhecido (registrado em 2026-07):
+
+```text
+A senha do painel está escrita no JavaScript de painel/login.html e fica
+visível para qualquer pessoa que abra o código-fonte da página.
+Aceitável enquanto o uso é interno e familiar.
+DEVE ser movida para validação no servidor antes de operar com número
+real da Meta e atendentes externos.
 ```
 
 Testes já realizados pelo usuário:
