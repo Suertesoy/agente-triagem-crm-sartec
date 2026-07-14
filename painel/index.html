@@ -12681,12 +12681,35 @@ function _sslParseItems(block, startMarker, endMarker) {
 
     const m = t.match(qtyRe);
     if (m) {
-      items.push({ qty: m[1], name: m[2].trim(), obs: [] });
+      items.push(_sslSplitItemObs(m[1], m[2].trim()));
     } else {
       // Sem "Nx" explícito — não inventar quantidade: item próprio com qtd. 1,
       // preservando números internos do nome (ex: "100 folhas de sulfite").
-      items.push({ qty: "1", name: t, obs: [] });
+      items.push(_sslSplitItemObs("1", t));
     }
+  }
+  return items;
+}
+
+// ── Separa "Nome (observação)": a observação no fim do nome vai para obs[] ──
+// Captura gulosa até o último ")" — parênteses aninhados ficam na observação.
+function _sslSplitItemObs(qty, rawName) {
+  const m = rawName.match(/^(.*?)\s*\((.+)\)\s*$/);
+  if (m && m[1].trim()) {
+    return { qty, name: m[1].trim(), obs: [m[2].trim()] };
+  }
+  return { qty, name: rawName, obs: [] };
+}
+
+// ── Itens sem título de seção (formato atual do site): linhas "Nx Nome" do bloco ──
+function _sslParseLooseItems(block) {
+  const items = [];
+  const qtyRe = /^[^\d]*(\d{1,3})\s*[xX]\s+(.+)/;
+  for (const line of block.split("\n")) {
+    const t = line.trim().replace(/^\*+|\*+$/g, "").trim();
+    if (!t) continue;
+    const m = t.match(qtyRe);
+    if (m) items.push(_sslSplitItemObs(m[1], m[2].trim()));
   }
   return items;
 }
@@ -12720,15 +12743,23 @@ function parseSiteSchoolList(content) {
     const segmento  = _sslField(block, "Segmento");
     const anoLetivo = _sslField(block, "Ano letivo");
     const alunoNome    = _sslField(block, "Nome") || (alunoNomeM ? alunoNomeM[1].trim() : "");
-    const prefCor      = _sslField(block, "Preferência de cor quando a lista não indicar") || _sslField(block, "Preferencia de cor quando a lista nao indicar");
-    const obsCorModelo = _sslField(block, "Observações sobre cores/modelos") || _sslField(block, "Observacoes sobre cores/modelos");
+    // Rótulos novos do site aceitos como alternativas — os antigos continuam
+    // válidos para que mensagens antigas do histórico sigam parseáveis.
+    const prefCor      = _sslField(block, "Preferência de cor quando a lista não indicar") || _sslField(block, "Preferencia de cor quando a lista nao indicar")
+                      || _sslField(block, "Preferência de cor") || _sslField(block, "Preferencia de cor");
+    const obsCorModelo = _sslField(block, "Observações sobre cores/modelos") || _sslField(block, "Observacoes sobre cores/modelos")
+                      || _sslField(block, "Observações") || _sslField(block, "Observacoes");
     const regaCorM = block.match(/Quando a lista indicar[^\n]+/);
     const regaCor  = regaCorM ? regaCorM[0].trim() : "";
     const prefOrcM = block.match(/\*Preferência para o orçamento:\*\s*\n([^\n]+)/i) || block.match(/\*Preferencia para o orcamento:\*\s*\n([^\n]+)/i);
-    const prefOrcamento = prefOrcM ? prefOrcM[1].trim() : _sslField(block, "Preferência para o orçamento") || _sslField(block, "Critério para orçamento") || _sslField(block, "Criterio para orcamento");
+    const prefOrcamento = prefOrcM ? prefOrcM[1].trim() : _sslField(block, "Preferência para o orçamento") || _sslField(block, "Critério para orçamento") || _sslField(block, "Criterio para orcamento")
+                      || _sslField(block, "Critério para o orçamento") || _sslField(block, "Criterio para o orcamento");
 
-    const items    = _sslParseItems(block, "*Itens que quero comprar:*", "*Itens marcados como Não quero:*");
+    let items      = _sslParseItems(block, "*Itens que quero comprar:*", "*Itens marcados como Não quero:*");
     const naoQuero = _sslParseItems(block, "*Itens marcados como Não quero:*", null);
+    // Formato atual do site: itens vêm direto como "Nx Nome (observação)",
+    // sem o título "*Itens que quero comprar:*" — extrai as linhas Nx do bloco.
+    if (items.length === 0) items = _sslParseLooseItems(block);
 
     result.lists.push({ listNum, escola, anoSerie, segmento, anoLetivo, alunoNome, prefCor, obsCorModelo, regaCor, prefOrcamento, items, naoQuero });
   }
@@ -12739,7 +12770,7 @@ function parseSiteSchoolList(content) {
       const t = line.trim();
       if (!t) continue;
       const m = t.match(/^[^\d]*(\d{1,3})\s*[xX]\s+(.+)/);
-      if (m) fallbackItems.push({ qty: m[1], name: m[2].trim(), obs: [] });
+      if (m) fallbackItems.push(_sslSplitItemObs(m[1], m[2].trim()));
     }
     result.lists.push({ listNum: 1, escola: "", anoSerie: "", segmento: "", anoLetivo: "", alunoNome: "", prefCor: "", obsCorModelo: "", regaCor: "", prefOrcamento: "", items: fallbackItems, naoQuero: [] });
   }
