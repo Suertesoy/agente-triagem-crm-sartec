@@ -4771,7 +4771,7 @@
         <span class="attendant-name" id="attendant-name">Perfil</span>
       </button>
       <div class="refresh-info">Atualiza em <span id="countdown">6</span>s<span id="refresh-state" class="refresh-state"></span></div>
-      <button class="btn-tutorial" onclick="restartOnboarding()" title="Ver tutorial">?</button>
+      <button class="btn-tutorial" onclick="restartOnboarding()" title="Ver tutorial desta tela">?</button>
       <button class="btn-logout" onclick="logout()">Sair</button>
     </div>
   </div>
@@ -6448,7 +6448,6 @@ function renderPfVsPj(pfvspj) {
 // ╔══════════════════════════════════════════════════════════════╗
 // ║  QUEUE / PIPELINE                                            ║
 // ╚══════════════════════════════════════════════════════════════╝
-let _obAutoStarted = false;
 
 function setRefreshState(state) {
   const el = document.getElementById("refresh-state");
@@ -6531,14 +6530,6 @@ async function loadQueue() {
     updateHeader(allConvs);
     updateDocTitle(allConvs);
     setRefreshState("ok");
-    if (checkAndShowOnboardingAfterLogin()) {
-      // Handled
-    } else if (!_obAutoStarted && getCurrentAttendant()) {
-      _obAutoStarted = true;
-      if (window.innerWidth > 768 && !localStorage.getItem("sartec_ob_done")) {
-        setTimeout(() => { switchTab('pf'); obStart(); }, 1200);
-      }
-    }
   } catch (e) {
     if (e.name === "AbortError") return; // cancelamento intencional — não é falha
     if (mySeq !== _queueRequestSeq) return; // resposta obsoleta que rejeitou depois de já substituída
@@ -11938,8 +11929,9 @@ if (window.innerWidth <= 768) { initMobileKanban(); }
 // ╔══════════════════════════════════════════════════════════════╗
 // ║  ONBOARDING TOUR                                             ║
 // ╚══════════════════════════════════════════════════════════════╝
-const OB_STEPS = [
-  { sel: ".top-header",        title: "Visão geral do painel",          text: "Aqui você acompanha os atendimentos em tempo real. O contador mostra quem está aguardando atendimento, e o botão de ajuda permite rever este tutorial quando precisar." },
+// Tour do Kanban — compartilhado por PF e PJ (a mesma renderização de card
+// atende as duas abas, não precisa duplicar por tipo de cliente).
+const OB_STEPS_KANBAN = [
   { sel: ".tab-bar",           title: "Pessoa Física e Pessoa Jurídica", text: "O Kanban tem filas separadas para Pessoa Física e Pessoa Jurídica. Use essas abas para alternar entre os dois tipos de atendimento, porque cada um tem etapas diferentes." },
   { sel: "#tab-convs",         title: "Conversas e Contatos",            text: "A aba Conversas funciona como um histórico geral, parecido com o WhatsApp Web. Ali você busca atendimentos, abre conversas, acompanha a janela do WhatsApp e acessa Contatos para consultar ou editar dados dos clientes." },
   { sel: ".pipeline-wrap",     title: "Kanban de atendimento",           text: "Cada coluna representa uma etapa do atendimento. Arraste os cards entre as colunas para manter a fila atualizada e mostrar em que ponto cada pedido está." },
@@ -11948,14 +11940,28 @@ const OB_STEPS = [
   { sel: ".card-name",         title: "Nome do cliente",                 text: "O nome identifica quem está sendo atendido. Quando necessário, ele pode ser ajustado para manter o card claro para toda a equipe." },
   { sel: ".card-title",        title: "Resumo do atendimento",           text: "O resumo mostra rapidamente o que o cliente precisa. Use essa área para entender o pedido sem abrir a conversa inteira." },
   { sel: ".demand-select",     title: "Categoria do pedido",             text: "A categoria ajuda a identificar o tipo de solicitação, como produtos, dúvida, lista escolar ou cotação PJ. Ela também pode ser ajustada quando o atendimento mudar de contexto." },
-  { sel: ".card-win-time",     title: "Janela do WhatsApp",              text: "O tempo indica a situação da janela de atendimento. Com a janela aberta, é possível responder livremente. Com a janela fechada, será necessário usar um template aprovado." },
+  { sel: ".card-footer-timer", title: "Janela do WhatsApp",              text: "O tempo indica a situação da janela de atendimento. Com a janela aberta, é possível responder livremente. Com a janela fechada, será necessário usar um template aprovado." },
   { sel: ".card-open-hint",    title: "Abrir conversa",                  text: "Use este botão para abrir o histórico completo do cliente, responder mensagens, enviar imagem ou PDF e acompanhar os detalhes do atendimento." },
   { sel: ".pf-pj-toggle",      title: "Tipo de cliente",                 text: "Use PF ou PJ para classificar o atendimento corretamente. Isso ajuda a manter o cliente na fila certa e com o fluxo adequado." },
   { sel: ".btn-resolve-inline", title: "Finalizar atendimento",          text: "Quando o atendimento estiver concluído, use Finalizar ou Resolver para arquivar a conversa e liberar a fila." },
-  { sel: ".card-expand-btn",   title: "Detalhes do pedido",              text: "Expanda o card para ver dados adicionais do pedido sem abrir o chat. Essa área ajuda a conferir informações rápidas durante o atendimento." },
+  { sel: ".card-summary-toggle", title: "Expandir resumo",               text: "Use o botão ▲/▼ para expandir ou retrair o resumo do card e ver mais detalhes do pedido sem abrir o chat." },
 ];
 
-let _obStep = 0;
+// Tour da aba Conversas
+const OB_STEPS_CONVS = [
+  { sel: ".convs-mode-bar", title: "Conversas e Contatos",        text: "Use estes botões para alternar entre a lista de conversas e o diretório de contatos." },
+  { sel: ".convs-filter",   title: "Filtrar por tipo de cliente", text: "Veja todas as conversas ou filtre apenas Pessoa Física ou Pessoa Jurídica." },
+  { sel: ".conv-item",      title: "Abrir uma conversa",          text: "Toque em uma conversa para ver o histórico completo, responder o cliente e acompanhar a janela do WhatsApp." },
+];
+
+// Tour da aba Contatos
+const OB_STEPS_CONTACTS = [
+  { sel: ".convs-mode-bar", title: "Conversas e Contatos", text: "Use estes botões para voltar à lista de conversas ou continuar no diretório de contatos." },
+  { sel: ".contact-item",   title: "Dados do contato",     text: "Cada contato mostra nome e telefone. Toque para ver os dados completos e o histórico de atendimento." },
+];
+
+let _obSteps = OB_STEPS_KANBAN; // array de passos do tour em andamento
+let _obStep  = 0;
 
 function _obClamp(v, lo, hi) { return Math.max(lo, Math.min(hi, v)); }
 
@@ -11977,9 +11983,23 @@ function _obSet(id, styles) {
   Object.assign(el.style, styles);
 }
 
+// PF e PJ têm cada um seu próprio Kanban no DOM ao mesmo tempo (só a aba ativa
+// fica visível via a classe .view.active) — um querySelector simples pode
+// pegar o elemento escondido da outra aba. Preferimos o primeiro match que
+// esteja fora de qualquer .view (ex.: cabeçalho) ou dentro da aba ativa.
+function _obFindVisible(sel) {
+  if (!sel) return null;
+  const matches = document.querySelectorAll(sel);
+  for (const el of matches) {
+    const view = el.closest(".view");
+    if (!view || view.classList.contains("active")) return el;
+  }
+  return matches[0] || null;
+}
+
 async function obShowStep(idx) {
-  const step = OB_STEPS[idx];
-  let el = step.sel ? document.querySelector(step.sel) : null;
+  const step = _obSteps[idx];
+  let el = step.sel ? _obFindVisible(step.sel) : null;
 
   if (el) {
     const r0 = el.getBoundingClientRect();
@@ -11990,7 +12010,10 @@ async function obShowStep(idx) {
   }
 
   const W = window.innerWidth, H = window.innerHeight, PAD = 10, TW = 300, GAP = 14;
-  const rect = el ? el.getBoundingClientRect() : null;
+  // Elemento sem área (0×0) não deve virar um destaque degenerado — trata
+  // como "não encontrado" e cai no tooltip centralizado.
+  let rect = el ? el.getBoundingClientRect() : null;
+  if (rect && (rect.width <= 0 || rect.height <= 0)) rect = null;
 
   if (rect) {
     const x = _obClamp(rect.left   - PAD, 0, W);
@@ -12023,23 +12046,24 @@ async function obShowStep(idx) {
 
   document.getElementById("ob-title").textContent = step.title;
   document.getElementById("ob-text").textContent  = step.text;
-  document.getElementById("ob-badge").textContent = (idx+1) + " / " + OB_STEPS.length;
+  document.getElementById("ob-badge").textContent = (idx+1) + " / " + _obSteps.length;
 
   const back = document.getElementById("ob-back");
   const next = document.getElementById("ob-next");
   if (back) back.style.display = idx === 0 ? "none" : "";
-  if (next) next.textContent   = idx === OB_STEPS.length-1 ? "Concluir →" : "Próximo →";
+  if (next) next.textContent   = idx === _obSteps.length-1 ? "Concluir →" : "Próximo →";
 }
 
-async function obStart() {
-  _obStep = 0;
+async function obStart(steps) {
+  _obSteps = steps || OB_STEPS_KANBAN;
+  _obStep  = 0;
   obShow();
   await obShowStep(0);
 }
 
 async function obNext() {
   const nxt = _obStep + 1;
-  if (nxt >= OB_STEPS.length) { obFinish(); return; }
+  if (nxt >= _obSteps.length) { obFinish(); return; }
   _obStep = nxt;
   await obShowStep(_obStep);
 }
@@ -12050,7 +12074,6 @@ async function obBack() {
 
 function obFinish() {
   obHide();
-  localStorage.setItem("sartec_ob_done", "1");
   if (allConvs.length) renderPipeline(allConvs);
 }
 
@@ -12065,26 +12088,16 @@ function closeMobileHelp() {
   document.getElementById('mob-help-overlay').classList.remove('open');
 }
 
-function checkAndShowOnboardingAfterLogin() {
-  const shouldShow = sessionStorage.getItem("sartec_show_onboarding_after_login") === "1";
-  if (!shouldShow) return false;
-  const att = getCurrentAttendant();
-  if (!att) return false;
-  sessionStorage.removeItem("sartec_show_onboarding_after_login");
-  _obAutoStarted = true;
-  if (window.innerWidth <= 768) {
-    setTimeout(() => { openMobileHelp(); }, 800);
-  } else {
-    setTimeout(() => { switchTab('pf'); obStart(); }, 1000);
-  }
-  return true;
-}
-
+// Tour sob demanda: mostra o conteúdo relativo à tela em que o atendente
+// está no momento do clique, sem forçar troca de aba.
 function restartOnboarding() {
   if (window.innerWidth <= 768) { openMobileHelp(); return; }
-  localStorage.removeItem("sartec_ob_done");
-  switchTab('pf');
-  obStart();
+  if (currentTab === "convs") {
+    obStart(convsSectionMode === "contacts" ? OB_STEPS_CONTACTS : OB_STEPS_CONVS);
+  } else {
+    // pf, pj ou qualquer outra aba sem tour próprio (ex.: Métricas) → Kanban
+    obStart(OB_STEPS_KANBAN);
+  }
 }
 
 loadQueue();
@@ -12391,13 +12404,6 @@ function setAttendant(id) {
   closeAttendantPicker();
   requestNotificationPermission();
   updateMetricsTabVisibility();
-  if (checkAndShowOnboardingAfterLogin()) {
-    return;
-  }
-  if (!_obAutoStarted && window.innerWidth > 768 && !localStorage.getItem("sartec_ob_done")) {
-    _obAutoStarted = true;
-    setTimeout(() => { switchTab('pf'); obStart(); }, 800);
-  }
 }
 
 function openAttendantPicker(required = false) {
@@ -14214,7 +14220,7 @@ function orgPrintList() { orgGenerateOrgFile(); }
     </div>
     <div class="mob-help-card">
       <div class="mob-help-card-title">👤 Contatos</div>
-      <div class="mob-help-card-text">Na aba Conversas, role até o final para ver a lista de Contatos. Toque em um contato para ver ou editar os dados do cliente.</div>
+      <div class="mob-help-card-text">Na aba Conversas, toque no botão "Contatos" no topo da lista para ver e editar os dados dos clientes.</div>
     </div>
     <div class="mob-help-card">
       <div class="mob-help-card-title">🪟 Janela de 24h</div>
