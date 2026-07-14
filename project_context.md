@@ -604,6 +604,18 @@ ponto entre o site e o webhook. Não afeta o parser (que ignora o marcador
 antes do "Nx"), mas deve ser investigado antes de operar com clientes reais.
 ```
 
+Código morto para limpeza futura (identificado em 2026-07):
+
+```text
+windowStatusLabel() em painel/index.html é uma função que nunca é chamada.
+Ela renderiza um rótulo de status de janela, mas seu resultado nunca é
+inserido no DOM — não há nenhum elemento que use seu retorno.
+O indicador visual correto da janela de WhatsApp é renderizado por
+cardWindowTimeText() → .card-footer-timer.
+windowStatusLabel() pode ser removida quando fazer uma limpeza geral de
+código morto no painel.
+```
+
 ### Próximas melhorias prováveis no CRM
 
 ```text
