@@ -518,6 +518,37 @@
       border-color: rgba(26,42,94,.28);
       box-shadow: 0 2px 10px rgba(26,42,94,.10);
     }
+    /* ── Filtro da coluna Resolvidos (busca + período) ── */
+    .btn-resolved-filter {
+      background: none; border: none; cursor: pointer; font-size: .72rem;
+      padding: 2px 4px; border-radius: 6px; opacity: .55; line-height: 1;
+    }
+    .btn-resolved-filter:hover { opacity: 1; background: rgba(26,42,94,.08); }
+    .btn-resolved-filter.has-filter { opacity: 1; }
+    .btn-resolved-filter.has-filter::after {
+      content: "•"; color: #f59e0b; margin-left: 2px; font-weight: 800;
+    }
+    .resolved-filter { padding: 6px 8px 8px; display: flex; flex-direction: column; gap: 6px; }
+    .resolved-filter input[type="search"],
+    .resolved-filter input[type="date"] {
+      width: 100%; border: 1px solid rgba(26,42,94,.15); border-radius: 8px;
+      padding: 6px 9px; font-size: .74rem; font-family: inherit;
+      background: #fff; outline: none; box-sizing: border-box;
+    }
+    .resolved-filter input:focus { border-color: var(--brand-navy); }
+    .resolved-filter-pills { display: flex; gap: 4px; flex-wrap: wrap; }
+    .resolved-filter-pill {
+      border: 1px solid rgba(26,42,94,.15); background: #fff; border-radius: 99px;
+      font-size: .68rem; padding: 3px 9px; cursor: pointer;
+      color: var(--text-secondary); font-weight: 600;
+    }
+    .resolved-filter-pill:hover { border-color: var(--brand-navy); color: var(--brand-navy); }
+    .resolved-filter-pill.active { background: var(--brand-navy); border-color: var(--brand-navy); color: #fff; }
+    .resolved-filter-dates { display: flex; gap: 6px; }
+    .resolved-filter-dates input { flex: 1; min-width: 0; }
+    .pipe-col.col-resolvido.resolved-collapsed .resolved-filter { display: none; }
+    .pipe-col.col-resolvido.resolved-collapsed .btn-resolved-filter { display: none; }
+
     .pipe-col.col-resolvido.resolved-collapsed .pipe-col-cards { display: none; }
     .pipe-col.col-resolvido.resolved-collapsed .pipe-col-header {
       flex: 1;
@@ -6644,6 +6675,102 @@ function toggleResolvedCol(btn) {
   try { localStorage.setItem("sartec_resolved_col_collapsed", isCollapsed ? "1" : "0"); } catch {}
 }
 
+// ── Filtro aditivo da coluna Resolvidos: busca por nome/número + período ────
+// Estado compartilhado entre as abas PF e PJ. Sem filtro ativo, a listagem
+// dos Resolvidos se comporta exatamente como antes.
+let _rfOpen = false;            // painel de filtro visível
+let _rfBypassGuard = false;     // permite o re-render disparado pela própria UI do filtro
+let _rfSearchDebounce = null;   // debounce da busca (300ms)
+const _resolvedFilter = { q: "", period: "", from: "", to: "" };
+
+function _rfActive() {
+  return !!(_resolvedFilter.q.trim() || _resolvedFilter.period);
+}
+
+function _rfPeriodRange() {
+  const p = _resolvedFilter.period;
+  if (!p) return {};
+  if (p === "hoje") { const f = new Date(); f.setHours(0, 0, 0, 0); return { from: f }; }
+  if (p === "7d")   return { from: new Date(Date.now() -  7 * 86400000) };
+  if (p === "30d")  return { from: new Date(Date.now() - 30 * 86400000) };
+  if (p === "custom") {
+    const r = {};
+    if (_resolvedFilter.from) r.from = new Date(_resolvedFilter.from + "T00:00:00");
+    if (_resolvedFilter.to)   r.to   = new Date(_resolvedFilter.to   + "T23:59:59.999");
+    return r;
+  }
+  return {};
+}
+
+function _rfApplyFilter(cards) {
+  if (!_rfActive()) return cards;
+  let out = cards;
+  const q = _resolvedFilter.q.trim().toLowerCase();
+  if (q) out = out.filter(c =>
+    (c.clientName || "").toLowerCase().includes(q) || (c.phone || "").includes(q));
+  const { from, to } = _rfPeriodRange();
+  if (from) out = out.filter(c => c.resolvedAt && new Date(c.resolvedAt) >= from);
+  if (to)   out = out.filter(c => c.resolvedAt && new Date(c.resolvedAt) <= to);
+  return out;
+}
+
+function _rfRerender(tabId, refocusSearch) {
+  _rfBypassGuard = true;
+  try { renderPipeline(allConvs); } finally { _rfBypassGuard = false; }
+  if (refocusSearch) {
+    const inp = document.getElementById("resolved-filter-q-" + tabId);
+    if (inp) {
+      inp.focus();
+      try { inp.setSelectionRange(inp.value.length, inp.value.length); } catch {}
+    }
+  }
+}
+
+function _rfOnSearch(tabId, value) {
+  clearTimeout(_rfSearchDebounce);
+  _rfSearchDebounce = setTimeout(() => {
+    _resolvedFilter.q = value;
+    _rfRerender(tabId, true);
+  }, 300);
+}
+
+function _rfSetPeriod(tabId, p) {
+  _resolvedFilter.period = _resolvedFilter.period === p ? "" : p;
+  _rfRerender(tabId, false);
+}
+
+function _rfOnDate(tabId, which, value) {
+  _resolvedFilter[which] = value;
+  _rfRerender(tabId, false);
+}
+
+function _rfClear(tabId) {
+  _resolvedFilter.q = ""; _resolvedFilter.period = "";
+  _resolvedFilter.from = ""; _resolvedFilter.to = "";
+  _rfRerender(tabId, false);
+}
+
+function buildResolvedFilterBar(tabId) {
+  const bar = document.createElement("div");
+  bar.className = "resolved-filter";
+  const pills = [["hoje", "Hoje"], ["7d", "7 dias"], ["30d", "30 dias"], ["custom", "Período"]]
+    .map(([k, l]) =>
+      `<button class="resolved-filter-pill${_resolvedFilter.period === k ? " active" : ""}" onclick="_rfSetPeriod('${tabId}','${k}')">${l}</button>`)
+    .join("");
+  bar.innerHTML = `
+    <input type="search" id="resolved-filter-q-${tabId}" placeholder="🔍 Nome ou número..."
+      value="${esc(_resolvedFilter.q)}" oninput="_rfOnSearch('${tabId}', this.value)">
+    <div class="resolved-filter-pills">${pills}${_rfActive()
+      ? `<button class="resolved-filter-pill rf-clear" onclick="_rfClear('${tabId}')" title="Limpar busca e período">✕ Limpar</button>` : ""}</div>
+    ${_resolvedFilter.period === "custom" ? `
+    <div class="resolved-filter-dates">
+      <input type="date" value="${esc(_resolvedFilter.from)}" title="De" onchange="_rfOnDate('${tabId}','from',this.value)">
+      <input type="date" value="${esc(_resolvedFilter.to)}" title="Até" onchange="_rfOnDate('${tabId}','to',this.value)">
+    </div>` : ""}
+  `;
+  return bar;
+}
+
 function renderPipeline(convs) {
   renderPipelineTab("pf", PF_COLS, convs.filter(c => (c.clientType||"pf") === "pf"));
   renderPipelineTab("pj", PJ_COLS, convs.filter(c => c.clientType === "pj"));
@@ -6684,6 +6811,10 @@ function renderPipelineTab(tabId, cols, convs) {
     active.addEventListener('blur', deferred);
     return;
   }
+
+  // Guard: foco no filtro de Resolvidos — o polling não pode destruir o campo
+  // enquanto o atendente digita; a própria UI do filtro re-renderiza via _rfRerender.
+  if (!_rfBypassGuard && active && container.contains(active) && active.closest?.(".resolved-filter")) return;
 
   // Preserva a rolagem do quadro (.pipeline-wrap rola em X e, em telas menores,
   // em Y; em desktop largo quem rola é a página) — o innerHTML="" abaixo
@@ -6752,6 +6883,10 @@ function renderPipelineTab(tabId, cols, convs) {
     const hasUrgent = !col.resolved && cards.some(c =>
       c.status === "aguardando_humano" && isUrgent(c.handoffAt)
     );
+
+    // Filtro aditivo da coluna Resolvidos (busca + período): sem filtro ativo,
+    // visibleCards === cards e o comportamento atual não muda em nada.
+    const visibleCards = col.resolved ? _rfApplyFilter(cards) : cards;
 
     const colEl = document.createElement("div");
     colEl.className = "pipe-col" + (col.resolved ? " col-resolvido" : "");
@@ -6883,13 +7018,25 @@ function renderPipelineTab(tabId, cols, convs) {
     hdr.className = "pipe-col-header";
     const countEl = document.createElement("span");
     countEl.className = "pipe-col-count" + (hasUrgent ? " has-urgent" : "");
-    countEl.textContent = cards.length;
+    countEl.textContent = col.resolved && _rfActive()
+      ? `${visibleCards.length}/${cards.length}`
+      : cards.length;
     hdr.innerHTML = `<span class="pipe-col-dot" style="background:${col.color}"></span><span class="pipe-col-label">${esc(col.label)}</span>`;
     hdr.appendChild(countEl);
     if (col.resolved) {
       let isCollapsed = false;
       try { isCollapsed = localStorage.getItem("sartec_resolved_col_collapsed") === "1"; } catch {}
       if (isCollapsed) colEl.classList.add("resolved-collapsed");
+      const rfBtn = document.createElement("button");
+      rfBtn.className   = "btn-resolved-filter" + (_rfActive() ? " has-filter" : "");
+      rfBtn.title       = "Buscar e filtrar resolvidos";
+      rfBtn.textContent = "🔍";
+      rfBtn.addEventListener("click", (e) => {
+        e.stopPropagation();
+        _rfOpen = !_rfOpen;
+        _rfRerender(tabId, false);
+      });
+      hdr.appendChild(rfBtn);
       const colBtn = document.createElement("button");
       colBtn.className   = "btn-collapse-resolved";
       colBtn.title       = isCollapsed ? "Expandir Resolvidos" : "Recolher Resolvidos";
@@ -6903,18 +7050,26 @@ function renderPipelineTab(tabId, cols, convs) {
     }
     colEl.appendChild(hdr);
 
+    // Barra de filtro dos Resolvidos: visível quando aberta ou com filtro ativo
+    // (nunca esconder um filtro que está afetando a lista).
+    if (col.resolved && (_rfOpen || _rfActive())) {
+      colEl.appendChild(buildResolvedFilterBar(tabId));
+    }
+
     const cardsEl = document.createElement("div");
     cardsEl.className = "pipe-col-cards";
 
-    if (!cards.length) {
+    if (!visibleCards.length) {
       const empty = document.createElement("div");
       empty.className = "empty-col";
-      empty.textContent = "Nenhuma conversa";
+      empty.textContent = col.resolved && _rfActive() && cards.length
+        ? "Nenhum resolvido encontrado para o filtro"
+        : "Nenhuma conversa";
       cardsEl.appendChild(empty);
     } else {
       if (col.resolved) {
         let lastGroup = null;
-        for (const c of cards) {
+        for (const c of visibleCards) {
           const group = getResolvedGroupLabel(c.resolvedAt);
           if (group !== lastGroup) {
             lastGroup = group;
@@ -6927,7 +7082,7 @@ function renderPipelineTab(tabId, cols, convs) {
           cardsEl.appendChild(buildCard(c, col, cols));
         }
       } else {
-        for (const c of cards) {
+        for (const c of visibleCards) {
           cardsEl.appendChild(buildCard(c, col, cols));
         }
       }
