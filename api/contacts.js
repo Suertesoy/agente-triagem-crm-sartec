@@ -55,9 +55,10 @@ async function handleGet(req, res) {
     const redis = getRedis();
     const keys  = await scanContactKeys(redis);
 
+    // MGET único em vez de um GET por chave — evita N+1 de round-trips ao Redis
+    const values = keys.length ? await redis.mget(...keys) : [];
     const contacts = [];
-    for (const key of keys) {
-      const raw = await redis.get(key);
+    for (const raw of values) {
       if (!raw) continue;
       try { contacts.push(JSON.parse(raw)); } catch {}
     }

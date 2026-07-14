@@ -2438,6 +2438,17 @@
       100% { transform: rotate(360deg); }
     }
 
+    /* Loading da lista de Conversas/Contatos (busca) */
+    .convs-list-loading {
+      display: flex; align-items: center; justify-content: center; gap: 8px;
+      padding: 24px 16px; color: var(--text-secondary); font-size: .82rem;
+    }
+    .convs-loading-spinner {
+      width: 14px; height: 14px; border-radius: 50%; flex-shrink: 0;
+      border: 2px solid rgba(26,42,94,.18); border-top-color: var(--brand-navy);
+      animation: org-spin .8s linear infinite;
+    }
+
     /* Tabela de folha de separação — colunas mais compactas */
     .sep-tbl th, .sep-tbl td { padding: 4px 5px; font-size: 9.5pt; }
     .sep-tbl input[type=text] {
@@ -5515,6 +5526,11 @@ const _colOrder = {};
 // movimentação otimista (drag, select, mobile) ainda em andamento.
 let _queueRequestSeq   = 0;    // geração monotônica: só a leitura mais recente pode ser aplicada
 let _activeQueueAbort  = null; // AbortController do GET /api/queue em andamento
+
+// ── Busca da aba Conversas/Contatos: debounce + descarte de respostas antigas ──
+let _convsSearchDebounce = null; // timer do debounce da busca (300ms)
+let _convsRequestSeq     = 0;    // só a resposta mais recente de /api/conversations é aplicada
+let _contactsRequestSeq  = 0;    // idem para /api/contacts
 let _pendingMoveSeq    = 0;    // token único por movimentação otimista pendente
 const pendingCardMoves = new Map(); // phone -> { moveId, kind: "status"|"order", ... }
 let _priPickerPhone      = null;
@@ -7956,15 +7972,18 @@ function closeModal() {
 let allConversationsList = [];
 
 async function loadConversations() {
+  const mySeq = ++_convsRequestSeq;
   try {
     const search = document.getElementById("convs-search-input")?.value || "";
     const url    = `/api/conversations?page=1&limit=50${search ? `&search=${encodeURIComponent(search)}` : ""}`;
     const res    = await fetch(url);
     const data   = await res.json();
+    if (mySeq !== _convsRequestSeq) return; // resposta antiga — uma busca mais nova já assumiu
     allConversationsList = data.conversations || [];
     if (convsSectionMode === 'convs') renderConvsList(allConversationsList);
   } catch (e) {
     console.error("[loadConversations]", e);
+    if (mySeq !== _convsRequestSeq) return; // falha de requisição já substituída — ignora
     if (convsSectionMode !== 'convs') return; // não sobrescreve lista de contatos
     const list = document.getElementById("convs-list");
     if (list) list.innerHTML = `<div style="padding:24px 16px;text-align:center;color:var(--text-secondary)">
@@ -8017,7 +8036,10 @@ function renderConvsList(convs) {
   }
 
   if (!filtered.length) {
-    list.innerHTML = `<div style="padding:24px;text-align:center;color:var(--text-muted);font-size:.82rem">Nenhuma conversa encontrada</div>`;
+    const _q = document.getElementById("convs-search-input")?.value.trim() || "";
+    list.innerHTML = `<div style="padding:24px;text-align:center;color:var(--text-muted);font-size:.82rem">${
+      _q ? `Nenhum resultado para "${esc(_q)}"` : "Nenhuma conversa encontrada"
+    }</div>`;
     return;
   }
 
@@ -11037,8 +11059,20 @@ function applyPillActiveState() {
 // ╚══════════════════════════════════════════════════════════════╝
 
 function handleConvsSearch() {
-  if (convsSectionMode === 'contacts') loadContacts();
-  else filterConvsList();
+  clearTimeout(_convsSearchDebounce);
+  showConvsListLoading();
+  _convsSearchDebounce = setTimeout(() => {
+    if (convsSectionMode === 'contacts') loadContacts();
+    else filterConvsList();
+  }, 300);
+}
+
+// Indicador de carregamento na área da lista durante a busca
+function showConvsListLoading() {
+  const list = document.getElementById('convs-list');
+  if (!list) return;
+  list._lastSig = null; // força re-render quando o resultado chegar
+  list.innerHTML = '<div class="convs-list-loading"><span class="convs-loading-spinner"></span>Buscando...</div>';
 }
 
 function setConvsMode(mode) {
@@ -11123,6 +11157,7 @@ function setConvSort(sort) {
 }
 
 async function loadContacts() {
+  const mySeq  = ++_contactsRequestSeq;
   const search = document.getElementById('convs-search-input')?.value || '';
   const list   = document.getElementById('convs-list');
   try {
@@ -11130,10 +11165,12 @@ async function loadContacts() {
     const res  = await fetch(url);
     if (!res.ok) throw new Error('HTTP ' + res.status);
     const data = await res.json();
+    if (mySeq !== _contactsRequestSeq) return; // resposta antiga — uma busca mais nova já assumiu
     if (convsSectionMode !== 'contacts') return; // modo mudou durante o fetch — não sobrescreve conversas
     renderContactsList(data.contacts || []);
   } catch (e) {
     console.error('[loadContacts]', e);
+    if (mySeq !== _contactsRequestSeq) return; // falha de requisição já substituída — ignora
     if (convsSectionMode !== 'contacts') return; // modo mudou durante o fetch
     if (list) list.innerHTML = `<div style="padding:24px 16px;text-align:center;color:var(--text-secondary)">
       <div style="font-size:.85rem;margin-bottom:12px">Não foi possível carregar os contatos agora. Verifique a conexão e tente novamente.</div>
@@ -11152,9 +11189,9 @@ function renderContactsList(contacts) {
   if (alphaIdx) { alphaIdx.innerHTML = ''; alphaIdx.style.display = 'none'; }
 
   if (!contacts.length) {
-    const search = document.getElementById('convs-search-input')?.value || '';
+    const search = document.getElementById('convs-search-input')?.value.trim() || '';
     list.innerHTML = `<div style="padding:24px;text-align:center;color:var(--text-muted);font-size:.82rem">${
-      search ? 'Nenhum contato encontrado para essa busca.' : 'Nenhum contato encontrado.'
+      search ? `Nenhum resultado para "${esc(search)}"` : 'Nenhum contato encontrado.'
     }</div>`;
     return;
   }
