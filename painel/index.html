@@ -2226,6 +2226,84 @@
     }
     .btn-emoji:hover { border-color: var(--brand-navy); color: var(--brand-navy); }
 
+    /* ── Mensagens rápidas (biblioteca de texto livre) ─────────── */
+    .btn-quickmsg {
+      background: none; border: 1px solid var(--border);
+      color: var(--text-secondary); border-radius: 8px;
+      height: 38px; padding: 0 10px; font-size: .78rem; font-weight: 600;
+      cursor: pointer; display: flex; align-items: center; gap: 5px;
+      flex-shrink: 0; transition: border-color .15s, color .15s; white-space: nowrap;
+    }
+    .btn-quickmsg:hover:not(:disabled) { border-color: var(--brand-navy); color: var(--brand-navy); }
+    .btn-quickmsg:disabled { opacity: .4; cursor: default; }
+
+    .qm-pop {
+      display: none; position: fixed; flex-direction: column;
+      background: #fff; border: 1px solid var(--border); border-radius: 10px;
+      box-shadow: 0 4px 18px rgba(0,0,0,.14);
+      z-index: 9999; width: 300px; max-height: 360px; overflow: hidden;
+    }
+    .qm-pop.visible { display: flex; }
+    .qm-pop-list { overflow-y: auto; flex: 1; padding: 6px; }
+    .qm-pop-item {
+      display: block; width: 100%; text-align: left; box-sizing: border-box;
+      background: none; border: none; border-radius: 8px;
+      padding: 8px 10px; cursor: pointer; margin-bottom: 2px;
+    }
+    .qm-pop-item:hover { background: #eef2ff; }
+    .qm-pop-item-title { font-size: .82rem; font-weight: 700; color: var(--text-primary); }
+    .qm-pop-item-preview {
+      font-size: .74rem; color: var(--text-secondary); margin-top: 2px;
+      overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+    }
+    .qm-pop-empty { padding: 20px 14px; text-align: center; font-size: .8rem; color: var(--text-muted); }
+    .qm-pop-footer { border-top: 1px solid var(--border); padding: 6px; }
+    .qm-pop-manage-btn {
+      width: 100%; padding: 8px; border-radius: 7px; border: none;
+      background: var(--bg-main); color: var(--brand-navy); font-size: .78rem;
+      font-weight: 700; cursor: pointer; transition: background .12s;
+    }
+    .qm-pop-manage-btn:hover { background: var(--bg-sidebar); }
+
+    /* ── Gerenciador de mensagens rápidas ──────────────────────── */
+    .qm-manager-box {
+      position: relative; background: #fff; border-radius: 14px; padding: 24px;
+      width: 520px; max-width: calc(100vw - 32px); max-height: calc(100vh - 64px);
+      box-shadow: 0 16px 48px rgba(15,23,42,.18);
+      display: flex; flex-direction: column; gap: 14px;
+    }
+    .qm-manager-title { font-size: 1rem; font-weight: 700; color: var(--text-primary); }
+    .qm-manager-list { overflow-y: auto; flex: 1; min-height: 60px; display: flex; flex-direction: column; gap: 8px; }
+    .qm-manager-row { display: flex; align-items: flex-start; gap: 8px; border: 1px solid var(--border); border-radius: 10px; padding: 10px 12px; }
+    .qm-manager-row-body { flex: 1; min-width: 0; }
+    .qm-manager-row-title { font-size: .85rem; font-weight: 700; color: var(--text-primary); }
+    .qm-manager-row-text {
+      font-size: .78rem; color: var(--text-secondary); margin-top: 3px; white-space: pre-wrap;
+      overflow: hidden; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical;
+    }
+    .qm-manager-row-actions { display: flex; flex-direction: column; gap: 4px; flex-shrink: 0; }
+    .qm-manager-row-actions button {
+      background: none; border: 1px solid var(--border); border-radius: 6px;
+      width: 28px; height: 26px; cursor: pointer; font-size: .78rem; color: var(--text-secondary);
+      transition: border-color .12s, color .12s;
+    }
+    .qm-manager-row-actions button:hover:not(:disabled) { border-color: var(--brand-navy); color: var(--brand-navy); }
+    .qm-manager-row-actions button:disabled { opacity: .3; cursor: default; }
+    .qm-manager-empty { text-align: center; font-size: .82rem; color: var(--text-muted); padding: 20px; }
+    .qm-manager-form { border-top: 1px solid var(--border); padding-top: 14px; display: flex; flex-direction: column; gap: 8px; }
+    .qm-manager-form input, .qm-manager-form textarea {
+      width: 100%; box-sizing: border-box; border: 1.5px solid var(--border); border-radius: 8px;
+      padding: 8px 10px; font-size: .84rem; font-family: inherit; color: var(--text-primary);
+    }
+    .qm-manager-form textarea { min-height: 70px; resize: vertical; }
+    .qm-manager-form-actions { display: flex; gap: 10px; justify-content: flex-end; }
+    .qm-manager-hint { font-size: .74rem; color: var(--text-muted); }
+    .qm-manager-close {
+      position: absolute; top: 14px; right: 18px; background: none; border: none;
+      font-size: 1rem; cursor: pointer; color: var(--text-muted); padding: 4px 8px; border-radius: 6px;
+    }
+    .qm-manager-close:hover { background: var(--bg-main); }
+
     /* ══════ REAÇÕES DO CLIENTE ══════ */
     .rxn-pill {
       display: inline-flex; align-items: center; gap: 3px;
@@ -4036,6 +4114,8 @@
       /* Composer: botões com área de toque mínima de 42px */
       .btn-attach { width:42px;height:42px; }
       .btn-camera { width:42px;height:42px; }
+      .btn-quickmsg { width:42px;height:42px;padding:0;justify-content:center; }
+      .qm-btn-label { display:none; }
       .btn-send { height:42px;min-width:60px; }
       .composer-row textarea { min-height:42px; }
       .bubble-reply-btn { display:block; }
@@ -5175,6 +5255,7 @@
           <input type="file" id="modal-camera-input" accept="image/*" capture="environment" style="display:none" onchange="handleImageSelect(event,'modal')">
           <button class="btn-camera" onclick="handleCameraClick('modal')" title="Câmera">📷</button>
           <button class="btn-emoji" id="modal-emoji-btn" onclick="toggleEmojiPicker('modal'); event.stopPropagation();" title="Emojis aprovados">🙂</button>
+          <button class="btn-quickmsg" id="modal-quickmsg-btn" onclick="openQuickMessages('modal'); event.stopPropagation();" aria-label="Mensagens rápidas" title="Mensagens rápidas"><span class="qm-btn-icon">💬</span><span class="qm-btn-label">Msgs rápidas</span></button>
           <textarea id="modal-msg-input" placeholder="Digite sua mensagem..." rows="1"
             onkeydown="handleEnter(event,'modal')" oninput="autoResize(this)"></textarea>
           <button class="btn-introduce" onclick="introduceAttendant('modal')" title="Me apresentar">Me apresentar</button>
@@ -7669,10 +7750,6 @@ function startAutoRefresh() {
 
 function stopAutoRefresh() { clearInterval(countdownTimer); countdownTimer = null; }
 
-document.addEventListener("visibilitychange", () => {
-  if (countdownTimer !== null) startAutoRefresh();
-});
-
 // ╔══════════════════════════════════════════════════════════════╗
 // ║  CHAT MODAL (pipeline "Abrir")                               ║
 // ╚══════════════════════════════════════════════════════════════╝
@@ -8334,6 +8411,7 @@ async function openConvsChat(phone, redisKey, isArchive) {
           <input type="file" id="convs-camera-input" accept="image/*" capture="environment" style="display:none" onchange="handleImageSelect(event,'convs')">
           <button class="btn-camera" onclick="handleCameraClick('convs')" title="Câmera">📷</button>
           <button class="btn-emoji" id="convs-emoji-btn" onclick="toggleEmojiPicker('convs'); event.stopPropagation();" title="Emojis aprovados">🙂</button>
+          <button class="btn-quickmsg" id="convs-quickmsg-btn" onclick="openQuickMessages('convs'); event.stopPropagation();" aria-label="Mensagens rápidas" title="Mensagens rápidas"><span class="qm-btn-icon">💬</span><span class="qm-btn-label">Msgs rápidas</span></button>
           <textarea id="convs-msg-input" placeholder="Digite sua mensagem..." rows="1"
             onkeydown="handleEnter(event,'convs')" oninput="autoResize(this)"></textarea>
           <button class="btn-introduce" onclick="introduceAttendant('convs')" title="Me apresentar">Me apresentar</button>
@@ -9973,6 +10051,258 @@ function autoResize(el) {
 }
 
 // ╔══════════════════════════════════════════════════════════════╗
+// ║  MENSAGENS RÁPIDAS — biblioteca de texto livre compartilhada  ║
+// ║  entre a equipe (Redis, sem TTL). NÃO são templates aprovados  ║
+// ║  pela Meta — só podem ser usadas com a janela de 24h aberta,   ║
+// ║  e o envio sempre passa por sendMessage() (nenhum caminho      ║
+// ║  paralelo). Não confundir com a "resposta rápida" já existente ║
+// ║  no card do Kanban — por isso os nomes aqui são todos           ║
+// ║  prefixados com "QuickMessage(s)", nunca "QuickReply".          ║
+// ╚══════════════════════════════════════════════════════════════╝
+let _quickMessages       = [];
+let _quickMessagesLoaded = false;
+let _qmEditingId         = null; // id em edição no gerenciador; null = criando uma nova
+
+function initQuickMessagesUI() {
+  ["modal", "convs"].forEach(prefix => {
+    const pop = document.createElement("div");
+    pop.className = "qm-pop";
+    pop.id = `${prefix}-qm-pop`;
+    document.body.appendChild(pop);
+  });
+  document.addEventListener("click", () => {
+    document.querySelectorAll(".qm-pop.visible").forEach(p => p.classList.remove("visible"));
+  });
+  loadQuickMessages();
+}
+
+async function loadQuickMessages() {
+  try {
+    const res = await fetch("/api/quick-messages");
+    if (!res.ok) throw new Error("http " + res.status);
+    const data = await res.json();
+    _quickMessages = data.messages || [];
+  } catch (err) {
+    console.error("[quickMessages] ❌ falha ao carregar", err);
+  } finally {
+    _quickMessagesLoaded = true;
+    ["modal", "convs"].forEach(prefix => _qmRenderPop(prefix));
+    _qmRenderManagerList();
+  }
+}
+
+function _qmPreview(text) {
+  const oneLine = String(text || "").replace(/\s+/g, " ").trim();
+  return oneLine.length > 60 ? oneLine.slice(0, 60) + "…" : oneLine;
+}
+
+function _qmRenderPop(prefix) {
+  const pop = document.getElementById(`${prefix}-qm-pop`);
+  if (!pop) return;
+  const listHtml = !_quickMessages.length
+    ? `<div class="qm-pop-empty">Ainda não há mensagens cadastradas.<br>Use "Gerenciar mensagens" para criar a primeira.</div>`
+    : `<div class="qm-pop-list">${_quickMessages.map(m => `
+        <button class="qm-pop-item" onclick="event.stopPropagation(); insertQuickMessage('${prefix}','${esc(m.id)}')">
+          <div class="qm-pop-item-title">${esc(m.title)}</div>
+          <div class="qm-pop-item-preview">${esc(_qmPreview(m.text))}</div>
+        </button>`).join("")}</div>`;
+  pop.innerHTML = `${listHtml}<div class="qm-pop-footer"><button class="qm-pop-manage-btn" onclick="event.stopPropagation(); openQuickMessagesManager();">⚙ Gerenciar mensagens</button></div>`;
+}
+
+function openQuickMessages(prefix) {
+  const btn = document.getElementById(`${prefix}-quickmsg-btn`);
+  const pop = document.getElementById(`${prefix}-qm-pop`);
+  if (!pop || !btn || btn.disabled) return;
+  const isVisible = pop.classList.contains("visible");
+  document.querySelectorAll(".qm-pop.visible").forEach(p => p.classList.remove("visible"));
+  if (isVisible) return;
+  if (!_quickMessagesLoaded) loadQuickMessages();
+  const rect = btn.getBoundingClientRect();
+  pop.style.bottom = `${window.innerHeight - rect.top + 6}px`;
+  pop.style.left   = `${Math.max(4, Math.min(rect.left, window.innerWidth - 308))}px`;
+  pop.classList.add("visible");
+}
+
+// Insere no cursor atual (preservando o texto já digitado); quando o textarea
+// não expõe seleção, acrescenta com quebra de linha. Nunca envia sozinho —
+// quem envia é sempre sendMessage(prefix), acionado manualmente pelo atendente.
+function insertQuickMessage(prefix, id) {
+  const msg = _quickMessages.find(m => m.id === id);
+  if (!msg) return;
+  const ta = document.getElementById(`${prefix}-msg-input`);
+  if (!ta || ta.disabled) return;
+
+  if (typeof ta.selectionStart === "number") {
+    const start  = ta.selectionStart || 0;
+    const end    = ta.selectionEnd   || 0;
+    const before = ta.value.slice(0, start);
+    const needsBreakBefore = before && !before.endsWith("\n");
+    const insertText = (needsBreakBefore ? "\n" : "") + msg.text;
+    ta.value = before + insertText + ta.value.slice(end);
+    ta.selectionStart = ta.selectionEnd = start + insertText.length;
+  } else {
+    ta.value = ta.value ? ta.value + "\n" + msg.text : msg.text;
+  }
+
+  autoResize(ta);
+  ta.focus();
+  const pop = document.getElementById(`${prefix}-qm-pop`);
+  if (pop) pop.classList.remove("visible");
+}
+
+// ── Gerenciador (criar/editar/excluir/reordenar) ────────────────────────────
+function openQuickMessagesManager() {
+  document.querySelectorAll(".qm-pop.visible").forEach(p => p.classList.remove("visible"));
+  _qmCancelEdit();
+  if (!_quickMessagesLoaded) loadQuickMessages();
+  else _qmRenderManagerList();
+  document.getElementById("qm-manager-modal").classList.remove("hidden");
+}
+
+function closeQuickMessagesManager() {
+  document.getElementById("qm-manager-modal").classList.add("hidden");
+  _qmCancelEdit();
+}
+
+function _qmRenderManagerList() {
+  const list = document.getElementById("qm-manager-list");
+  if (!list) return;
+  const sorted = [...(_quickMessages || [])].sort((a, b) => (a.order ?? 0) - (b.order ?? 0));
+  if (!sorted.length) {
+    list.innerHTML = `<div class="qm-manager-empty">Nenhuma mensagem cadastrada ainda.</div>`;
+    return;
+  }
+  list.innerHTML = sorted.map((m, idx) => `
+    <div class="qm-manager-row" data-id="${esc(m.id)}">
+      <div class="qm-manager-row-body">
+        <div class="qm-manager-row-title">${esc(m.title)}</div>
+        <div class="qm-manager-row-text">${esc(m.text)}</div>
+      </div>
+      <div class="qm-manager-row-actions">
+        <button onclick="_qmMove('${esc(m.id)}',-1)" ${idx === 0 ? "disabled" : ""} title="Mover para cima" aria-label="Mover para cima">↑</button>
+        <button onclick="_qmMove('${esc(m.id)}',1)" ${idx === sorted.length - 1 ? "disabled" : ""} title="Mover para baixo" aria-label="Mover para baixo">↓</button>
+        <button onclick="_qmStartEdit('${esc(m.id)}')" title="Editar" aria-label="Editar">✎</button>
+        <button onclick="deleteQuickMessage('${esc(m.id)}')" title="Excluir" aria-label="Excluir">🗑</button>
+      </div>
+    </div>
+  `).join("");
+}
+
+function _qmStartEdit(id) {
+  const msg = _quickMessages.find(m => m.id === id);
+  if (!msg) return;
+  _qmEditingId = id;
+  document.getElementById("qm-form-title").value = msg.title;
+  document.getElementById("qm-form-text").value  = msg.text;
+  document.getElementById("qm-manager-form-title").textContent = "Editar mensagem";
+  document.getElementById("qm-form-cancel-btn").style.display = "";
+  document.getElementById("qm-form-save-btn").textContent = "Salvar edição";
+}
+
+function _qmCancelEdit() {
+  _qmEditingId = null;
+  const titleEl = document.getElementById("qm-form-title");
+  const textEl  = document.getElementById("qm-form-text");
+  if (titleEl) titleEl.value = "";
+  if (textEl)  textEl.value  = "";
+  const headEl = document.getElementById("qm-manager-form-title");
+  if (headEl) headEl.textContent = "Nova mensagem";
+  const cancelBtn = document.getElementById("qm-form-cancel-btn");
+  if (cancelBtn) cancelBtn.style.display = "none";
+  const saveBtn = document.getElementById("qm-form-save-btn");
+  if (saveBtn) saveBtn.textContent = "Salvar";
+}
+
+async function saveQuickMessage() {
+  const titleEl = document.getElementById("qm-form-title");
+  const textEl  = document.getElementById("qm-form-text");
+  const title = (titleEl.value || "").trim();
+  const text  = (textEl.value  || "").trim();
+  if (!title) { showToast("Informe um título para a mensagem.", "t-err"); return; }
+  if (!text)  { showToast("Informe o texto da mensagem.", "t-err"); return; }
+
+  const saveBtn = document.getElementById("qm-form-save-btn");
+  if (saveBtn) saveBtn.disabled = true;
+  try {
+    const att  = getCurrentAttendant();
+    const body = { title, text, updatedBy: att?.name || att?.id || null };
+    const res = _qmEditingId
+      ? await fetch("/api/quick-messages", {
+          method: "PUT",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ ...body, id: _qmEditingId }),
+        })
+      : await fetch("/api/quick-messages", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(body),
+        });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) {
+      showToast(data.detail || data.error || "Não foi possível salvar a mensagem.", "t-err");
+      return;
+    }
+    showToast(_qmEditingId ? "Mensagem atualizada ✓" : "Mensagem criada ✓");
+    _qmCancelEdit();
+    await loadQuickMessages();
+  } catch {
+    showToast("Não foi possível salvar a mensagem. Verifique sua conexão.", "t-err");
+  } finally {
+    if (saveBtn) saveBtn.disabled = false;
+  }
+}
+
+async function deleteQuickMessage(id) {
+  const msg = _quickMessages.find(m => m.id === id);
+  if (!msg) return;
+  const confirmed = window.confirm(`Excluir a mensagem "${msg.title}"? Esta ação não pode ser desfeita.`);
+  if (!confirmed) return;
+  try {
+    const res = await fetch("/api/quick-messages", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ action: "delete", id }),
+    });
+    if (!res.ok) {
+      const data = await res.json().catch(() => ({}));
+      showToast(data.detail || data.error || "Não foi possível excluir a mensagem.", "t-err");
+      return;
+    }
+    if (_qmEditingId === id) _qmCancelEdit();
+    showToast("Mensagem excluída ✓");
+    await loadQuickMessages();
+  } catch {
+    showToast("Não foi possível excluir a mensagem. Verifique sua conexão.", "t-err");
+  }
+}
+
+async function _qmMove(id, direction) {
+  const sorted = [...(_quickMessages || [])].sort((a, b) => (a.order ?? 0) - (b.order ?? 0));
+  const idx    = sorted.findIndex(m => m.id === id);
+  const target = idx + direction;
+  if (idx === -1 || target < 0 || target >= sorted.length) return;
+  const reordered = [...sorted];
+  [reordered[idx], reordered[target]] = [reordered[target], reordered[idx]];
+  try {
+    const res = await fetch("/api/quick-messages", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ action: "reorder", order: reordered.map(m => m.id) }),
+    });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) {
+      showToast(data.detail || data.error || "Não foi possível reordenar.", "t-err");
+      return;
+    }
+    _quickMessages = data.messages || reordered;
+    _qmRenderManagerList();
+    ["modal", "convs"].forEach(prefix => _qmRenderPop(prefix));
+  } catch {
+    showToast("Não foi possível reordenar. Verifique sua conexão.", "t-err");
+  }
+}
+
+// ╔══════════════════════════════════════════════════════════════╗
 // ║  RESOLVER CONVERSA                                           ║
 // ╚══════════════════════════════════════════════════════════════╝
 function resolveConversation(prefix) {
@@ -10029,17 +10359,47 @@ function confirmResolve(confirmed) {
 }
 
 // ╔══════════════════════════════════════════════════════════════╗
-// ║  VISIBILIDADE — pausa polling quando aba fica inativa        ║
+// ║  RETOMADA DO PAINEL — pausa o polling quando a aba fica       ║
+// ║  oculta e força uma leitura imediata de /api/queue ao voltar. ║
+// ║                                                                ║
+// ║  Depender só de "visibilitychange" deixa buracos: ele não é    ║
+// ║  disparado por uma restauração via BFCache (pageshow com       ║
+// ║  event.persisted), nem cobre a reconexão depois de perda de     ║
+// ║  rede. refreshAfterResume() centraliza a retomada e é           ║
+// ║  chamada por vários sinais — o dedup abaixo garante que         ║
+// ║  vários sinais disparados juntos resultem em uma única          ║
+// ║  atualização efetiva (nunca uma tempestade de requisições).      ║
 // ╚══════════════════════════════════════════════════════════════╝
-document.addEventListener("visibilitychange", () => {
-  if (document.hidden) {
-    stopAutoRefresh();
-  } else {
-    loadQueue();
-    startAutoRefresh();
-    if (currentTab === "convs") loadConversations();
+let _resumeInFlight   = false;
+let _lastResumeRunAt  = 0;
+const RESUME_DEDUP_MS = 800; // colapsa gatilhos quase simultâneos numa única atualização
+
+async function refreshAfterResume(reason) {
+  const now = Date.now();
+  if (_resumeInFlight || (now - _lastResumeRunAt) < RESUME_DEDUP_MS) return;
+  _resumeInFlight  = true;
+  _lastResumeRunAt = now;
+  try {
+    await loadQueue(); // já usa _queueRequestSeq + AbortController — nenhuma leitura antiga sobrescreve esta
+    if (currentTab === "convs") await loadConversations();
+  } finally {
+    _resumeInFlight = false;
+    startAutoRefresh(); // limpa o interval anterior antes de criar um novo — nunca duplica
   }
+}
+
+document.addEventListener("visibilitychange", () => {
+  if (document.hidden) { stopAutoRefresh(); return; }
+  refreshAfterResume("visibilitychange");
 });
+
+window.addEventListener("focus", () => refreshAfterResume("focus"));
+
+window.addEventListener("pageshow", (event) => {
+  refreshAfterResume(event.persisted ? "pageshow-bfcache" : "pageshow");
+});
+
+window.addEventListener("online", () => refreshAfterResume("online"));
 
 // Cleanup ao fechar aba
 window.addEventListener("beforeunload", () => {
@@ -10335,13 +10695,15 @@ async function setPriorityManual(level) {
  * `data` deve conter conversationWindowStatus, windowRemainingMs, windowExpiresAt.
  */
 function lockComposerResolved(prefix, phone, clientType) {
-  const textarea  = document.getElementById(`${prefix}-msg-input`);
-  const sendBtn   = document.getElementById(`${prefix}-send-btn`);
-  const fileInput = document.getElementById(`${prefix}-file-input`);
-  const lockBar   = document.getElementById(`${prefix}-composer-lock`);
-  if (textarea)  { textarea.disabled = true;  textarea.placeholder = "Atendimento resolvido"; }
-  if (sendBtn)   sendBtn.disabled = true;
-  if (fileInput) fileInput.disabled = true;
+  const textarea   = document.getElementById(`${prefix}-msg-input`);
+  const sendBtn    = document.getElementById(`${prefix}-send-btn`);
+  const fileInput  = document.getElementById(`${prefix}-file-input`);
+  const lockBar    = document.getElementById(`${prefix}-composer-lock`);
+  const quickMsgBtn = document.getElementById(`${prefix}-quickmsg-btn`);
+  if (textarea)   { textarea.disabled = true;  textarea.placeholder = "Atendimento resolvido"; }
+  if (sendBtn)    sendBtn.disabled = true;
+  if (fileInput)  fileInput.disabled = true;
+  if (quickMsgBtn) quickMsgBtn.disabled = true;
   if (lockBar) {
     lockBar.style.display = "flex";
     lockBar.className = "composer-lock-bar resolved-lock";
@@ -10451,14 +10813,16 @@ function updateWindowUI(prefix, data) {
 }
 
 function lockComposer(prefix, reason) {
-  const textarea = document.getElementById(`${prefix}-msg-input`);
-  const sendBtn  = document.getElementById(`${prefix}-send-btn`);
-  const fileInput = document.getElementById(`${prefix}-file-input`);
-  const lockBar  = document.getElementById(`${prefix}-composer-lock`);
+  const textarea   = document.getElementById(`${prefix}-msg-input`);
+  const sendBtn    = document.getElementById(`${prefix}-send-btn`);
+  const fileInput  = document.getElementById(`${prefix}-file-input`);
+  const lockBar    = document.getElementById(`${prefix}-composer-lock`);
+  const quickMsgBtn = document.getElementById(`${prefix}-quickmsg-btn`);
 
-  if (textarea)  { textarea.disabled = true;  textarea.placeholder = "Janela encerrada"; }
-  if (sendBtn)   sendBtn.disabled = true;
-  if (fileInput) fileInput.disabled = true;
+  if (textarea)   { textarea.disabled = true;  textarea.placeholder = "Janela encerrada"; }
+  if (sendBtn)    sendBtn.disabled = true;
+  if (fileInput)  fileInput.disabled = true;
+  if (quickMsgBtn) quickMsgBtn.disabled = true;
 
   if (lockBar) {
     lockBar.style.display = "flex";
@@ -10610,15 +10974,17 @@ async function resendTemplate(prefix, skipCooldown = false) {
 }
 
 function unlockComposer(prefix) {
-  const textarea = document.getElementById(`${prefix}-msg-input`);
-  const sendBtn  = document.getElementById(`${prefix}-send-btn`);
-  const fileInput = document.getElementById(`${prefix}-file-input`);
-  const lockBar  = document.getElementById(`${prefix}-composer-lock`);
+  const textarea   = document.getElementById(`${prefix}-msg-input`);
+  const sendBtn    = document.getElementById(`${prefix}-send-btn`);
+  const fileInput  = document.getElementById(`${prefix}-file-input`);
+  const lockBar    = document.getElementById(`${prefix}-composer-lock`);
+  const quickMsgBtn = document.getElementById(`${prefix}-quickmsg-btn`);
 
-  if (textarea)  { textarea.disabled = false; textarea.placeholder = "Digite sua mensagem..."; }
-  if (sendBtn)   sendBtn.disabled = false;
-  if (fileInput) fileInput.disabled = false;
-  if (lockBar)   lockBar.style.display = "none";
+  if (textarea)   { textarea.disabled = false; textarea.placeholder = "Digite sua mensagem..."; }
+  if (sendBtn)    sendBtn.disabled = false;
+  if (fileInput)  fileInput.disabled = false;
+  if (quickMsgBtn) quickMsgBtn.disabled = false;
+  if (lockBar)    lockBar.style.display = "none";
 
 }
 
@@ -12102,6 +12468,7 @@ function restartOnboarding() {
 
 loadQueue();
 startAutoRefresh();
+_lastResumeRunAt = Date.now(); // evita que o "pageshow" do próprio carregamento inicial dispare um loadQueue() redundante
 
 // ── helpers de refresh inteligente ──────────────────────────────
 function isNearBottom(el) {
@@ -12463,6 +12830,7 @@ function introduceAttendant(prefix) {
 document.addEventListener("DOMContentLoaded", initAttendant);
 document.addEventListener("DOMContentLoaded", initPjLunchMode);
 document.addEventListener("DOMContentLoaded", initEmojiPickers);
+document.addEventListener("DOMContentLoaded", initQuickMessagesUI);
 document.addEventListener("DOMContentLoaded", function() {
   // Reflete escolha salva de ordenação de conversas
   document.getElementById("sort-btn-recent")?.classList.toggle("active", convSort === "recent");
@@ -14168,6 +14536,25 @@ function orgPrintList() { orgGenerateOrgFile(); }
       • ou cancele a resposta selecionada e envie como mensagem normal.
     </div>
     <button class="reply-warn-btn" onclick="closeReplyWarnModal()">Entendi</button>
+  </div>
+</div>
+
+<!-- ══════ GERENCIADOR DE MENSAGENS RÁPIDAS ══════ -->
+<div id="qm-manager-modal" class="modal-overlay hidden" onclick="if(event.target===this) closeQuickMessagesManager()">
+  <div class="qm-manager-box" onclick="event.stopPropagation()">
+    <button class="qm-manager-close" onclick="closeQuickMessagesManager()" aria-label="Fechar" title="Fechar">✕</button>
+    <div class="qm-manager-title">Gerenciar mensagens rápidas</div>
+    <div class="qm-manager-hint">Textos livres reaproveitáveis para o atendimento humano. Não são templates da Meta — só podem ser enviados com a janela de 24h aberta.</div>
+    <div class="qm-manager-list" id="qm-manager-list"></div>
+    <div class="qm-manager-form" id="qm-manager-form">
+      <div id="qm-manager-form-title" style="font-size:.82rem;font-weight:700;color:var(--text-primary);">Nova mensagem</div>
+      <input type="text" id="qm-form-title" placeholder="Título curto (ex: Prazo de entrega)" maxlength="80">
+      <textarea id="qm-form-text" placeholder="Texto completo da mensagem..." maxlength="4000"></textarea>
+      <div class="qm-manager-form-actions">
+        <button class="pfpj-btn-cancel" id="qm-form-cancel-btn" onclick="_qmCancelEdit()" style="display:none">Cancelar edição</button>
+        <button class="pfpj-btn-confirm" id="qm-form-save-btn" onclick="saveQuickMessage()">Salvar</button>
+      </div>
+    </div>
   </div>
 </div>
 
