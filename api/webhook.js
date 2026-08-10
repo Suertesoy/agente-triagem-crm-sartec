@@ -800,9 +800,16 @@ function generateCardTitle(session) {
   // --- Escolhe a mensagem mais longa das últimas 4 (tende a ter mais detalhes) ---
   const best = [...userMsgs.slice(-4)].sort((a, b) => b.length - a.length)[0];
 
+  // --- Remove marcadores técnicos do catálogo do site — não fazem parte do pedido ---
+  const withoutSiteMarkers = best
+    .replace(/\[\s*SITE_CATALOGO_ORCAMENTO\s*\]/gi, "")
+    .replace(/\[\s*TIPO_CLIENTE\s*:\s*(?:PF|PJ)\s*\]/gi, "")
+    .trim();
+
   // --- Remove saudações e locuções introdutórias comuns em português ---
-  const cleaned = best
+  const cleaned = withoutSiteMarkers
     .replace(/^(olá|ola|oi|bom\s+dia|boa\s+tarde|boa\s+noite)[,!.\s]*/gi, "")
+    .replace(/^montei\s+uma\s+lista\s+de\s+produtos\s+pelo\s+site\s+da\s+sartec\s+e\s+gostaria\s+de\s+solicitar\s+um\s+or[çc]amento[.!\s]*/gi, "")
     .replace(/^(gostaria\s+de|preciso\s+de|quero\s+pedir|queria|vim\s+pedir|poderia|pode\s+me)\s+/gi, "")
     .replace(/^(pedir|solicitar|comprar|encomendar|fazer\s+(?:um\s+)?pedido\s+de)\s+/gi, "")
     .replace(/^(solicito|necessito|estou\s+precisando\s+de|tenho\s+interesse\s+em)\s+/gi, "")
@@ -1418,6 +1425,107 @@ async function handleSiteSchoolList(from, text, name, msgMeta) {
 }
 
 // ============================================================
+// DETECÇÃO E ROTEAMENTO — Orçamento do Catálogo via Site
+//
+// Contrato fechado com o site: uma solicitação válida contém obrigatoriamente
+// o marcador de origem [SITE_CATALOGO_ORCAMENTO] E exatamente um marcador de
+// tipo [TIPO_CLIENTE:PF] ou [TIPO_CLIENTE:PJ]. Detecção puramente determinística
+// (regex nos marcadores exatos) — nunca por palavras soltas como "site" ou
+// "orçamento", e nunca via IA.
+// ============================================================
+
+/**
+ * Retorna true somente quando o marcador de origem do catálogo está presente.
+ * Não classifica a mensagem por si só — [TIPO_CLIENTE:...] ainda precisa ser
+ * validado separadamente antes de acionar o bypass de triagem.
+ */
+function isSiteCatalogQuoteMessage(text) {
+  if (!text) return false;
+  return /\[\s*SITE_CATALOGO_ORCAMENTO\s*\]/i.test(text);
+}
+
+/**
+ * Extrai o tipo de cliente do marcador exato [TIPO_CLIENTE:PF|PJ].
+ * Retorna "PF", "PJ" ou null (marcador ausente/inválido — nunca inferido).
+ */
+function extractSiteCatalogClientType(text) {
+  if (!text) return null;
+  const m = text.match(/\[\s*TIPO_CLIENTE\s*:\s*(PF|PJ)\s*\]/i);
+  return m ? m[1].toUpperCase() : null;
+}
+
+/**
+ * Processa orçamentos de catálogo recebidos via site sem passar pela triagem
+ * nem pela Anthropic. O marcador do site é a fonte de verdade para ESTA
+ * solicitação — sobrescreve clientType/demandType herdados de contato ou
+ * sessão anterior. Preserva a mensagem completa (marcadores + itens) no
+ * histórico e envia uma única confirmação determinística ao cliente.
+ *
+ * catalogType: "PF" ou "PJ" — já validado por extractSiteCatalogClientType
+ * antes de chamar esta função.
+ */
+async function handleSiteCatalogQuote(from, text, name, msgMeta, catalogType) {
+  return withSessionLock(getRedis(), from, async () => {
+    const session = await loadSession(from);
+
+    // Conversa resolvida → nova demanda inicia um novo ciclo (mesma semântica
+    // usada em chatWithAgent para getResolvedReturnMode === "new_cycle").
+    // Preserva o history; limpa campos operacionais do atendimento anterior
+    // (formaEntrega, endereco, escola, serie, schoolList, priorityManual etc.)
+    // para que o novo pedido não herde estado de um orçamento anterior.
+    if (session.status === "resolvido") resetToNewCycle(session);
+
+    const now = new Date();
+    session.lastUserMessageAt = now.toISOString();
+    session.windowExpiresAt   = new Date(now.getTime() + 24 * 60 * 60 * 1000).toISOString();
+
+    // Mensagem real do cliente reabre a janela pós-template, se houver uma em espera.
+    session.templateWaitingReply = false;
+    session.templateSentAt       = null;
+
+    if (name) session.clientName = name;
+    session.clientPhone = from;
+
+    // Marcador do site é a fonte de verdade para ESTA solicitação — não deixa
+    // o clientType histórico (contato conhecido) sobrescrever o pedido atual.
+    session.clientType     = catalogType === "PJ" ? "pj" : "pf";
+    session.demandType     = catalogType === "PJ" ? "cotacao_pj" : "produto";
+    session.status         = "aguardando_humano";
+    session.pipelineStatus = "novo";
+    session.handoffDone    = true;
+    session.handoffAt      = now.toISOString();
+    session.resolvedAt     = null;
+    session.requestSource  = "site_catalog_quote";
+
+    // Preserva a mensagem completa no histórico (itens, quantidades,
+    // observações, preferência de entrega/retirada etc.)
+    addMessage(session, "user", text, msgMeta);
+
+    // Reutiliza generateCardTitle — já produz "Produtos — ..." / "Cotação PJ — ..."
+    // a partir de demandType+clientType; a limpeza dos marcadores técnicos no
+    // resumo é feita dentro da própria função.
+    session.cardTitle = generateCardTitle(session);
+
+    // Resposta única e determinística — não depende da Anthropic.
+    const reply =
+      "Recebemos sua solicitação de orçamento pelo site. " +
+      "Vou encaminhar sua lista diretamente para a equipe responsável.";
+
+    addMessage(session, "assistant", reply);
+    session.postHandoffReplySent = true;
+
+    await saveSession(from, session);
+
+    console.log(
+      `[SiteCatalog] 🛒 Orçamento do catálogo — tipo=${catalogType} roteado direto +${from}` +
+      ` demandType=${session.demandType} pipelineStatus=${session.pipelineStatus}`
+    );
+
+    return reply;
+  });
+}
+
+// ============================================================
 // DOWNLOAD DE MÍDIA DA META
 // ============================================================
 
@@ -1694,7 +1802,8 @@ async function chatWithAgent(phone, userText, mediaPayload = null, name = "", me
           session.pjLunchAutoReplySentFor = _lunchSt.updatedAt;
           session.pjLunchAutoReplySentAt  = new Date().toISOString();
           await saveSession(phone, session);
-          await sendTextMessage(phone, _lunchMsg);
+          // Não enviar aqui — retornar o texto e deixar handleIncomingMessage
+          // fazer o único envio (mesma convenção de todo o resto de chatWithAgent).
           return _lunchMsg;
         }
       } catch { /* falha silenciosa */ }
@@ -2451,7 +2560,8 @@ async function handleIncomingMessage(req, res) {
                       session.pjLunchAutoReplySentFor = _audioLunch.updatedAt;
                       session.pjLunchAutoReplySentAt  = new Date().toISOString();
                       await saveSession(from, session);
-                      await sendTextMessage(from, _lunchMsg);
+                      // Não enviar aqui — retornar o texto e deixar o chamador (linha
+                      // com `if (audioReply) await sendTextMessage(...)`) fazer o único envio.
                       return _lunchMsg;
                     }
                   } catch { /* falha silenciosa */ }
@@ -2701,9 +2811,20 @@ async function handleIncomingMessage(req, res) {
 
             let reply;
             try {
-              if (isSiteSchoolListMessage(text)) {
+              const _catalogClientType = isSiteCatalogQuoteMessage(text)
+                ? extractSiteCatalogClientType(text)
+                : null;
+              if (_catalogClientType) {
+                // Marcador de origem + tipo válido (PF ou PJ) — bypass total da
+                // triagem e da Anthropic, direto para atendimento humano.
+                reply = await handleSiteCatalogQuote(from, text, name, msgMeta, _catalogClientType);
+              } else if (isSiteSchoolListMessage(text)) {
                 reply = await handleSiteSchoolList(from, text, name, msgMeta);
               } else {
+                // Inclui o caso de fallback de segurança: [SITE_CATALOGO_ORCAMENTO]
+                // presente mas sem [TIPO_CLIENTE:PF|PJ] válido — não inventa o tipo,
+                // segue pelo fluxo normal de triagem (mais conservador e compatível
+                // com a arquitetura existente).
                 reply = await chatWithAgent(from, text, null, name, msgMeta);
               }
             } catch (err) {
