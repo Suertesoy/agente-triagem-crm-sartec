@@ -20,6 +20,7 @@ import {
   DeleteObjectCommand,
   HeadObjectCommand,
 } from "@aws-sdk/client-s3";
+import { createHash } from "node:crypto";
 import { getSignedUrl } from "@aws-sdk/s3-request-presigner";
 
 // Mapa de mimeType → extensão de arquivo
@@ -157,6 +158,18 @@ export async function headMediaObject(storageKey) {
     }
     throw error;
   }
+}
+
+export async function inspectMediaObject(storageKey) {
+  const head = await headMediaObject(storageKey);
+  if (!head.exists) return { ...head, storageKey, downloadedSize: null, downloadedSha256: null };
+  const buffer = await downloadMedia(storageKey);
+  return {
+    ...head,
+    storageKey,
+    downloadedSize: buffer.length,
+    downloadedSha256: createHash("sha256").update(buffer).digest("hex"),
+  };
 }
 
 export async function putMediaObject({ storageKey, buffer, mimeType, sha256 }) {

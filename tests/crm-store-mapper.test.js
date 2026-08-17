@@ -15,6 +15,7 @@ import {
 import {
   assertCommitAllowed,
   classifyAndConsolidateMessages,
+  collectMediaDuplicateEvidence,
   commitBlockers,
 } from "../scripts/migrate-redis-to-supabase.js";
 
@@ -403,6 +404,114 @@ test("reporta duplicata conflitante sem tratá-la como exata", () => {
   assert.equal(result.conflictSamples[0].id, first.id);
   assert.ok(result.conflictSamples[0].camposDiferentes.includes("content"));
   assert.equal(result.conflictSamples[0].classificacaoSugerida, "possível corrupção");
+});
+
+test("consolida reprocessamento de webhook usando menor posição, data mais antiga e auditoria", () => {
+  const later = mapMessage({
+    role: "user",
+    content: "mesmo texto",
+    metaMessageId: "wamid.webhook-repeat",
+    createdAt: "2026-08-17T12:05:00.000Z",
+  }, 9).message;
+  const earlier = mapMessage({
+    role: "user",
+    content: "mesmo texto",
+    metaMessageId: "wamid.webhook-repeat",
+    createdAt: "2026-08-17T12:00:00.000Z",
+  }, 3).message;
+  const result = classifyAndConsolidateMessages([later, earlier]);
+  assert.equal(result.consolidatedDuplicates, 1);
+  assert.equal(result.duplicateConflicts, 0);
+  assert.equal(result.messages[0].legacy_history_index, 3);
+  assert.equal(result.messages[0].created_at, "2026-08-17T12:00:00.000Z");
+  assert.deepEqual(
+    result.messages[0].raw_payload.legacyDuplicateAudit.consolidatedLegacyHistoryIndexes,
+    [3, 9]
+  );
+  assert.deepEqual(
+    result.messages[0].raw_payload.legacyDuplicateAudit.observedCreatedAt,
+    ["2026-08-17T12:00:00.000Z", "2026-08-17T12:05:00.000Z"]
+  );
+});
+
+function duplicateMediaMessages() {
+  const common = {
+    role: "user",
+    content: "mesma mídia",
+    metaMessageId: "wamid.media-repeat",
+    mediaType: "image",
+    mediaMimeType: "image/jpeg",
+    mediaStorageProvider: "cloudflare-r2",
+  };
+  return [
+    mapMessage({
+      ...common,
+      mediaStorageKey: `media/${PHONE}/primeira.jpg`,
+      createdAt: "2026-08-17T12:05:00.000Z",
+    }, 2).message,
+    mapMessage({
+      ...common,
+      mediaStorageKey: `media/${PHONE}/segunda.jpg`,
+      createdAt: "2026-08-17T12:00:00.000Z",
+    }, 8).message,
+  ];
+}
+
+test("consolida mídia duplicada somente com bytes R2 iguais e não apaga objetos", async () => {
+  const messages = duplicateMediaMessages();
+  const calls = [];
+  const storage = {
+    deleteCalls: 0,
+    async inspectObject(storageKey) {
+      calls.push(storageKey);
+      return {
+        storageKey,
+        exists: true,
+        size: 123,
+        mimeType: "image/jpeg",
+        downloadedSize: 123,
+        downloadedSha256: "a".repeat(64),
+      };
+    },
+    async deleteObject() {
+      this.deleteCalls += 1;
+    },
+  };
+  const mediaEvidenceByPair = await collectMediaDuplicateEvidence(
+    messages,
+    storage.inspectObject.bind(storage)
+  );
+  const result = classifyAndConsolidateMessages(messages, 20, { mediaEvidenceByPair });
+  assert.equal(result.consolidatedDuplicates, 1);
+  assert.equal(result.duplicateConflicts, 0);
+  assert.equal(result.messages[0].media_storage_key, `media/${PHONE}/primeira.jpg`);
+  assert.deepEqual(
+    result.messages[0].raw_payload.legacyDuplicateAudit.alternateMediaStorageKeys,
+    [`media/${PHONE}/segunda.jpg`]
+  );
+  assert.equal(calls.length, 2);
+  assert.equal(storage.deleteCalls, 0);
+});
+
+test("mídia com SHA diferente ou objeto ausente permanece conflito", async () => {
+  for (const missing of [false, true]) {
+    const messages = duplicateMediaMessages();
+    let call = 0;
+    const mediaEvidenceByPair = await collectMediaDuplicateEvidence(messages, async (storageKey) => {
+      call += 1;
+      return {
+        storageKey,
+        exists: !(missing && call === 2),
+        size: 123,
+        mimeType: "image/jpeg",
+        downloadedSize: 123,
+        downloadedSha256: call === 1 ? "a".repeat(64) : "b".repeat(64),
+      };
+    });
+    const result = classifyAndConsolidateMessages(messages, 20, { mediaEvidenceByPair });
+    assert.equal(result.consolidatedDuplicates, 0);
+    assert.equal(result.duplicateConflicts, 1);
+  }
 });
 
 test("guard rails de commit bloqueiam todos os contadores exigidos e ignoram timestamp ausente", () => {

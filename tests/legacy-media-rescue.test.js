@@ -9,6 +9,7 @@ import {
   executeLegacyMediaRescue,
   extractLegacyBase64,
   inspectLegacyMediaMessage,
+  withSessionLock,
 } from "../scripts/rescue-legacy-media-to-r2.js";
 
 const PHONE = "5512999990000";
@@ -41,10 +42,13 @@ function sessionEntries(message = legacyMessage()) {
 }
 
 class FakeRedis {
-  constructor(session) {
+  constructor(session, sessionTtl = -1) {
     this.data = new Map([[SESSION_KEY, JSON.stringify(session)]]);
+    this.ttls = new Map();
+    if (sessionTtl >= 0) this.ttls.set(SESSION_KEY, sessionTtl);
     this.sessionWrites = 0;
     this.lockAttempts = [];
+    this.setCalls = [];
   }
 
   async get(key) {
@@ -52,20 +56,29 @@ class FakeRedis {
   }
 
   async set(key, value, ...args) {
+    this.setCalls.push({ key, args: [...args] });
     if (args[0] === "NX") {
       this.lockAttempts.push(key);
       if (this.data.has(key)) return null;
       this.data.set(key, value);
+      const exIndex = args.indexOf("EX");
+      if (exIndex >= 0) this.ttls.set(key, Number(args[exIndex + 1]));
       return "OK";
     }
     this.data.set(key, value);
+    if (!args.includes("KEEPTTL")) this.ttls.delete(key);
     if (key === SESSION_KEY) this.sessionWrites += 1;
     return "OK";
+  }
+
+  async ttl(key) {
+    return this.data.has(key) ? (this.ttls.get(key) ?? -1) : -2;
   }
 
   async eval(_script, _keys, key, token) {
     if (this.data.get(key) === token) {
       this.data.delete(key);
+      this.ttls.delete(key);
       return 1;
     }
     return 0;
@@ -76,6 +89,7 @@ class FakeStorage {
   constructor() {
     this.objects = new Map();
     this.uploadCalls = 0;
+    this.deleteCalls = 0;
     this.onUpload = null;
   }
 
@@ -95,11 +109,15 @@ class FakeStorage {
     this.objects.set(storageKey, { buffer: Buffer.from(buffer), mimeType, sha256 });
     if (this.onUpload) await this.onUpload();
   }
+
+  async deleteObject() {
+    this.deleteCalls += 1;
+  }
 }
 
-function executionFixture(message = legacyMessage()) {
+function executionFixture(message = legacyMessage(), sessionTtl = -1) {
   const session = { status: "ativo", history: [structuredClone(message)] };
-  const redis = new FakeRedis(session);
+  const redis = new FakeRedis(session, sessionTtl);
   const storage = new FakeStorage();
   const plan = buildLegacyMediaRescuePlan(sessionEntries(message));
   return { session, redis, storage, plan };
@@ -184,6 +202,7 @@ test("mensagem alterada depois do planejamento é recusada antes do upload", asy
 test("lock e releitura preservam uma sessão atualizada durante o upload", async () => {
   const { redis, storage, plan } = executionFixture();
   storage.onUpload = async () => {
+    assert.equal(await redis.get(`lock:sartec:${PHONE}`), null);
     const newer = JSON.parse(await redis.get(SESSION_KEY));
     newer.concurrentField = "preservado";
     newer.history.push({ role: "user", content: "mensagem concorrente" });
@@ -194,7 +213,8 @@ test("lock e releitura preservam uma sessão atualizada durante o upload", async
   assert.equal(saved.concurrentField, "preservado");
   assert.equal(saved.history.length, 2);
   assert.ok(redis.lockAttempts.every((key) => key === `lock:sartec:${PHONE}`));
-  assert.ok(redis.lockAttempts.length >= 2);
+  assert.equal(redis.lockAttempts.length, 1);
+  assert.equal(storage.deleteCalls, 0);
 });
 
 test("referência R2 que aparece durante o upload nunca é sobrescrita", async () => {
@@ -251,4 +271,29 @@ test("base64 inválido bloqueia a operação real sem tocar R2/Redis", async () 
   );
   assert.equal(storage.uploadCalls, 0);
   assert.equal(redis.sessionWrites, 0);
+});
+
+test("resgate preserva exatamente TTL existente com KEEPTTL e não aplica 90 dias", async () => {
+  const { redis, storage, plan } = executionFixture(legacyMessage(), 3_600);
+  await executeLegacyMediaRescue(plan, { redis, storage }, { commit: true });
+  assert.equal(await redis.ttl(SESSION_KEY), 3_600);
+  const sessionWrite = redis.setCalls.find(({ key }) => key === SESSION_KEY);
+  assert.deepEqual(sessionWrite.args, ["KEEPTTL"]);
+  assert.equal(sessionWrite.args.includes(7_776_000), false);
+});
+
+test("resgate mantém sessão sem TTL como permanente", async () => {
+  const { redis, storage, plan } = executionFixture();
+  assert.equal(await redis.ttl(SESSION_KEY), -1);
+  await executeLegacyMediaRescue(plan, { redis, storage }, { commit: true });
+  assert.equal(await redis.ttl(SESSION_KEY), -1);
+});
+
+test("lock só é liberado quando o token ainda pertence ao resgate", async () => {
+  const { redis } = executionFixture();
+  const lockKey = `lock:sartec:${PHONE}`;
+  await withSessionLock(redis, PHONE, async () => {
+    await redis.set(lockKey, "token-de-outro-processo");
+  }, { token: "token-do-resgate", attempts: 1 });
+  assert.equal(await redis.get(lockKey), "token-de-outro-processo");
 });

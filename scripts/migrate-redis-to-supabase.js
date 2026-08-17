@@ -13,6 +13,7 @@ import {
   sha256Canonical,
 } from "../lib/crm-store/index.js";
 import { isSupabaseCrmEnabled } from "../lib/supabase-server.js";
+import { inspectMediaObject } from "../api/_lib/media-storage.js";
 
 export const COMMIT_BLOCKING_COUNTERS = [
   "invalidJson",
@@ -53,6 +54,13 @@ function comparableMessage(message) {
   delete comparable.legacy_payload_hash;
   delete comparable.raw_payload;
   return comparable;
+}
+
+function logicalMessage(message) {
+  const logical = comparableMessage(message);
+  delete logical.created_at;
+  delete logical.media_storage_key;
+  return logical;
 }
 
 function differingFields(first, second) {
@@ -127,14 +135,150 @@ function conflictOccurrence(message, phoneByConversationId) {
   };
 }
 
+function mediaPairKey(firstKey, secondKey) {
+  return [firstKey, secondKey].sort().join("\n");
+}
+
+function validIsoTimestamp(value) {
+  if (!value) return null;
+  const time = new Date(value).getTime();
+  return Number.isNaN(time) ? null : new Date(time).toISOString();
+}
+
+function safeEvidenceObject(value) {
+  if (!value) return null;
+  return {
+    storageKey: maskPhonesInText(value.storageKey),
+    exists: Boolean(value.exists),
+    size: value.size ?? null,
+    mimeType: value.mimeType || null,
+    downloadedSize: value.downloadedSize ?? null,
+    sha256: value.downloadedSha256 || null,
+  };
+}
+
+function duplicateAuditValues(message) {
+  const previous = message.raw_payload?.legacyDuplicateAudit || {};
+  return {
+    indexes: previous.consolidatedLegacyHistoryIndexes || [message.legacy_history_index],
+    timestamps: previous.observedCreatedAt || [message.created_at],
+    mediaKeys: [
+      message.media_storage_key,
+      ...(previous.alternateMediaStorageKeys || []),
+    ].filter(Boolean),
+  };
+}
+
+function consolidateWebhookDuplicate(existing, incoming) {
+  const occurrences = [existing, incoming];
+  const canonical = structuredClone(
+    occurrences.slice().sort((a, b) => a.legacy_history_index - b.legacy_history_index)[0]
+  );
+  const validTimestamps = occurrences
+    .map((message) => validIsoTimestamp(message.created_at))
+    .filter(Boolean)
+    .sort();
+  canonical.created_at = validTimestamps[0] || null;
+  canonical.legacy_history_index = Math.min(
+    ...occurrences.map((message) => message.legacy_history_index)
+  );
+
+  const mediaOccurrences = occurrences
+    .filter((message) => message.media_storage_key)
+    .sort((first, second) => first.legacy_history_index - second.legacy_history_index);
+  if (mediaOccurrences.length) {
+    canonical.media_storage_key = mediaOccurrences[0].media_storage_key;
+  }
+
+  const audit = occurrences.map(duplicateAuditValues);
+  const indexes = [...new Set(audit.flatMap((item) => item.indexes))].sort((a, b) => a - b);
+  const timestamps = [...new Set(audit.flatMap((item) => item.timestamps))]
+    .sort((a, b) => String(a).localeCompare(String(b)));
+  const allMediaKeys = [...new Set(audit.flatMap((item) => item.mediaKeys))];
+  canonical.raw_payload = {
+    ...(canonical.raw_payload || {}),
+    legacyDuplicateAudit: {
+      reason: "duplicate_webhook_processing",
+      consolidatedLegacyHistoryIndexes: indexes,
+      observedCreatedAt: timestamps,
+      alternateMediaStorageKeys: allMediaKeys.filter(
+        (storageKey) => storageKey !== canonical.media_storage_key
+      ),
+    },
+  };
+  return canonical;
+}
+
+function eligibleWebhookDuplicate(existing, incoming, differences, mediaEvidenceByPair) {
+  if (!existing.meta_message_id || existing.meta_message_id !== incoming.meta_message_id) return false;
+  if (existing.conversation_id !== incoming.conversation_id
+    || existing.role !== incoming.role
+    || existing.source !== incoming.source
+    || existing.message_type !== incoming.message_type
+    || existing.direction !== incoming.direction) return false;
+  if (sha256Canonical(logicalMessage(existing)) !== sha256Canonical(logicalMessage(incoming))) return false;
+
+  const allowed = new Set(["created_at", "media_storage_key"]);
+  if (!differences.every((field) => allowed.has(field))) return false;
+  if (!differences.includes("media_storage_key")) return true;
+  if (!existing.media_storage_key || !incoming.media_storage_key) return false;
+  const evidence = mediaEvidenceByPair.get(
+    mediaPairKey(existing.media_storage_key, incoming.media_storage_key)
+  );
+  return Boolean(evidence?.equivalent);
+}
+
+export async function collectMediaDuplicateEvidence(messages, inspector) {
+  const evidence = new Map();
+  if (typeof inspector !== "function") return evidence;
+  const firstById = new Map();
+  const objectCache = new Map();
+  const inspect = async (storageKey) => {
+    if (!objectCache.has(storageKey)) objectCache.set(storageKey, inspector(storageKey));
+    return objectCache.get(storageKey);
+  };
+
+  for (const message of messages) {
+    const existing = firstById.get(message.id);
+    if (!existing) {
+      firstById.set(message.id, message);
+      continue;
+    }
+    if (!existing.media_storage_key || !message.media_storage_key
+      || existing.media_storage_key === message.media_storage_key) continue;
+    const key = mediaPairKey(existing.media_storage_key, message.media_storage_key);
+    try {
+      const objects = await Promise.all([
+        inspect(existing.media_storage_key),
+        inspect(message.media_storage_key),
+      ]);
+      const bothValid = objects.every((object) => object.exists
+        && object.downloadedSha256
+        && object.size === object.downloadedSize);
+      evidence.set(key, {
+        equivalent: bothValid
+          && objects[0].downloadedSha256 === objects[1].downloadedSha256,
+        objects,
+        error: null,
+      });
+    } catch (error) {
+      evidence.set(key, { equivalent: false, objects: [], error: error.message });
+    }
+  }
+  return evidence;
+}
+
 export function classifyAndConsolidateMessages(messages, sampleLimit = 20, options = {}) {
   const phoneByConversationId = options.phoneByConversationId || new Map();
+  const mediaEvidenceByPair = options.mediaEvidenceByPair || new Map();
   const messagesById = new Map();
   const crossConversationIds = new Set();
   const exactIds = [];
   const conflictSamples = [];
   let exactDuplicates = 0;
+  let consolidatedDuplicates = 0;
   let duplicateConflicts = 0;
+  const consolidatedSamples = [];
 
   for (const message of messages) {
     const existing = messagesById.get(message.id);
@@ -154,9 +298,42 @@ export function classifyAndConsolidateMessages(messages, sampleLimit = 20, optio
       continue;
     }
 
+    const differences = differingFields(existingComparable, incomingComparable);
+    if (eligibleWebhookDuplicate(existing, message, differences, mediaEvidenceByPair)) {
+      const consolidated = consolidateWebhookDuplicate(existing, message);
+      messagesById.set(message.id, consolidated);
+      consolidatedDuplicates += 1;
+      if (consolidatedSamples.length < sampleLimit) {
+        const evidence = differences.includes("media_storage_key")
+          ? mediaEvidenceByPair.get(mediaPairKey(existing.media_storage_key, message.media_storage_key))
+          : null;
+        consolidatedSamples.push({
+          id: message.id,
+          metaMessageId: message.meta_message_id,
+          telefone: maskedPhone(phoneByConversationId.get(message.conversation_id)),
+          legacyHistoryIndexes: [existing.legacy_history_index, message.legacy_history_index].sort((a, b) => a - b),
+          canonicalLegacyHistoryIndex: consolidated.legacy_history_index,
+          canonicalCreatedAt: consolidated.created_at,
+          canonicalMediaStorageKey: consolidated.media_storage_key
+            ? maskPhonesInText(consolidated.media_storage_key)
+            : null,
+          alternateMediaStorageKeys: consolidated.raw_payload.legacyDuplicateAudit
+            .alternateMediaStorageKeys.map(maskPhonesInText),
+          mediaEvidence: evidence ? {
+            equivalent: evidence.equivalent,
+            objects: evidence.objects.map(safeEvidenceObject),
+          } : null,
+          classification: "duplicate webhook processing",
+        });
+      }
+      continue;
+    }
+
     duplicateConflicts += 1;
     if (conflictSamples.length < sampleLimit) {
-      const differences = differingFields(existingComparable, incomingComparable);
+      const evidence = differences.includes("media_storage_key")
+        ? mediaEvidenceByPair.get(mediaPairKey(existing.media_storage_key, message.media_storage_key))
+        : null;
       conflictSamples.push({
         id: message.id,
         mesmaConversa: existing.conversation_id === message.conversation_id,
@@ -174,6 +351,11 @@ export function classifyAndConsolidateMessages(messages, sampleLimit = 20, optio
           existingComparable,
           incomingComparable
         ),
+        mediaEvidence: evidence ? {
+          equivalent: evidence.equivalent,
+          error: evidence.error,
+          objects: evidence.objects.map(safeEvidenceObject),
+        } : null,
       });
     }
   }
@@ -181,9 +363,11 @@ export function classifyAndConsolidateMessages(messages, sampleLimit = 20, optio
   return {
     messages: [...messagesById.values()],
     exactDuplicates,
+    consolidatedDuplicates,
     duplicateConflicts,
     crossConversationDuplicates: crossConversationIds.size,
     exactIds,
+    consolidatedSamples,
     conflictSamples,
   };
 }
@@ -230,6 +414,7 @@ Diagnóstico
   itens de histórico invál.:${report.counters.invalidHistoryItems}
   mensagens sem timestamp:  ${report.counters.messagesWithoutTimestamp}
   duplicatas exatas:        ${report.counters.exactDuplicates}
+  duplicatas consolidadas:  ${report.counters.consolidatedDuplicates}
   duplicatas conflitantes:  ${report.counters.duplicateConflicts}
   duplicatas entre conversas:${report.counters.crossConversationDuplicates}
   entradas pipeline invál.: ${report.counters.invalidPipelineEntries}
@@ -242,11 +427,14 @@ Checksum: ${report.checksum}
 ${report.duplicates.conflictSamples.length
     ? `Conflitos de duplicata (amostra): ${JSON.stringify(report.duplicates.conflictSamples)}`
     : "Conflitos de duplicata: nenhum"}
+${report.duplicates.consolidatedSamples.length
+    ? `Duplicatas consolidadas (auditoria): ${JSON.stringify(report.duplicates.consolidatedSamples)}`
+    : "Duplicatas consolidadas: nenhuma"}
 
 ${report.mode === "DRY RUN" ? "Nenhuma escrita foi realizada no Supabase." : "Importação gravada no Supabase CRM."}`);
 }
 
-export async function buildPlan(redisStore, { commit = false } = {}) {
+export async function buildPlan(redisStore, { commit = false, inspectR2Object = null } = {}) {
   const [contactEntries, sessionEntries, pipelineEntry] = await Promise.all([
     redisStore.contactEntries(),
     redisStore.sessionEntries(),
@@ -270,6 +458,7 @@ export async function buildPlan(redisStore, { commit = false } = {}) {
       invalidHistoryItems: 0,
       messagesWithoutTimestamp: 0,
       exactDuplicates: 0,
+      consolidatedDuplicates: 0,
       duplicateConflicts: 0,
       crossConversationDuplicates: 0,
       invalidPipelineEntries: 0,
@@ -280,7 +469,7 @@ export async function buildPlan(redisStore, { commit = false } = {}) {
     },
     unmapped: { contact: {}, session: {}, message: {} },
     normalizedFallbacks: {},
-    duplicates: { exactIds: [], conflictSamples: [] },
+    duplicates: { exactIds: [], consolidatedSamples: [], conflictSamples: [] },
     checksum: null,
   };
 
@@ -385,12 +574,18 @@ export async function buildPlan(redisStore, { commit = false } = {}) {
       conversation.redis_key.slice("sartec:".length),
     ])
   );
-  const deduplicated = classifyAndConsolidateMessages(messages, 20, { phoneByConversationId });
+  const mediaEvidenceByPair = await collectMediaDuplicateEvidence(messages, inspectR2Object);
+  const deduplicated = classifyAndConsolidateMessages(messages, 20, {
+    phoneByConversationId,
+    mediaEvidenceByPair,
+  });
   const uniqueMessages = deduplicated.messages;
   report.counters.exactDuplicates = deduplicated.exactDuplicates;
+  report.counters.consolidatedDuplicates = deduplicated.consolidatedDuplicates;
   report.counters.duplicateConflicts = deduplicated.duplicateConflicts;
   report.counters.crossConversationDuplicates = deduplicated.crossConversationDuplicates;
   report.duplicates.exactIds = deduplicated.exactIds;
+  report.duplicates.consolidatedSamples = deduplicated.consolidatedSamples;
   report.duplicates.conflictSamples = deduplicated.conflictSamples;
   report.counters.customers = contactsByPhone.size;
   report.counters.conversations = conversations.length;
@@ -493,7 +688,10 @@ Para --commit, SUPABASE_CRM_ENABLED deve ser true e todos os guard rails devem e
 
   try {
     await redis.connect();
-    const plan = await buildPlan(new RedisCrmStore(redis), { commit });
+    const plan = await buildPlan(new RedisCrmStore(redis), {
+      commit,
+      inspectR2Object: inspectMediaObject,
+    });
     if (commit) await commitPlan(plan);
     printReport(plan.report);
   } finally {

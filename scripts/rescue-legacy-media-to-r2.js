@@ -292,7 +292,7 @@ export async function withSessionLock(redis, phone, fn, options = {}) {
 async function readAndValidateCurrent(redis, item) {
   const key = `sartec:${item.phone}`;
   const raw = await redis.get(key);
-  if (!raw) throw new Error("sessão não encontrada após adquirir lock");
+  if (!raw) throw new Error("sessão não encontrada");
   const session = JSON.parse(raw);
   const located = locatePlannedMessage(session, item);
   if (located.message.mediaStorageKey) {
@@ -325,12 +325,9 @@ export async function executeLegacyMediaRescue(plan, dependencies, { commit = fa
   const result = { mode: "COMMIT", uploaded: 0, reused: 0, redisUpdated: 0, skipped: 0 };
 
   for (const item of plan.items) {
-    const preflight = await withSessionLock(
-      redis,
-      item.phone,
-      () => readAndValidateCurrent(redis, item),
-      lockOptions
-    );
+    // A validação preliminar e todo o tráfego R2 ficam fora do lock Redis.
+    // A sessão é obrigatoriamente relida e validada novamente sob lock antes da escrita.
+    const preflight = await readAndValidateCurrent(redis, item);
     if (preflight.alreadyReferenced) {
       result.skipped += 1;
       continue;
