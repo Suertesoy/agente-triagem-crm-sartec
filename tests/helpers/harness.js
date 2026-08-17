@@ -10,14 +10,16 @@ import { fileURLToPath, pathToFileURL } from "node:url";
 import path from "node:path";
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
-register(pathToFileURL(path.join(HERE, "hooks.js")).href, import.meta.url);
 
-process.env.WHATSAPP_VERIFY_TOKEN    ??= "test-verify-token";
-process.env.WHATSAPP_ACCESS_TOKEN    ??= "test-access-token";
-process.env.WHATSAPP_PHONE_NUMBER_ID ??= "1234567890";
-process.env.ANTHROPIC_API_KEY        ??= "test-key";
-process.env.REDIS_URL                ??= "redis://fake";
-process.env.R2_DISABLED              ??= "true"; // evita chamadas reais ao S3/R2 nos testes de mídia
+// Testes nunca devem herdar credenciais (nem valores vazios) do ambiente host.
+process.env.WHATSAPP_VERIFY_TOKEN    = "test-verify-token";
+process.env.WHATSAPP_ACCESS_TOKEN    = "test-access-token";
+process.env.WHATSAPP_PHONE_NUMBER_ID = "1234567890";
+process.env.ANTHROPIC_API_KEY        = "test-key";
+process.env.REDIS_URL                = "redis://fake";
+process.env.R2_DISABLED              = "true"; // evita chamadas reais ao S3/R2 nos testes de mídia
+
+register(pathToFileURL(path.join(HERE, "hooks.js")).href, import.meta.url);
 
 const REPO_ROOT   = path.resolve(HERE, "..", "..");
 const WEBHOOK_URL = pathToFileURL(path.join(REPO_ROOT, "api", "webhook.js")).href;
