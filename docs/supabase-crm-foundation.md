@@ -84,6 +84,12 @@ SUPABASE_CRM_ENABLED=true node scripts/migrate-redis-to-supabase.js --commit
 
 O modo commit registra início, conclusão/falha, contadores e checksum em `crm_migration_runs`. Ele é recusado se houver JSON, sessão, item de histórico ou pipeline inválido; duplicata entre conversas; duplicata conflitante; ou base64 legado sem R2 válido. Não execute antes de revisar o dry-run e validar as credenciais do projeto `uzwyzwbybtnvgjjhimwy`.
 
+## Resgate administrativo de mídia legada
+
+`node scripts/rescue-legacy-media-to-r2.js` é sempre dry-run por padrão. Ele inventaria somente mensagens que ainda contêm base64 e não têm referência R2 válida, valida o SHA-256, resolve MIME/extensão segura e gera uma chave determinística no bucket R2 já configurado.
+
+Uma execução futura com `--commit` fará `HEAD` antes do upload, reutilizará apenas objetos com tamanho, MIME e SHA compatíveis e atualizará o Redis sob `lock:sartec:{phone}`. A sessão é relida antes e depois do upload; uma referência que apareça durante a operação nunca é sobrescrita. `mediaData` e `content[].source.data` permanecem no Redis nesta primeira etapa para rollback.
+
 ## Schema versionado
 
-As três primeiras migrations em `supabase/migrations` são cópias exatas das migrations já aplicadas remotamente. A migration incremental `20260817172655_add_legacy_message_audit_fields.sql` permanece apenas local: torna `crm_messages.created_at` anulável mantendo seu default, adiciona os dois campos de auditoria legada e o índice por conversa/posição. Ela não foi aplicada remotamente. RLS permanece ativo, não há policies públicas e privilégios diretos de `anon`/`authenticated` permanecem revogados.
+As quatro migrations em `supabase/migrations` correspondem ao histórico remoto aplicado. A incremental `20260817175639_add_legacy_message_audit_fields.sql` torna `crm_messages.created_at` anulável mantendo seu default, adiciona os dois campos de auditoria legada e o índice por conversa/posição. RLS permanece ativo, não há policies públicas e privilégios diretos de `anon`/`authenticated` permanecem revogados.

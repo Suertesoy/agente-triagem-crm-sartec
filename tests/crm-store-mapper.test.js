@@ -401,7 +401,8 @@ test("reporta duplicata conflitante sem tratá-la como exata", () => {
   assert.equal(result.exactDuplicates, 0);
   assert.equal(result.duplicateConflicts, 1);
   assert.equal(result.conflictSamples[0].id, first.id);
-  assert.ok(result.conflictSamples[0].differingFields.includes("content"));
+  assert.ok(result.conflictSamples[0].camposDiferentes.includes("content"));
+  assert.equal(result.conflictSamples[0].classificacaoSugerida, "possível corrupção");
 });
 
 test("guard rails de commit bloqueiam todos os contadores exigidos e ignoram timestamp ausente", () => {

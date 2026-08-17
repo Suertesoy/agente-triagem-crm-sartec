@@ -62,7 +62,73 @@ function differingFields(first, second) {
   ).sort();
 }
 
-export function classifyAndConsolidateMessages(messages, sampleLimit = 20) {
+function maskedPhone(value) {
+  const digits = String(value || "").replace(/\D/g, "");
+  return digits.length >= 4 ? `***${digits.slice(-4)}` : "***";
+}
+
+function maskPhonesInText(value) {
+  return String(value).replace(/\d{10,15}/g, (digits) => `***${digits.slice(-4)}`);
+}
+
+function summarizeDifference(field, value) {
+  if (value == null || typeof value === "number" || typeof value === "boolean") return value;
+  if (typeof value === "string") {
+    if (["content", "template_text", "transcription", "delivery_error"].includes(field)) {
+      return {
+        type: "text",
+        length: value.length,
+        sha256: createHash("sha256").update(value).digest("hex"),
+        preview: maskPhonesInText(value.replace(/\s+/g, " ").slice(0, 48)),
+      };
+    }
+    return maskPhonesInText(value.length > 160 ? `${value.slice(0, 157)}...` : value);
+  }
+  const serialized = JSON.stringify(value);
+  return {
+    type: Array.isArray(value) ? "array" : "object",
+    length: serialized.length,
+    sha256: createHash("sha256").update(serialized).digest("hex"),
+    preview: maskPhonesInText(serialized.slice(0, 120)),
+  };
+}
+
+function suggestedConflictClassification(fields, first, second) {
+  const deliveryFields = new Set(["delivery_status", "delivery_status_at", "delivery_error"]);
+  const metadataFields = new Set([
+    "created_at",
+    "reactions",
+    "media_storage_key",
+    "media_storage_provider",
+    "media_storage_failed",
+    "media_unavailable",
+  ]);
+  if (fields.some((field) => deliveryFields.has(field))) return "evolução de delivery status";
+  if (first.message_type === "reaction_event" || second.message_type === "reaction_event"
+    || fields.some((field) => metadataFields.has(field)) && fields.length > 1) {
+    return "reação/metadado posterior";
+  }
+  if (fields.length === 1 && fields[0] === "created_at") return "duplicata legítima";
+  if (fields.some((field) => ["content", "content_json", "role", "source", "message_type"].includes(field))) {
+    return "possível corrupção";
+  }
+  return "outro";
+}
+
+function conflictOccurrence(message, phoneByConversationId) {
+  return {
+    telefone: maskedPhone(phoneByConversationId.get(message.conversation_id)),
+    metaMessageId: message.meta_message_id || null,
+    legacy_history_index: message.legacy_history_index,
+    message_type: message.message_type,
+    role: message.role,
+    source: message.source,
+    created_at: message.created_at,
+  };
+}
+
+export function classifyAndConsolidateMessages(messages, sampleLimit = 20, options = {}) {
+  const phoneByConversationId = options.phoneByConversationId || new Map();
   const messagesById = new Map();
   const crossConversationIds = new Set();
   const exactIds = [];
@@ -90,11 +156,24 @@ export function classifyAndConsolidateMessages(messages, sampleLimit = 20) {
 
     duplicateConflicts += 1;
     if (conflictSamples.length < sampleLimit) {
+      const differences = differingFields(existingComparable, incomingComparable);
       conflictSamples.push({
         id: message.id,
-        conversationIds: [...new Set([existing.conversation_id, message.conversation_id])],
-        legacyHistoryIndexes: [existing.legacy_history_index, message.legacy_history_index],
-        differingFields: differingFields(existingComparable, incomingComparable),
+        mesmaConversa: existing.conversation_id === message.conversation_id,
+        ocorrencias: [
+          conflictOccurrence(existing, phoneByConversationId),
+          conflictOccurrence(message, phoneByConversationId),
+        ],
+        camposDiferentes: differences,
+        valoresResumidos: Object.fromEntries(differences.map((field) => [
+          field,
+          [summarizeDifference(field, existingComparable[field]), summarizeDifference(field, incomingComparable[field])],
+        ])),
+        classificacaoSugerida: suggestedConflictClassification(
+          differences,
+          existingComparable,
+          incomingComparable
+        ),
       });
     }
   }
@@ -300,7 +379,13 @@ export async function buildPlan(redisStore, { commit = false } = {}) {
     }
   }
 
-  const deduplicated = classifyAndConsolidateMessages(messages);
+  const phoneByConversationId = new Map(
+    conversations.map((conversation) => [
+      conversation.id,
+      conversation.redis_key.slice("sartec:".length),
+    ])
+  );
+  const deduplicated = classifyAndConsolidateMessages(messages, 20, { phoneByConversationId });
   const uniqueMessages = deduplicated.messages;
   report.counters.exactDuplicates = deduplicated.exactDuplicates;
   report.counters.duplicateConflicts = deduplicated.duplicateConflicts;

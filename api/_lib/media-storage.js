@@ -13,7 +13,13 @@
 //           → webhook cai no fallback base64 no Redis (comportamento anterior)
 // ============================================================
 
-import { S3Client, PutObjectCommand, GetObjectCommand, DeleteObjectCommand } from "@aws-sdk/client-s3";
+import {
+  S3Client,
+  PutObjectCommand,
+  GetObjectCommand,
+  DeleteObjectCommand,
+  HeadObjectCommand,
+} from "@aws-sdk/client-s3";
 import { getSignedUrl } from "@aws-sdk/s3-request-presigner";
 
 // Mapa de mimeType → extensão de arquivo
@@ -44,8 +50,12 @@ const MIME_TO_EXT = {
   "image/heif":       "heif",
 };
 
+export function getMediaExtension(mimeType) {
+  return MIME_TO_EXT[(mimeType || "").toLowerCase()] || null;
+}
+
 function getExt(mimeType) {
-  return MIME_TO_EXT[(mimeType || "").toLowerCase()] || "bin";
+  return getMediaExtension(mimeType) || "bin";
 }
 
 // Remove caracteres perigosos do messageId antes de usar como parte da chave
@@ -122,6 +132,54 @@ export async function uploadMedia(buffer, mimeType, phone, messageId) {
     bucket,
     mimeType,
     size: buffer.byteLength,
+  };
+}
+
+export async function headMediaObject(storageKey) {
+  if (!storageKey || !String(storageKey).startsWith("media/")) {
+    throw new Error("storageKey inválida — deve começar com media/");
+  }
+  try {
+    const result = await getS3().send(new HeadObjectCommand({
+      Bucket: process.env.R2_BUCKET,
+      Key: storageKey,
+    }));
+    return {
+      exists: true,
+      size: result.ContentLength ?? null,
+      mimeType: result.ContentType || null,
+      sha256: result.Metadata?.sha256 || null,
+    };
+  } catch (error) {
+    const status = error?.$metadata?.httpStatusCode;
+    if (status === 404 || error?.name === "NotFound" || error?.name === "NoSuchKey") {
+      return { exists: false, size: null, mimeType: null, sha256: null };
+    }
+    throw error;
+  }
+}
+
+export async function putMediaObject({ storageKey, buffer, mimeType, sha256 }) {
+  if (process.env.R2_DISABLED === "true") {
+    throw new Error("R2_DISABLED — upload administrativo não disponível");
+  }
+  if (!storageKey || !String(storageKey).startsWith("media/")) {
+    throw new Error("storageKey inválida — deve começar com media/");
+  }
+  await getS3().send(new PutObjectCommand({
+    Bucket: process.env.R2_BUCKET,
+    Key: storageKey,
+    Body: buffer,
+    ContentType: mimeType,
+    Metadata: { sha256 },
+  }));
+  return {
+    storageProvider: "cloudflare-r2",
+    storageKey,
+    bucket: process.env.R2_BUCKET,
+    mimeType,
+    size: buffer.byteLength,
+    sha256,
   };
 }
 
