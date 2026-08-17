@@ -5,6 +5,7 @@
 // ============================================================
 
 import Redis from "ioredis";
+import { withSessionLock } from "../lib/redis-lock.js";
 
 let redisClient = null;
 
@@ -20,20 +21,6 @@ function getRedis() {
 }
 
 const SESSION_TTL = 60 * 60 * 24 * 90; // 90 dias — retenção mínima de histórico
-
-async function withSessionLock(redis, phone, fn) {
-  const lockKey = `lock:sartec:${phone}`;
-  for (let i = 0; i < 20; i++) {
-    const ok = await redis.set(lockKey, "1", "NX", "EX", 15);
-    if (ok) {
-      try { return await fn(); }
-      finally { await redis.del(lockKey); }
-    }
-    await new Promise((r) => setTimeout(r, 150));
-  }
-  console.warn(`[Lock] ⚠️ Timeout +${phone}`);
-  return fn();
-}
 
 async function upsertContact(redis, phone, incoming) {
   const key = `sartec:contact:${phone}`;

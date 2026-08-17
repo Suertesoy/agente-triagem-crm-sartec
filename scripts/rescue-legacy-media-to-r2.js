@@ -1,9 +1,10 @@
 #!/usr/bin/env node
 
-import { createHash, randomUUID } from "node:crypto";
+import { createHash } from "node:crypto";
 import { pathToFileURL } from "node:url";
 import Redis from "ioredis";
 import { RedisCrmStore, normalizeSartecPhone } from "../lib/crm-store/index.js";
+import { withSessionLock as withSharedSessionLock } from "../lib/redis-lock.js";
 import {
   getMediaExtension,
   headMediaObject,
@@ -264,29 +265,10 @@ export function locatePlannedMessage(session, item) {
 }
 
 export async function withSessionLock(redis, phone, fn, options = {}) {
-  const lockKey = `lock:sartec:${normalizeSartecPhone(phone)}`;
-  const token = options.token || randomUUID();
-  const attempts = options.attempts ?? 20;
-  const delayMs = options.delayMs ?? 150;
-  const ttlSeconds = options.ttlSeconds ?? 15;
-  const sleep = options.sleep || ((ms) => new Promise((resolve) => setTimeout(resolve, ms)));
-  for (let attempt = 0; attempt < attempts; attempt += 1) {
-    const acquired = await redis.set(lockKey, token, "NX", "EX", ttlSeconds);
-    if (acquired) {
-      try {
-        return await fn();
-      } finally {
-        await redis.eval(
-          "if redis.call('get', KEYS[1]) == ARGV[1] then return redis.call('del', KEYS[1]) else return 0 end",
-          1,
-          lockKey,
-          token
-        );
-      }
-    }
-    await sleep(delayMs);
-  }
-  throw new Error(`lock indisponível: ${lockKey}`);
+  return withSharedSessionLock(redis, normalizeSartecPhone(phone), fn, {
+    ...options,
+    onTimeout: "throw",
+  });
 }
 
 async function readAndValidateCurrent(redis, item) {

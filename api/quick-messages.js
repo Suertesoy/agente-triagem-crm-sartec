@@ -15,6 +15,7 @@
 
 import Redis from "ioredis";
 import crypto from "crypto";
+import { withRedisLock } from "../lib/redis-lock.js";
 
 let redisClient = null;
 
@@ -36,16 +37,9 @@ const MAX_TEXT  = 4000;
 const MAX_ITEMS = 50;
 
 async function withLock(redis, fn) {
-  for (let i = 0; i < 20; i++) {
-    const ok = await redis.set(LOCK_KEY, "1", "NX", "EX", 15);
-    if (ok) {
-      try { return await fn(); }
-      finally { await redis.del(LOCK_KEY); }
-    }
-    await new Promise((r) => setTimeout(r, 150));
-  }
-  console.warn("[Lock] ⚠️ Timeout quickMessages");
-  return fn();
+  return withRedisLock(redis, LOCK_KEY, fn, {
+    timeoutMessage: "[Lock] ⚠️ Timeout quickMessages",
+  });
 }
 
 async function readList(redis) {

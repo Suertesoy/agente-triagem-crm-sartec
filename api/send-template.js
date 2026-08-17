@@ -18,6 +18,7 @@
 // ============================================================
 
 import Redis from "ioredis";
+import { withSessionLock } from "../lib/redis-lock.js";
 
 let redisClient = null;
 
@@ -39,21 +40,6 @@ const SESSION_TTL = 60 * 60 * 24 * 90; // 90 dias — retenção mínima de hist
 // Normaliza telefone: remove tudo que não for dígito
 function normalizePhone(raw) {
   return String(raw || "").replace(/\D/g, "");
-}
-
-// Lock idêntico ao de webhook.js e resolve.js — evita race condition no Redis
-async function withSessionLock(redis, phone, fn) {
-  const lockKey = `lock:sartec:${phone}`;
-  for (let i = 0; i < 20; i++) {
-    const ok = await redis.set(lockKey, "1", "NX", "EX", 15);
-    if (ok) {
-      try { return await fn(); }
-      finally { await redis.del(lockKey); }
-    }
-    await new Promise((r) => setTimeout(r, 150));
-  }
-  console.warn(`[send-template/lock] ⚠️ Timeout aguardando lock +${phone}`);
-  return fn();
 }
 
 // ── Mapeamento tipo → nome aprovado na Meta ─────────────────────────────────

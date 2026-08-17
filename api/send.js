@@ -8,6 +8,7 @@
 
 import Redis from "ioredis";
 import { uploadMedia } from "./_lib/media-storage.js";
+import { withSessionLock } from "../lib/redis-lock.js";
 
 let redisClient = null;
 
@@ -402,20 +403,6 @@ async function sendDocument(req, res, body, PHONE_NUMBER_ID, ACCESS_TOKEN) {
   if (!docSaved) console.warn(`[send/document] ⚠️ Documento entregue à Meta mas não persistido no Redis (+${to})`);
 
   return res.status(200).json({ success: true, historyPersisted: docSaved });
-}
-
-async function withSessionLock(redis, phone, fn) {
-  const lockKey = `lock:sartec:${phone}`;
-  for (let i = 0; i < 20; i++) {
-    const ok = await redis.set(lockKey, "1", "NX", "EX", 15);
-    if (ok) {
-      try { return await fn(); }
-      finally { await redis.del(lockKey); }
-    }
-    await new Promise((r) => setTimeout(r, 150));
-  }
-  console.warn(`[Lock] ⚠️ Timeout +${phone}`);
-  return fn();
 }
 
 // ── Aplica status pendente de entrega se houver (race condition fix) ─────
