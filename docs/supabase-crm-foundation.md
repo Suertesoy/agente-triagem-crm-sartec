@@ -42,23 +42,23 @@ O migrador desta etapa lê somente contatos, sessões principais e `sartec:pipel
 
 - O telefone é normalizado para 10–15 dígitos, preservando o formato numérico usado nas chaves atuais.
 - `sartec:contact:{phone}` vira uma linha de `crm_customers`; o JSON original fica em `legacy_contact`.
-- `sartec:{phone}` vira uma linha de `crm_conversations`; o JSON original fica em `legacy_session`.
-- Cada item de `session.history` vira uma linha de `crm_messages`; o item original fica em `raw_payload`.
-- `metaMessageId` é a identidade preferencial da mensagem. Sem ele, o mapper produz UUID determinístico a partir de telefone, papel, conteúdo, timestamp, mídia/template/contexto e ocorrência estável.
+- `sartec:{phone}` vira uma linha de `crm_conversations`; `legacy_session` preserva os demais campos originais, mas não duplica `history`. Em seu lugar ficam `legacyHistoryAudit.count` e o checksum SHA-256 canônico do histórico.
+- Cada item de `session.history` vira uma linha de `crm_messages`, com a posição original em `legacy_history_index`. Mensagens sem timestamp enviam `created_at: null`, sem inventar data.
+- `metaMessageId` é a identidade preferencial da mensagem. Sem ele, o mapper usa de forma determinística `legacy:{phone}:{legacyHistoryIndex}`. O SHA-256 canônico do payload original fica separado em `legacy_payload_hash` para auditoria.
 - IDs determinísticos de cliente, conversa e mensagem tornam reexecuções idempotentes. O banco também mantém índices únicos em `phone`, `redis_key` e `meta_message_id` quando presente.
 - IDs de atendente do painel são preservados em `attendant_external_id`; não são forçados para o UUID institucional de `crm_attendants`.
-- `mediaStorageKey` e `mediaStorageProvider` continuam apontando para o R2. Base64 legado permanece apenas dentro do JSON legado para não descartar dados durante a auditoria; não é normalizado nem enviado ao Supabase Storage.
+- `mediaStorageKey` e `mediaStorageProvider` continuam apontando para o R2. Base64 legado não entra em `raw_payload`, `content_json` nem `legacy_session`; em seu lugar ficam presença, tamanho em bytes, SHA-256 e a referência de storage. A origem Redis não é alterada pelo dry-run. Base64 sem referência R2 válida bloqueia `--commit`.
 
 Foram encontrados **12 formatos lógicos possíveis** no histórico: texto inbound, texto outbound do agente, texto outbound humano, nota interna `internal_note`, imagem inbound, imagem outbound humana, documento inbound, documento outbound humano, áudio inbound, template, evento `template_status` e evento `reaction_event`.
 
 Campos observados sem coluna normalizada dedicada ficam preservados no JSON legado e aparecem no dry-run. Entre eles:
 
 - sessão: `audioCount`, `lastDate`, `historySummary`, `lastHumanReply`, `previousResolvedAt`, `currentCycleStartedAt`, `proactiveNote`, `requestSource`, `pjLunchAutoReplySentFor` e `pjLunchAutoReplySentAt`;
-- mensagem: `mediaData`, `mediaSize`, `sentMedia`, `pjLunchAutoReply`, `templateStatus`, `relatedMessageId`, campos avulsos de `reaction_event` e metadados de remoção da mídia.
+- mensagem: `mediaData` (persistido somente como metadados de auditoria), `mediaSize`, `sentMedia`, `pjLunchAutoReply`, `templateStatus`, `relatedMessageId`, campos avulsos de `reaction_event` e metadados de remoção da mídia.
 
-Esses campos não exigem alteração imediata do banco porque continuam íntegros em `legacy_session`/`raw_payload`. Antes do dual write, vale decidir se `mediaSize`, metadados de exclusão e eventos de reação/template merecem colunas próprias.
+Esses campos não exigem alteração imediata do banco porque continuam preservados em `legacy_session`/`raw_payload`. Antes do dual write, vale decidir se metadados de exclusão e eventos de reação/template merecem colunas próprias.
 
-Repetições do mesmo ID dentro da mesma conversa são contadas e consolidadas em uma única linha importável. Se um mesmo Meta ID aparecer em conversas diferentes, `--commit` é recusado para exigir revisão manual.
+Repetições normalizadas equivalentes do mesmo ID são consolidadas e contadas como `exactDuplicates`. Diferenças materiais são contadas como `duplicateConflicts`, com amostras no diagnóstico, e bloqueiam `--commit`. IDs repetidos entre conversas também bloqueiam a importação.
 
 ## Janela de 24 horas e templates
 
@@ -74,7 +74,7 @@ Com as variáveis do Redis disponíveis:
 node scripts/migrate-redis-to-supabase.js
 ```
 
-Esse comando somente lê o Redis e imprime contagens, inválidos, campos sem mapeamento, possíveis duplicatas e checksum. Ele não cria o cliente Supabase.
+Esse comando somente lê o Redis e imprime contagens, inválidos, campos sem mapeamento, duplicatas exatas/conflitantes, métricas de base64 legado e checksum. Ele não cria o cliente Supabase.
 
 Uma escrita futura exige as três variáveis específicas do CRM e duas confirmações explícitas:
 
@@ -82,8 +82,8 @@ Uma escrita futura exige as três variáveis específicas do CRM e duas confirma
 SUPABASE_CRM_ENABLED=true node scripts/migrate-redis-to-supabase.js --commit
 ```
 
-O modo commit registra início, conclusão/falha, contadores e checksum em `crm_migration_runs`. Não execute antes de revisar o dry-run e validar as credenciais do projeto `uzwyzwbybtnvgjjhimwy`.
+O modo commit registra início, conclusão/falha, contadores e checksum em `crm_migration_runs`. Ele é recusado se houver JSON, sessão, item de histórico ou pipeline inválido; duplicata entre conversas; duplicata conflitante; ou base64 legado sem R2 válido. Não execute antes de revisar o dry-run e validar as credenciais do projeto `uzwyzwbybtnvgjjhimwy`.
 
 ## Schema versionado
 
-Os arquivos em `supabase/migrations` são cópias exatas das três migrations já aplicadas remotamente. Não foram enviados ao banco nesta entrega. RLS permanece ativo, não há policies públicas e privilégios diretos de `anon`/`authenticated` permanecem revogados.
+As três primeiras migrations em `supabase/migrations` são cópias exatas das migrations já aplicadas remotamente. A migration incremental `20260817172655_add_legacy_message_audit_fields.sql` permanece apenas local: torna `crm_messages.created_at` anulável mantendo seu default, adiciona os dois campos de auditoria legada e o índice por conversa/posição. Ela não foi aplicada remotamente. RLS permanece ativo, não há policies públicas e privilégios diretos de `anon`/`authenticated` permanecem revogados.

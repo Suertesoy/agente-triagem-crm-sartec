@@ -2,7 +2,9 @@
 
 Este diretório versiona o schema já aplicado ao projeto **Sartec CRM** (`uzwyzwbybtnvgjjhimwy`, `sa-east-1`). Ele foi reconstruído a partir do histórico de migrations e do catálogo remoto em 17/08/2026.
 
-Estas migrations representam o estado remoto existente. Não execute `db push`, `db reset`, `migration repair` ou reaplique os arquivos contra produção sem uma revisão explícita do histórico remoto.
+As três primeiras migrations representam o estado remoto existente. A migration incremental `20260817172655_add_legacy_message_audit_fields.sql` está versionada para revisão, mas ainda não foi aplicada remotamente.
+
+Não execute `db push`, `db reset`, `migration repair` ou aplique qualquer migration contra produção sem uma autorização explícita.
 
 O acesso permanece exclusivamente server-side: RLS está habilitado, não há policies públicas e `anon`/`authenticated` não têm privilégios diretos nas tabelas `crm_*`.
 

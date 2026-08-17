@@ -1,5 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
+import { createHash } from "node:crypto";
 import {
   mapHistoryMessage,
   mapPipelineOrder,
@@ -11,6 +12,11 @@ import {
   assertSupabaseCrmTarget,
   isSupabaseCrmEnabled,
 } from "../lib/supabase-server.js";
+import {
+  assertCommitAllowed,
+  classifyAndConsolidateMessages,
+  commitBlockers,
+} from "../scripts/migrate-redis-to-supabase.js";
 
 const PHONE = "5512999990000";
 const BASE_TIME = "2026-08-17T12:00:00.000Z";
@@ -33,12 +39,12 @@ function session(overrides = {}) {
   };
 }
 
-function mapMessage(message, occurrence = 0) {
+function mapMessage(message, legacyHistoryIndex = 0) {
   return mapHistoryMessage({
     phone: PHONE,
     conversationId: "3a1476ca-c82d-5e69-b127-a71db5d7f02f",
     message,
-    occurrence,
+    legacyHistoryIndex,
   });
 }
 
@@ -243,7 +249,7 @@ test("mapeia reply/context e status de falha", () => {
   assert.equal(message.delivery_error, "Falha na entrega");
 });
 
-test("preserva lista escolar estruturada e JSON completo da sessão", () => {
+test("preserva lista escolar e sessão legada sem duplicar o history", () => {
   const schoolList = {
     source: "pdf",
     items: ["2 cadernos", "1 estojo"],
@@ -258,7 +264,10 @@ test("preserva lista escolar estruturada e JSON completo da sessão", () => {
   });
   const { conversation, diagnostics } = mapRedisSession(PHONE, original);
   assert.deepEqual(conversation.school_list, schoolList);
-  assert.deepEqual(conversation.legacy_session, original);
+  assert.equal("history" in conversation.legacy_session, false);
+  assert.equal(conversation.legacy_session.historySummary, original.historySummary);
+  assert.equal(conversation.legacy_session.legacyHistoryAudit.count, 0);
+  assert.match(conversation.legacy_session.legacyHistoryAudit.checksum, /^[a-f0-9]{64}$/);
   assert.ok(diagnostics.unmappedFields.includes("historySummary"));
 });
 
@@ -277,11 +286,142 @@ test("gera ID determinístico para mensagem sem Meta ID e é idempotente", () =>
   assert.deepEqual(firstRun, secondRun);
 });
 
-test("distingue mensagens legadas idênticas pela ocorrência estável", () => {
+test("distingue mensagens legadas idênticas pela posição histórica", () => {
   const duplicate = { role: "user", content: "ok", createdAt: BASE_TIME };
   const { messages } = mapRedisSession(PHONE, session({ history: [duplicate, duplicate] }));
   assert.equal(messages.length, 2);
   assert.notEqual(messages[0].id, messages[1].id);
+});
+
+test("mensagem sem timestamp grava created_at nulo e preserva a posição histórica", () => {
+  const { message, missingTimestamp } = mapMessage({ role: "user", content: "Sem hora" }, 17);
+  assert.equal(message.created_at, null);
+  assert.equal(message.legacy_history_index, 17);
+  assert.equal(missingTimestamp, true);
+});
+
+test("ID legado depende da posição, não de campos mutáveis", () => {
+  const original = mapMessage({
+    role: "assistant",
+    content: "Pedido enviado",
+    deliveryStatus: "sent",
+    reactions: [],
+  }, 8);
+  const updated = mapMessage({
+    role: "assistant",
+    content: "Pedido enviado",
+    deliveryStatus: "read",
+    reactions: [{ emoji: "👍" }],
+  }, 8);
+  assert.equal(original.message.id, updated.message.id);
+  assert.notEqual(original.message.legacy_payload_hash, updated.message.legacy_payload_hash);
+});
+
+test("mensagens idênticas em posições diferentes têm IDs diferentes", () => {
+  const value = { role: "user", content: "Mesmo conteúdo" };
+  assert.notEqual(mapMessage(value, 3).message.id, mapMessage(value, 4).message.id);
+});
+
+test("audita count e checksum do history sem persistir seu conteúdo na conversa", () => {
+  const history = [
+    { role: "user", content: "A", createdAt: BASE_TIME },
+    { role: "assistant", content: "B" },
+  ];
+  const { conversation } = mapRedisSession(PHONE, session({ history }));
+  assert.equal(conversation.legacy_session.legacyHistoryAudit.count, 2);
+  assert.match(conversation.legacy_session.legacyHistoryAudit.checksum, /^[a-f0-9]{64}$/);
+  assert.equal(JSON.stringify(conversation.legacy_session).includes("\"history\":"), false);
+});
+
+test("remove base64 legado do payload PostgreSQL e preserva SHA, tamanho e referência R2", () => {
+  const binary = Buffer.from("conteúdo binário legado", "utf8");
+  const encoded = binary.toString("base64");
+  const mapped = mapMessage({
+    role: "user",
+    content: [{ type: "image", source: { type: "base64", data: encoded } }],
+    mediaData: encoded,
+    mediaType: "image",
+    mediaStorageKey: `media/${PHONE}/legacy.jpg`,
+    mediaStorageProvider: "cloudflare-r2",
+  }, 2);
+  assert.equal("mediaData" in mapped.message.raw_payload, false);
+  assert.equal("data" in mapped.message.raw_payload.content[0].source, false);
+  assert.equal("data" in mapped.message.content_json[0].source, false);
+  assert.equal(mapped.legacyBase64.bytes, binary.length);
+  assert.equal(
+    mapped.legacyBase64.sha256,
+    createHash("sha256").update(binary).digest("hex")
+  );
+  assert.equal(mapped.legacyBase64.hasValidR2Reference, true);
+  assert.deepEqual(mapped.message.raw_payload.legacyMediaData, mapped.legacyBase64);
+
+  const { conversation } = mapRedisSession(PHONE, session({ mediaData: encoded }));
+  assert.equal("mediaData" in conversation.legacy_session, false);
+});
+
+test("base64 legado sem R2 válido bloqueia commit", () => {
+  const mapped = mapRedisSession(PHONE, session({
+    history: [{ role: "user", content: "arquivo", mediaData: Buffer.from("x").toString("base64") }],
+  }));
+  assert.equal(mapped.diagnostics.legacyBase64Messages, 1);
+  assert.equal(mapped.diagnostics.legacyBase64WithoutR2, 1);
+  const report = { counters: { legacyBase64WithoutR2: 1 } };
+  assert.throws(
+    () => assertCommitAllowed(report, { supabaseEnabled: true }),
+    /legacyBase64WithoutR2/
+  );
+});
+
+test("consolida duplicata normalizada exata", () => {
+  const first = mapMessage({
+    role: "user",
+    content: "duplicada",
+    metaMessageId: "wamid.duplicate",
+    createdAt: BASE_TIME,
+  }, 1).message;
+  const second = { ...structuredClone(first), legacy_history_index: 9 };
+  const result = classifyAndConsolidateMessages([first, second]);
+  assert.equal(result.messages.length, 1);
+  assert.equal(result.exactDuplicates, 1);
+  assert.equal(result.duplicateConflicts, 0);
+});
+
+test("reporta duplicata conflitante sem tratá-la como exata", () => {
+  const first = mapMessage({
+    role: "user",
+    content: "versão A",
+    metaMessageId: "wamid.conflict",
+  }, 1).message;
+  const second = mapMessage({
+    role: "user",
+    content: "versão B",
+    metaMessageId: "wamid.conflict",
+  }, 2).message;
+  const result = classifyAndConsolidateMessages([first, second]);
+  assert.equal(result.exactDuplicates, 0);
+  assert.equal(result.duplicateConflicts, 1);
+  assert.equal(result.conflictSamples[0].id, first.id);
+  assert.ok(result.conflictSamples[0].differingFields.includes("content"));
+});
+
+test("guard rails de commit bloqueiam todos os contadores exigidos e ignoram timestamp ausente", () => {
+  const blocking = [
+    "invalidJson",
+    "invalidSessions",
+    "invalidHistoryItems",
+    "invalidPipelineEntries",
+    "crossConversationDuplicates",
+    "duplicateConflicts",
+    "legacyBase64WithoutR2",
+  ];
+  for (const counter of blocking) {
+    const report = { counters: { [counter]: 1, messagesWithoutTimestamp: 182 } };
+    assert.deepEqual(commitBlockers(report), [counter]);
+    assert.throws(() => assertCommitAllowed(report, { supabaseEnabled: true }), /--commit recusado/);
+  }
+  assert.doesNotThrow(() => assertCommitAllowed({
+    counters: { messagesWithoutTimestamp: 182, exactDuplicates: 8 },
+  }, { supabaseEnabled: true }));
 });
 
 test("mapeia ordem do pipeline por tipo e coluna", () => {

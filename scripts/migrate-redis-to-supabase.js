@@ -1,6 +1,7 @@
 #!/usr/bin/env node
 
 import { createHash } from "node:crypto";
+import { pathToFileURL } from "node:url";
 import Redis from "ioredis";
 import {
   RedisCrmStore,
@@ -9,28 +10,19 @@ import {
   mapRedisContact,
   mapRedisSession,
   normalizeSartecPhone,
+  sha256Canonical,
 } from "../lib/crm-store/index.js";
 import { isSupabaseCrmEnabled } from "../lib/supabase-server.js";
 
-const args = new Set(process.argv.slice(2));
-const allowedArgs = new Set(["--commit", "--help"]);
-const unknownArgs = [...args].filter((arg) => !allowedArgs.has(arg));
-
-if (args.has("--help")) {
-  console.log(`Uso:
-  node scripts/migrate-redis-to-supabase.js           # dry-run (somente leitura)
-  node scripts/migrate-redis-to-supabase.js --commit  # gravação explícita
-
-Para --commit, SUPABASE_CRM_ENABLED deve ser true e as variáveis específicas do CRM devem estar configuradas.`);
-  process.exit(0);
-}
-
-if (unknownArgs.length) {
-  console.error(`Argumento(s) desconhecido(s): ${unknownArgs.join(", ")}`);
-  process.exit(2);
-}
-
-const commit = args.has("--commit");
+export const COMMIT_BLOCKING_COUNTERS = [
+  "invalidJson",
+  "invalidSessions",
+  "invalidHistoryItems",
+  "invalidPipelineEntries",
+  "crossConversationDuplicates",
+  "duplicateConflicts",
+  "legacyBase64WithoutR2",
+];
 
 function incrementFieldCounts(target, fields) {
   for (const field of fields) target[field] = (target[field] || 0) + 1;
@@ -54,6 +46,85 @@ function checksumPlan(customers, conversations, messages, pipelineRows) {
   return hash.digest("hex");
 }
 
+function comparableMessage(message) {
+  const comparable = structuredClone(message);
+  delete comparable.id;
+  delete comparable.legacy_history_index;
+  delete comparable.legacy_payload_hash;
+  delete comparable.raw_payload;
+  return comparable;
+}
+
+function differingFields(first, second) {
+  const fields = new Set([...Object.keys(first), ...Object.keys(second)]);
+  return [...fields].filter(
+    (field) => sha256Canonical(first[field]) !== sha256Canonical(second[field])
+  ).sort();
+}
+
+export function classifyAndConsolidateMessages(messages, sampleLimit = 20) {
+  const messagesById = new Map();
+  const crossConversationIds = new Set();
+  const exactIds = [];
+  const conflictSamples = [];
+  let exactDuplicates = 0;
+  let duplicateConflicts = 0;
+
+  for (const message of messages) {
+    const existing = messagesById.get(message.id);
+    if (!existing) {
+      messagesById.set(message.id, message);
+      continue;
+    }
+
+    if (existing.conversation_id !== message.conversation_id) {
+      crossConversationIds.add(message.id);
+    }
+    const existingComparable = comparableMessage(existing);
+    const incomingComparable = comparableMessage(message);
+    if (sha256Canonical(existingComparable) === sha256Canonical(incomingComparable)) {
+      exactDuplicates += 1;
+      if (exactIds.length < sampleLimit) exactIds.push(message.id);
+      continue;
+    }
+
+    duplicateConflicts += 1;
+    if (conflictSamples.length < sampleLimit) {
+      conflictSamples.push({
+        id: message.id,
+        conversationIds: [...new Set([existing.conversation_id, message.conversation_id])],
+        legacyHistoryIndexes: [existing.legacy_history_index, message.legacy_history_index],
+        differingFields: differingFields(existingComparable, incomingComparable),
+      });
+    }
+  }
+
+  return {
+    messages: [...messagesById.values()],
+    exactDuplicates,
+    duplicateConflicts,
+    crossConversationDuplicates: crossConversationIds.size,
+    exactIds,
+    conflictSamples,
+  };
+}
+
+export function commitBlockers(report) {
+  return COMMIT_BLOCKING_COUNTERS.filter((counter) => (report.counters[counter] || 0) > 0);
+}
+
+export function assertCommitAllowed(report, { supabaseEnabled = isSupabaseCrmEnabled() } = {}) {
+  if (!supabaseEnabled) {
+    throw new Error(
+      "--commit recusado: defina SUPABASE_CRM_ENABLED=true para confirmar que o destino é o Supabase Sartec CRM."
+    );
+  }
+  const blockers = commitBlockers(report);
+  if (blockers.length) {
+    throw new Error(`--commit recusado pelos guard rails: ${blockers.join(", ")}.`);
+  }
+}
+
 function printReport(report) {
   console.log(`
 Migração Redis → Supabase CRM (${report.mode})
@@ -67,6 +138,10 @@ Contagens
   mensagens normalizadas:   ${report.counters.messages}
   itens de histórico lidos: ${report.counters.historyItems}
   mídias referenciadas:     ${report.counters.media}
+  mensagens com base64:     ${report.counters.legacyBase64Messages}
+  bytes de base64 legado:   ${report.counters.legacyBase64Bytes}
+  maior base64 (bytes):     ${report.counters.largestLegacyBase64Bytes}
+  base64 sem R2 válido:     ${report.counters.legacyBase64WithoutR2}
   templates/eventos:        ${report.counters.templates}
   linhas de pipeline:       ${report.counters.pipelineRows}
 
@@ -75,7 +150,8 @@ Diagnóstico
   sessões inválidas:        ${report.counters.invalidSessions}
   itens de histórico invál.:${report.counters.invalidHistoryItems}
   mensagens sem timestamp:  ${report.counters.messagesWithoutTimestamp}
-  possíveis duplicatas:     ${report.counters.possibleDuplicates}
+  duplicatas exatas:        ${report.counters.exactDuplicates}
+  duplicatas conflitantes:  ${report.counters.duplicateConflicts}
   duplicatas entre conversas:${report.counters.crossConversationDuplicates}
   entradas pipeline invál.: ${report.counters.invalidPipelineEntries}
 
@@ -84,11 +160,14 @@ Campos de mensagem sem coluna normalizada: ${Object.keys(report.unmapped.message
 Campos de contato sem coluna normalizada: ${Object.keys(report.unmapped.contact).join(", ") || "nenhum"}
 Fallbacks de enum detectados: ${Object.keys(report.normalizedFallbacks).join(", ") || "nenhum"}
 Checksum: ${report.checksum}
+${report.duplicates.conflictSamples.length
+    ? `Conflitos de duplicata (amostra): ${JSON.stringify(report.duplicates.conflictSamples)}`
+    : "Conflitos de duplicata: nenhum"}
 
 ${report.mode === "DRY RUN" ? "Nenhuma escrita foi realizada no Supabase." : "Importação gravada no Supabase CRM."}`);
 }
 
-async function buildPlan(redisStore) {
+export async function buildPlan(redisStore, { commit = false } = {}) {
   const [contactEntries, sessionEntries, pipelineEntry] = await Promise.all([
     redisStore.contactEntries(),
     redisStore.sessionEntries(),
@@ -111,12 +190,18 @@ async function buildPlan(redisStore) {
       invalidSessions: 0,
       invalidHistoryItems: 0,
       messagesWithoutTimestamp: 0,
-      possibleDuplicates: 0,
+      exactDuplicates: 0,
+      duplicateConflicts: 0,
       crossConversationDuplicates: 0,
       invalidPipelineEntries: 0,
+      legacyBase64Messages: 0,
+      legacyBase64Bytes: 0,
+      legacyBase64WithoutR2: 0,
+      largestLegacyBase64Bytes: 0,
     },
     unmapped: { contact: {}, session: {}, message: {} },
     normalizedFallbacks: {},
+    duplicates: { exactIds: [], conflictSamples: [] },
     checksum: null,
   };
 
@@ -188,6 +273,13 @@ async function buildPlan(redisStore) {
       report.counters.messagesWithoutTimestamp += mapped.diagnostics.missingTimestamps;
       report.counters.media += mapped.diagnostics.mediaCount;
       report.counters.templates += mapped.diagnostics.templateCount;
+      report.counters.legacyBase64Messages += mapped.diagnostics.legacyBase64Messages;
+      report.counters.legacyBase64Bytes += mapped.diagnostics.legacyBase64Bytes;
+      report.counters.legacyBase64WithoutR2 += mapped.diagnostics.legacyBase64WithoutR2;
+      report.counters.largestLegacyBase64Bytes = Math.max(
+        report.counters.largestLegacyBase64Bytes,
+        mapped.diagnostics.largestLegacyBase64Bytes
+      );
       incrementFieldCounts(report.unmapped.session, mapped.diagnostics.unmappedFields);
       incrementFieldCounts(report.unmapped.message, mapped.diagnostics.messageUnmappedFields);
     } catch {
@@ -208,21 +300,13 @@ async function buildPlan(redisStore) {
     }
   }
 
-  const messagesById = new Map();
-  const crossConversationIds = new Set();
-  for (const message of messages) {
-    const existing = messagesById.get(message.id);
-    if (existing) {
-      report.counters.possibleDuplicates += 1;
-      if (existing.conversation_id !== message.conversation_id) {
-        crossConversationIds.add(message.id);
-      }
-      continue;
-    }
-    messagesById.set(message.id, message);
-  }
-  const uniqueMessages = [...messagesById.values()];
-  report.counters.crossConversationDuplicates = crossConversationIds.size;
+  const deduplicated = classifyAndConsolidateMessages(messages);
+  const uniqueMessages = deduplicated.messages;
+  report.counters.exactDuplicates = deduplicated.exactDuplicates;
+  report.counters.duplicateConflicts = deduplicated.duplicateConflicts;
+  report.counters.crossConversationDuplicates = deduplicated.crossConversationDuplicates;
+  report.duplicates.exactIds = deduplicated.exactIds;
+  report.duplicates.conflictSamples = deduplicated.conflictSamples;
   report.counters.customers = contactsByPhone.size;
   report.counters.conversations = conversations.length;
   report.counters.historyItems = messages.length;
@@ -241,17 +325,8 @@ async function buildPlan(redisStore) {
   };
 }
 
-async function commitPlan(plan) {
-  if (!isSupabaseCrmEnabled()) {
-    throw new Error(
-      "--commit recusado: defina SUPABASE_CRM_ENABLED=true para confirmar que o destino é o Supabase Sartec CRM."
-    );
-  }
-  if (plan.report.counters.crossConversationDuplicates > 0) {
-    throw new Error(
-      "--commit recusado: há Meta IDs repetidos em conversas diferentes. Revise os conflitos antes de importar."
-    );
-  }
+export async function commitPlan(plan) {
+  assertCommitAllowed(plan.report);
 
   const store = new SupabaseCrmStore();
   let runId = null;
@@ -305,6 +380,21 @@ async function commitPlan(plan) {
 }
 
 async function main() {
+  const args = new Set(process.argv.slice(2));
+  const allowedArgs = new Set(["--commit", "--help"]);
+  const unknownArgs = [...args].filter((arg) => !allowedArgs.has(arg));
+  if (args.has("--help")) {
+    console.log(`Uso:
+  node scripts/migrate-redis-to-supabase.js           # dry-run (somente leitura)
+  node scripts/migrate-redis-to-supabase.js --commit  # gravação explícita
+
+Para --commit, SUPABASE_CRM_ENABLED deve ser true e todos os guard rails devem estar zerados.`);
+    return;
+  }
+  if (unknownArgs.length) {
+    throw new Error(`Argumento(s) desconhecido(s): ${unknownArgs.join(", ")}`);
+  }
+  const commit = args.has("--commit");
   if (!process.env.REDIS_URL) {
     throw new Error("REDIS_URL não configurada. O dry-run precisa de acesso somente leitura ao Redis de origem.");
   }
@@ -318,7 +408,7 @@ async function main() {
 
   try {
     await redis.connect();
-    const plan = await buildPlan(new RedisCrmStore(redis));
+    const plan = await buildPlan(new RedisCrmStore(redis), { commit });
     if (commit) await commitPlan(plan);
     printReport(plan.report);
   } finally {
@@ -326,7 +416,9 @@ async function main() {
   }
 }
 
-main().catch((error) => {
-  console.error(`Migração interrompida: ${error.message}`);
-  process.exitCode = 1;
-});
+if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
+  main().catch((error) => {
+    console.error(`Migração interrompida: ${error.message}`);
+    process.exitCode = 1;
+  });
+}
