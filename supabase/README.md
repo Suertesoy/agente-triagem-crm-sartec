@@ -2,7 +2,9 @@
 
 Este diretório versiona o schema já aplicado ao projeto **Sartec CRM** (`uzwyzwbybtnvgjjhimwy`, `sa-east-1`). Ele foi reconstruído a partir do histórico de migrations e do catálogo remoto em 17/08/2026.
 
-As quatro migrations representam o estado remoto existente. A migration incremental foi registrada remotamente como `20260817175639_add_legacy_message_audit_fields` e o arquivo local usa o mesmo timestamp.
+As quatro primeiras migrations representam o estado remoto existente. A migration incremental foi registrada remotamente como `20260817175639_add_legacy_message_audit_fields` e o arquivo local usa o mesmo timestamp.
+
+`20260817231131_ordered_crm_shadow_write.sql` prepara revisões condicionais, RPCs server-only e `crm_settings`, mas ainda não foi aplicada. A infraestrutura correspondente não está conectada aos endpoints; Redis continua como fonte operacional e `SUPABASE_DUAL_WRITE=false` é o padrão.
 
 Não execute `db push`, `db reset`, `migration repair` ou aplique qualquer migration contra produção sem uma autorização explícita.
 

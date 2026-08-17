@@ -3,6 +3,7 @@
 // ioredis mock — only the commands this project calls.
 const store = new Map();
 const expiresAt = new Map();
+const sets = new Map();
 let clockOffsetMs = 0;
 
 function now() {
@@ -51,10 +52,71 @@ export default class FakeRedis {
     return n;
   }
 
-  async eval(_script, numberOfKeys, key, token) {
-    if (numberOfKeys !== 1) throw new Error("FakeRedis.eval suporta exatamente uma chave");
-    if (await this.get(key) !== token) return 0;
-    return this.del(key);
+  async incr(key) {
+    const next = Number(await this.get(key) || 0) + 1;
+    await this.set(key, String(next));
+    return next;
+  }
+
+  async sadd(key, ...members) {
+    if (!sets.has(key)) sets.set(key, new Set());
+    let added = 0;
+    for (const member of members) {
+      if (!sets.get(key).has(member)) added += 1;
+      sets.get(key).add(member);
+    }
+    return added;
+  }
+
+  async smembers(key) {
+    return [...(sets.get(key) || [])];
+  }
+
+  async srem(key, ...members) {
+    let removed = 0;
+    for (const member of members) if (sets.get(key)?.delete(member)) removed += 1;
+    return removed;
+  }
+
+  async eval(script, numberOfKeys, ...args) {
+    const keys = args.slice(0, numberOfKeys);
+    const argv = args.slice(numberOfKeys);
+    if (script.includes("crm-shadow:commit-v1")) {
+      const revision = await this.incr(keys[0]);
+      if (argv[2] === "keep") await this.set(keys[1], argv[0], "KEEPTTL");
+      else if (argv[2]) await this.set(keys[1], argv[0], "EX", argv[2]);
+      else await this.set(keys[1], argv[0]);
+      await this.set(keys[2], String(revision));
+      const item = JSON.parse(argv[1]);
+      item.shadowRevision = revision;
+      await this.set(keys[3], JSON.stringify(item));
+      await this.sadd(keys[4], argv[3]);
+      return revision;
+    }
+    if (script.includes("crm-shadow:remove-v1")) {
+      const raw = await this.get(keys[0]);
+      if (!raw) {
+        await this.srem(keys[1], argv[1]);
+        return 0;
+      }
+      if (String(JSON.parse(raw).shadowRevision) !== argv[0]) return 0;
+      await this.del(keys[0]);
+      await this.srem(keys[1], argv[1]);
+      return 1;
+    }
+    if (script.includes("crm-shadow:failure-v1")) {
+      const raw = await this.get(keys[0]);
+      if (!raw) return 0;
+      const item = JSON.parse(raw);
+      if (String(item.shadowRevision) !== argv[0]) return 0;
+      item.attempts = (item.attempts || 0) + 1;
+      item.lastError = argv[1];
+      await this.set(keys[0], JSON.stringify(item));
+      return 1;
+    }
+    if (numberOfKeys !== 1) throw new Error("FakeRedis.eval não reconheceu o script");
+    if (await this.get(keys[0]) !== argv[0]) return 0;
+    return this.del(keys[0]);
   }
 
   async mget(...keys) {
@@ -82,6 +144,7 @@ export default class FakeRedis {
   static _reset() {
     store.clear();
     expiresAt.clear();
+    sets.clear();
     clockOffsetMs = 0;
   }
 

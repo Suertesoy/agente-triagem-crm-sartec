@@ -587,6 +587,28 @@ export async function buildPlan(redisStore, { commit = false, inspectR2Object = 
   report.duplicates.exactIds = deduplicated.exactIds;
   report.duplicates.consolidatedSamples = deduplicated.consolidatedSamples;
   report.duplicates.conflictSamples = deduplicated.conflictSamples;
+  const readEntityRevision = async (entityType, entityKey) => {
+    if (typeof redisStore.entityRevision !== "function") return 0;
+    return redisStore.entityRevision(entityType, entityKey);
+  };
+  await Promise.all([
+    ...[...contactsByPhone.values()].map(async (customer) => {
+      customer.shadow_revision = await readEntityRevision("customer", customer.phone);
+    }),
+    ...conversations.map(async (conversation) => {
+      conversation.shadow_revision = await readEntityRevision("conversation", conversation.redis_key);
+    }),
+    ...uniqueMessages.map(async (message) => {
+      message.shadow_revision = await readEntityRevision("message", message.id);
+    }),
+    ...pipelineRows.map(async (row) => {
+      row.shadow_revision = await readEntityRevision(
+        "pipeline",
+        `${row.client_type}:${row.column_key}`
+      );
+    }),
+  ]);
+
   report.counters.customers = contactsByPhone.size;
   report.counters.conversations = conversations.length;
   report.counters.historyItems = messages.length;
