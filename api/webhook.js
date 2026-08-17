@@ -853,6 +853,7 @@ function addMessage(session, role, content, meta = {}) {
   if (meta.transcription)           item.transcription           = meta.transcription;
   if (meta.transcriptionError)      item.transcriptionError      = meta.transcriptionError;
   if (meta.pjLunchAutoReply)        item.pjLunchAutoReply        = true;
+  const historyIndex = session.history.length;
   session.history.push(item);
 
   if (role === "assistant" && isHandoff(content)) {
@@ -883,6 +884,16 @@ function addMessage(session, role, content, meta = {}) {
 
   // BUG1 FIX: session.history never truncated — only update summary for AI context
   if (session.history.length > MAX_MESSAGES) updateHistorySummary(session);
+
+  return { historyIndex, createdAt: item.createdAt };
+}
+
+function outgoingReply(text, historyRef) {
+  return { text, historyRef };
+}
+
+function outgoingReplyText(reply) {
+  return typeof reply === "string" ? reply : reply?.text;
 }
 
 function hasMedia(msg) {
@@ -1410,7 +1421,7 @@ async function handleSiteSchoolList(from, text, name, msgMeta) {
       "Vou encaminhar para a equipe responsável por orçamentos de listas escolares. " +
       "A equipe confirma disponibilidade, marcas/modelos e valores por aqui.";
 
-    addMessage(session, "assistant", reply);
+    const replyRef = addMessage(session, "assistant", reply);
     session.postHandoffReplySent = true;
 
     await saveSession(from, session);
@@ -1420,7 +1431,7 @@ async function handleSiteSchoolList(from, text, name, msgMeta) {
       ` escola=${session.escola || "—"} série=${session.serie || "—"}`
     );
 
-    return reply;
+    return outgoingReply(reply, replyRef);
   });
 }
 
@@ -1511,7 +1522,7 @@ async function handleSiteCatalogQuote(from, text, name, msgMeta, catalogType) {
       "Recebemos sua solicitação de orçamento pelo site. " +
       "Vou encaminhar sua lista diretamente para a equipe responsável.";
 
-    addMessage(session, "assistant", reply);
+    const replyRef = addMessage(session, "assistant", reply);
     session.postHandoffReplySent = true;
 
     await saveSession(from, session);
@@ -1521,7 +1532,7 @@ async function handleSiteCatalogQuote(from, text, name, msgMeta, catalogType) {
       ` demandType=${session.demandType} pipelineStatus=${session.pipelineStatus}`
     );
 
-    return reply;
+    return outgoingReply(reply, replyRef);
   });
 }
 
@@ -1782,10 +1793,10 @@ async function chatWithAgent(phone, userText, mediaPayload = null, name = "", me
     // For media messages use clean caption (possibly ""); for text use fallback "[mensagem]"
     const _phContent = (meta.mediaData || meta.mediaStorageKey) ? textToCheck : (textToCheck || "[mensagem]");
     addMessage(session, "user",      _phContent, meta);
-    addMessage(session, "assistant", reply);
+    const replyRef = addMessage(session, "assistant", reply);
     session.postHandoffReplySent = true;
     await saveSession(phone, session);
-    return reply;
+    return outgoingReply(reply, replyRef);
   }
 
   if (decision === false) {
@@ -1798,13 +1809,13 @@ async function chatWithAgent(phone, userText, mediaPayload = null, name = "", me
         const _lunchSt = await getPjLunchMode();
         if (_lunchSt.enabled && session.pjLunchAutoReplySentFor !== _lunchSt.updatedAt) {
           const _lunchMsg = "Olá! Estou em horário de almoço agora, assim que retornar atendo a sua solicitação.";
-          addMessage(session, "assistant", _lunchMsg, { pjLunchAutoReply: true });
+          const replyRef = addMessage(session, "assistant", _lunchMsg, { pjLunchAutoReply: true });
           session.pjLunchAutoReplySentFor = _lunchSt.updatedAt;
           session.pjLunchAutoReplySentAt  = new Date().toISOString();
           await saveSession(phone, session);
           // Não enviar aqui — retornar o texto e deixar handleIncomingMessage
           // fazer o único envio (mesma convenção de todo o resto de chatWithAgent).
-          return _lunchMsg;
+          return outgoingReply(_lunchMsg, replyRef);
         }
       } catch { /* falha silenciosa */ }
     }
@@ -1842,10 +1853,10 @@ async function chatWithAgent(phone, userText, mediaPayload = null, name = "", me
                     lc.includes("dia")   ? "Bom dia! 😊" : "Olá! 😊";
         const shortReply = `${ack} Só para confirmar: você é pessoa física ou pessoa jurídica?`;
         addMessage(session, "user", userContent, meta);
-        addMessage(session, "assistant", shortReply);
+        const replyRef = addMessage(session, "assistant", shortReply);
         await saveSession(phone, session);
         console.log(`[Agente] 👋 Saudação fragmentada — PF/PJ já perguntado +${phone}`);
-        return shortReply;
+        return outgoingReply(shortReply, replyRef);
       }
     }
   }
@@ -1907,7 +1918,7 @@ async function chatWithAgent(phone, userText, mediaPayload = null, name = "", me
     aiResponse.content[0]?.type === "text" ? aiResponse.content[0].text : ""
   );
 
-  addMessage(session, "assistant", reply);
+  const replyRef = addMessage(session, "assistant", reply);
 
   // ── Lista escolar: extração estruturada (texto livre ou mídia) ───────────
   // Não bloqueia nem altera a resposta ao cliente — é só persistência interna.
@@ -1943,7 +1954,7 @@ async function chatWithAgent(phone, userText, mediaPayload = null, name = "", me
     `${aiResponse.usage?.input_tokens}in/${aiResponse.usage?.output_tokens}out`
   );
 
-  return reply;
+  return outgoingReply(reply, replyRef);
   });
 }
 
@@ -2556,13 +2567,13 @@ async function handleIncomingMessage(req, res) {
                     const _audioLunch = await getPjLunchMode();
                     if (_audioLunch.enabled && session.pjLunchAutoReplySentFor !== _audioLunch.updatedAt) {
                       const _lunchMsg = "Olá! Estou em horário de almoço agora, assim que retornar atendo a sua solicitação.";
-                      addMessage(session, "assistant", _lunchMsg, { pjLunchAutoReply: true });
+                      const replyRef = addMessage(session, "assistant", _lunchMsg, { pjLunchAutoReply: true });
                       session.pjLunchAutoReplySentFor = _audioLunch.updatedAt;
                       session.pjLunchAutoReplySentAt  = new Date().toISOString();
                       await saveSession(from, session);
                       // Não enviar aqui — retornar o texto e deixar o chamador (linha
                       // com `if (audioReply) await sendTextMessage(...)`) fazer o único envio.
-                      return _lunchMsg;
+                      return outgoingReply(_lunchMsg, replyRef);
                     }
                   } catch { /* falha silenciosa */ }
                 }
@@ -2597,9 +2608,9 @@ async function handleIncomingMessage(req, res) {
                   if (!session.cardTitle) session.cardTitle = generateCardTitle(session);
                 }
                 addMessage(session, "user", "[áudio]", _audioMeta);
-                addMessage(session, "assistant", reply);
+                const replyRef = addMessage(session, "assistant", reply);
                 await saveSession(from, session);
-                return reply;
+                return outgoingReply(reply, replyRef);
               }
 
               // Transcrição OK → zera contador de falhas consecutivas e decide se responde
@@ -2609,10 +2620,10 @@ async function handleIncomingMessage(req, res) {
               if (decision === "post_handoff_default") {
                 const reply = "Nossa equipe já está ciente e vai te atender em breve 🤝";
                 addMessage(session, "user", "[áudio]", _audioMeta);
-                addMessage(session, "assistant", reply);
+                const replyRef = addMessage(session, "assistant", reply);
                 session.postHandoffReplySent = true;
                 await saveSession(from, session);
-                return reply;
+                return outgoingReply(reply, replyRef);
               }
 
               if (decision === false) {
@@ -2635,10 +2646,10 @@ async function handleIncomingMessage(req, res) {
                 _aiRes.content[0]?.type === "text" ? _aiRes.content[0].text : ""
               );
 
-              addMessage(session, "assistant", reply);
+              const replyRef = addMessage(session, "assistant", reply);
               await saveSession(from, session);
               console.log(`[Audio] ✅ "${reply.substring(0, 80)}..." | ${_aiRes.usage?.input_tokens}in/${_aiRes.usage?.output_tokens}out`);
-              return reply;
+              return outgoingReply(reply, replyRef);
             });
 
             if (audioReply) await sendTextMessage(from, audioReply);
@@ -2901,6 +2912,7 @@ async function sendTextMessage(to, text) {
     return;
   }
 
+  const body = outgoingReplyText(text);
   const res = await fetch(
     `https://graph.facebook.com/v19.0/${PHONE_NUMBER_ID}/messages`,
     {
@@ -2914,7 +2926,7 @@ async function sendTextMessage(to, text) {
         recipient_type:    "individual",
         to,
         type: "text",
-        text: { preview_url: false, body: text },
+        text: { preview_url: false, body },
       }),
     }
   );
@@ -2923,6 +2935,32 @@ async function sendTextMessage(to, text) {
   if (!res.ok) {
     console.error(`[Send] ❌ Meta erro ${data?.error?.code}: ${data?.error?.message}`);
   } else {
-    console.log(`[Send] ✅ ID: ${data?.messages?.[0]?.id}`);
+    const metaMessageId = data?.messages?.[0]?.id;
+    console.log(`[Send] ✅ ID: ${metaMessageId}`);
+    if (metaMessageId && text?.historyRef) {
+      try {
+        await withSessionLock(getRedis(), to, async () => {
+          const session = await loadSession(to);
+          const { historyIndex, createdAt } = text.historyRef;
+          const savedMessage = session.history?.[historyIndex];
+          if (
+            !savedMessage
+            || savedMessage.role !== "assistant"
+            || savedMessage.createdAt !== createdAt
+          ) {
+            console.warn(`[Send] ⚠️ Resposta salva mudou antes do vínculo Meta +${to}`);
+            return;
+          }
+          if (savedMessage.metaMessageId && savedMessage.metaMessageId !== metaMessageId) {
+            console.warn(`[Send] ⚠️ Resposta já possui outro ID Meta +${to}`);
+            return;
+          }
+          savedMessage.metaMessageId = metaMessageId;
+          await saveSession(to, session);
+        });
+      } catch (error) {
+        console.error(`[Send] ❌ Falha ao persistir ID Meta +${to}: ${error.message}`);
+      }
+    }
   }
 }

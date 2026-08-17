@@ -32,6 +32,17 @@ describe("catálogo do site — PF válido", () => {
     assert.equal(sentText(calls), EXPECTED_CATALOG_REPLY);
   });
 
+  test("associa o ID devolvido pela Meta à resposta exata já salva", async () => {
+    const s = await getSession(phone);
+    const inbound = s.history.find((message) => message.role === "user");
+    const outbound = s.history.find((message) => message.role === "assistant");
+
+    assert.equal(inbound.metaMessageId, "wamid_pf_1");
+    assert.equal(outbound.content, EXPECTED_CATALOG_REPLY);
+    assert.equal(outbound.metaMessageId, "wamid_out_1");
+    assert.equal(s.history.filter((message) => message.role === "assistant").length, 1);
+  });
+
   test("persiste os campos determinísticos esperados na sessão", async () => {
     const s = await getSession(phone);
     assert.equal(s.clientType, "pf");
