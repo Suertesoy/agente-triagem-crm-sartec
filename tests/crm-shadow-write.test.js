@@ -546,7 +546,7 @@ test("status de identidade dupla preserva recibo para reconciliação explícita
 
 test("migration declara RPC live estrita, modo histórico rev0 e promoção Meta auditável", async () => {
   const sql = await readFile(
-    path.resolve(HERE, "..", "supabase", "migrations", "20260817231131_ordered_crm_shadow_write.sql"),
+    path.resolve(HERE, "..", "supabase", "migrations", "20260818151936_20260817231131_ordered_crm_shadow_write.sql"),
     "utf8"
   );
   assert.equal((sql.match(/add column shadow_revision bigint not null default 0/g) || []).length, 4);
@@ -572,7 +572,7 @@ test("migration declara RPC live estrita, modo histórico rev0 e promoção Meta
 
 test("promoção legacy→Meta cobre A/B/C/D sem remoção destrutiva", async () => {
   const sql = await readFile(
-    path.resolve(HERE, "..", "supabase", "migrations", "20260817231131_ordered_crm_shadow_write.sql"),
+    path.resolve(HERE, "..", "supabase", "migrations", "20260818151936_20260817231131_ordered_crm_shadow_write.sql"),
     "utf8"
   );
   const decide = ({ legacy, meta, sameHash, incomingRevision, historical = false }) => {
