@@ -267,7 +267,6 @@ export function locatePlannedMessage(session, item) {
 export async function withSessionLock(redis, phone, fn, options = {}) {
   return withSharedSessionLock(redis, normalizeSartecPhone(phone), fn, {
     ...options,
-    onTimeout: "throw",
   });
 }
 

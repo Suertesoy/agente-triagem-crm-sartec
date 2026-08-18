@@ -6,6 +6,7 @@ import { fileURLToPath } from "node:url";
 import FakeRedis from "./helpers/fake-ioredis.js";
 import {
   commitShadowReceipt,
+  commitShadowReceipts,
   getCrmShadowFlags,
   getCrmShadowTimeoutMs,
 } from "../lib/crm-shadow-write/index.js";
@@ -17,6 +18,7 @@ import {
 import {
   SHADOW_REVISION_KEY,
   commitAtomicShadowMutation,
+  commitAtomicShadowMutations,
   readShadowEntityRevision,
 } from "../lib/crm-shadow-write/revision.js";
 import { flushShadowReceipt } from "../lib/crm-shadow-write/reconciler.js";
@@ -28,7 +30,7 @@ import {
   mapLiveCustomer,
 } from "../lib/crm-store/mapper.js";
 import { SupabaseCrmStore } from "../lib/crm-store/supabase-store.js";
-import { buildPlan } from "../scripts/migrate-redis-to-supabase.js";
+import { buildPlan, commitPlan } from "../scripts/migrate-redis-to-supabase.js";
 import { reconcileCrmShadow } from "../scripts/reconcile-crm-shadow.js";
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
@@ -124,6 +126,69 @@ test("nova alteração da mesma mensagem recebe revisão nova e substitui só su
 
   assert.equal(statusUpdate.shadowRevision, first.shadowRevision + 1);
   assert.equal((await listShadowOutbox(redis))[0].payload.delivery_status, "delivered");
+});
+
+test("uma mutação operacional grava conversa e duas mensagens com a mesma revisão", async () => {
+  const redis = new FakeRedis();
+  const phone = "5511222222222";
+  const conversationId = deterministicUuid("sartec-conversation", `sartec:${phone}`);
+  const result = await commitShadowReceipts({
+    redis,
+    operationalKey: `sartec:${phone}`,
+    operationalValue: JSON.stringify({ status: "ativo", history: [{ content: "oi" }, { content: "olá" }] }),
+    entities: [
+      {
+        entityType: "conversation",
+        entityKey: `sartec:${phone}`,
+        input: { phone, session: { clientPhone: phone, status: "ativo" } },
+      },
+      {
+        entityType: "message",
+        entityKey: "legacy-message-0",
+        input: { phone, conversationId, legacyHistoryIndex: 0, message: { role: "user", content: "oi" } },
+      },
+      {
+        entityType: "message",
+        entityKey: "legacy-message-1",
+        input: { phone, conversationId, legacyHistoryIndex: 1, message: { role: "assistant", content: "olá" } },
+      },
+    ],
+    env: ENABLED_ENV,
+    logger: silentLogger,
+  });
+
+  assert.equal(result.committed, true);
+  assert.equal(result.receipts.length, 3);
+  assert.equal(new Set(result.receipts.map((receipt) => receipt.shadowRevision)).size, 1);
+  assert.equal((await listShadowOutbox(redis)).length, 3);
+  assert.match(await redis.get(`sartec:${phone}`), /"history"/);
+});
+
+test("falha antes do script não cria nem SET operacional nem recibos parciais", async () => {
+  const redis = new FakeRedis();
+  await assert.rejects(commitAtomicShadowMutations(redis, {
+    operationalKey: "sartec:atomic-failure",
+    operationalValue: "new-value",
+    entities: [
+      { entityType: "setting", entityKey: "valid", payload: { key: "valid", value: true } },
+      { entityType: "setting", entityKey: "invalid", payload: { key: "invalid", value: Buffer.from("x") } },
+    ],
+  }));
+  assert.equal(await redis.get("sartec:atomic-failure"), null);
+  assert.equal((await listShadowOutbox(redis)).length, 0);
+  assert.equal(await redis.get(SHADOW_REVISION_KEY), null);
+});
+
+test("interrupção do EVAL antes da execução não deixa Redis ou recibos isolados", async () => {
+  const redis = new FakeRedis();
+  redis.eval = async () => { throw new Error("connection interrupted before EVAL"); };
+  await assert.rejects(commitAtomicShadowMutations(redis, {
+    operationalKey: "sartec:interrupted",
+    operationalValue: "new-value",
+    entities: [{ entityType: "setting", entityKey: "mode", payload: { key: "mode", value: true } }],
+  }), /interrupted/);
+  assert.equal(await redis.get("sartec:interrupted"), null);
+  assert.equal((await listShadowOutbox(redis)).length, 0);
 });
 
 test("CAS da outbox impede confirmação da revisão 101 de remover a 102", async () => {
@@ -288,7 +353,31 @@ test("SupabaseCrmStore usa RPC condicional e conecta AbortSignal", async () => {
   assert.equal(result.status, "stale_ignored");
   assert.equal(rpcCall.name, "crm_shadow_upsert_setting");
   assert.equal(rpcCall.args.p_shadow_revision, 12);
+  assert.equal(rpcCall.args.p_historical, false);
   assert.equal(receivedSignal, controller.signal);
+});
+
+test("store separa regra live da administrativa e cobre as fronteiras de revisão", async () => {
+  const execute = async ({ stored, incoming, historical }) => {
+    let current = stored;
+    const client = {
+      async rpc(_name, args) {
+        const applied = args.p_shadow_revision > current
+          || (args.p_historical && args.p_shadow_revision === 0 && current === 0);
+        if (applied) current = args.p_shadow_revision;
+        return { data: applied ? "applied" : "stale_ignored", error: null };
+      },
+    };
+    const store = new SupabaseCrmStore(client);
+    const method = historical ? "writeHistoricalEntity" : "writeShadowEntity";
+    return store[method]("setting", { key: "mode", value: incoming }, incoming);
+  };
+
+  assert.equal((await execute({ stored: 0, incoming: 0, historical: true })).status, "applied");
+  assert.equal((await execute({ stored: 5, incoming: 0, historical: true })).status, "stale_ignored");
+  assert.equal((await execute({ stored: 5, incoming: 6, historical: false })).status, "applied");
+  assert.equal((await execute({ stored: 6, incoming: 6, historical: false })).status, "stale_ignored");
+  assert.equal((await execute({ stored: 6, incoming: 5, historical: false })).status, "stale_ignored");
 });
 
 test("flush remove sucesso/stale e mantém pendência em erro de rede", async () => {
@@ -343,7 +432,7 @@ test("reconciliador processa lote, respeita stale e é idempotente sem PII no re
     logger: silentLogger,
   });
 
-  assert.deepEqual(first, { scanned: 2, applied: 1, staleIgnored: 1, failed: 0, removed: 2 });
+  assert.deepEqual(first, { scanned: 2, applied: 1, staleIgnored: 1, conflicts: 0, failed: 0, removed: 2 });
   assert.equal(second.scanned, 0);
   assert.equal(logs[0].includes("pjLunchMode"), false);
 });
@@ -401,7 +490,61 @@ test("revisão histórica 0 não sobrescreve estado live maior", async () => {
   assert.deepEqual(stored, { revision: 9, value: "live" });
 });
 
-test("migration declara revisions, settings server-only e cinco RPCs estritamente condicionais", async () => {
+test("migrador contabiliza applied/stale por entidade sem ocultar catch-up stale", async () => {
+  const plan = {
+    report: {
+      counters: {
+        shadowApplied: { customers: 0, conversations: 0, messages: 0, pipelineRows: 0 },
+        shadowStaleIgnored: { customers: 0, conversations: 0, messages: 0, pipelineRows: 0 },
+      },
+      checksum: "checksum",
+    },
+    customers: [{ id: "customer-1", phone: "5511000000000" }],
+    conversations: [{ id: "conversation-1", customer_id: "customer-1", redis_key: "sartec:5511000000000" }],
+    messages: [{ id: "message-1", conversation_id: "conversation-1" }],
+    pipelineRows: [{ client_type: "pf", column_key: "novo" }],
+  };
+  let finished;
+  const store = {
+    startMigrationRun: async () => "run-1",
+    finishMigrationRun: async (_id, result) => { finished = result; },
+    upsertCustomer: async (row) => ({ id: row.id, status: "applied" }),
+    upsertConversation: async (row) => ({ id: row.id, status: "stale_ignored" }),
+    upsertMessages: async () => ({ applied: 0, staleIgnored: 1, other: 0 }),
+    upsertPipelineOrder: async () => ({ applied: 1, staleIgnored: 0, other: 0 }),
+  };
+
+  await commitPlan(plan, { store, supabaseEnabled: true });
+  assert.deepEqual(finished.counters.shadowApplied, {
+    customers: 1, conversations: 0, messages: 0, pipelineRows: 1,
+  });
+  assert.deepEqual(finished.counters.shadowStaleIgnored, {
+    customers: 0, conversations: 1, messages: 1, pipelineRows: 0,
+  });
+});
+
+test("status de identidade dupla preserva recibo para reconciliação explícita", async () => {
+  for (const detail of ["duplicate_requires_reconciliation", "identity_conflict"]) {
+    FakeRedis._reset();
+    const redis = new FakeRedis();
+    const receipt = await enqueueShadowReceipt(redis, {
+      entityType: "message",
+      entityKey: detail,
+      payload: { id: detail, legacy_payload_hash: "hash" },
+      shadowRevision: 8,
+    });
+    const result = await flushShadowReceipt({
+      redis,
+      receipt,
+      store: { writeShadowEntity: async () => ({ status: detail }) },
+      timeoutMs: 50,
+    });
+    assert.deepEqual(result, { status: "conflict", detail, removed: false });
+    assert.equal((await listShadowOutbox(redis)).length, 1);
+  }
+});
+
+test("migration declara RPC live estrita, modo histórico rev0 e promoção Meta auditável", async () => {
   const sql = await readFile(
     path.resolve(HERE, "..", "supabase", "migrations", "20260817231131_ordered_crm_shadow_write.sql"),
     "utf8"
@@ -412,10 +555,40 @@ test("migration declara revisions, settings server-only e cinco RPCs estritament
   assert.match(sql, /revoke all privileges on table public\.crm_settings from public, anon, authenticated/);
   assert.equal((sql.match(/create or replace function public\.crm_shadow_upsert_/g) || []).length, 5);
   assert.equal((sql.match(/excluded\.shadow_revision > public\.crm_/g) || []).length, 5);
+  assert.equal((sql.match(/p_historical boolean/g) || []).length, 5);
+  assert.equal((sql.match(/p_historical and excluded\.shadow_revision = 0/g) || []).length, 5);
   assert.equal((sql.match(/return case when affected = 0 then 'stale_ignored'/g) || []).length, 5);
   assert.equal((sql.match(/security invoker/g) || []).length, 5);
   assert.match(sql, /candidate\.legacy_history_index = \(p_payload->>'legacy_history_index'\)::integer/);
   assert.match(sql, /set id = \(p_payload->>'id'\)::uuid/);
+  assert.match(sql, /return 'duplicate_requires_reconciliation'/);
+  assert.match(sql, /return 'identity_conflict'/);
+  assert.doesNotMatch(sql, /delete from public\.crm_messages/i);
+  assert.match(sql, /crm_messages_meta_message_id_uidx|meta_message_id/);
+  assert.match(sql, /media_storage_key = coalesce\(excluded\.media_storage_key, public\.crm_messages\.media_storage_key\)/);
+  assert.match(sql, /created_at = coalesce\(public\.crm_messages\.created_at, excluded\.created_at\)/);
+  assert.equal((sql.match(/grant execute on function public\.crm_shadow_upsert_\w+\(jsonb, bigint, boolean\) to service_role/g) || []).length, 5);
+});
+
+test("promoção legacy→Meta cobre A/B/C/D sem remoção destrutiva", async () => {
+  const sql = await readFile(
+    path.resolve(HERE, "..", "supabase", "migrations", "20260817231131_ordered_crm_shadow_write.sql"),
+    "utf8"
+  );
+  const decide = ({ legacy, meta, sameHash, incomingRevision, historical = false }) => {
+    if (legacy && meta) return sameHash ? "duplicate_requires_reconciliation" : "identity_conflict";
+    if (legacy && !(incomingRevision > legacy.revision
+      || (historical && incomingRevision === 0 && legacy.revision === 0))) return "stale_ignored";
+    if (legacy) return "promoted";
+    return meta && incomingRevision <= meta.revision ? "stale_ignored" : "applied";
+  };
+
+  assert.equal(decide({ legacy: { revision: 0 }, meta: null, sameHash: true, incomingRevision: 0, historical: true }), "promoted", "A");
+  assert.equal(decide({ legacy: null, meta: { revision: 6 }, sameHash: true, incomingRevision: 6 }), "stale_ignored", "B");
+  assert.equal(decide({ legacy: { revision: 5 }, meta: { revision: 6 }, sameHash: true, incomingRevision: 7 }), "duplicate_requires_reconciliation", "C");
+  assert.equal(decide({ legacy: { revision: 5 }, meta: { revision: 6 }, sameHash: false, incomingRevision: 7 }), "identity_conflict", "D");
+  assert.ok(sql.indexOf("target_exists then") < sql.indexOf("set id = (p_payload->>'id')::uuid"));
+  assert.doesNotMatch(sql, /delete from public\.crm_messages/i);
 });
 
 test("nenhum endpoint de produção importa shadow writer ou Supabase", async () => {

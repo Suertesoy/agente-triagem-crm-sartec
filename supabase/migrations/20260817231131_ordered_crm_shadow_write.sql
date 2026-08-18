@@ -29,7 +29,8 @@ grant select, insert, update on table public.crm_settings to service_role;
 
 create or replace function public.crm_shadow_upsert_customer(
   p_payload jsonb,
-  p_shadow_revision bigint
+  p_shadow_revision bigint,
+  p_historical boolean
 )
 returns text
 language plpgsql
@@ -76,7 +77,8 @@ begin
     legacy_contact = coalesce(excluded.legacy_contact, public.crm_customers.legacy_contact),
     updated_at = excluded.updated_at,
     shadow_revision = excluded.shadow_revision
-  where excluded.shadow_revision > public.crm_customers.shadow_revision;
+  where excluded.shadow_revision > public.crm_customers.shadow_revision
+     or (p_historical and excluded.shadow_revision = 0 and public.crm_customers.shadow_revision = 0);
   get diagnostics affected = row_count;
   return case when affected = 0 then 'stale_ignored' else 'applied' end;
 end;
@@ -84,7 +86,8 @@ $$;
 
 create or replace function public.crm_shadow_upsert_conversation(
   p_payload jsonb,
-  p_shadow_revision bigint
+  p_shadow_revision bigint,
+  p_historical boolean
 )
 returns text
 language plpgsql
@@ -182,7 +185,8 @@ begin
     legacy_session = coalesce(excluded.legacy_session, public.crm_conversations.legacy_session),
     updated_at = excluded.updated_at,
     shadow_revision = excluded.shadow_revision
-  where excluded.shadow_revision > public.crm_conversations.shadow_revision;
+  where excluded.shadow_revision > public.crm_conversations.shadow_revision
+     or (p_historical and excluded.shadow_revision = 0 and public.crm_conversations.shadow_revision = 0);
   get diagnostics affected = row_count;
   return case when affected = 0 then 'stale_ignored' else 'applied' end;
 end;
@@ -190,7 +194,8 @@ $$;
 
 create or replace function public.crm_shadow_upsert_message(
   p_payload jsonb,
-  p_shadow_revision bigint
+  p_shadow_revision bigint,
+  p_historical boolean
 )
 returns text
 language plpgsql
@@ -201,6 +206,9 @@ declare
   affected integer;
   legacy_id uuid;
   legacy_revision bigint;
+  legacy_hash text;
+  target_hash text;
+  target_exists boolean := false;
 begin
   if p_shadow_revision < 0 then raise exception 'shadow revision must be non-negative'; end if;
   -- Uma mensagem historica sem Meta ID usa o indice legado como identidade. Quando
@@ -208,22 +216,40 @@ begin
   -- UUID deterministico de Meta antes do upsert, sem criar uma segunda mensagem.
   if p_payload->>'meta_message_id' is not null
      and p_payload->>'legacy_history_index' is not null then
-    select candidate.id, candidate.shadow_revision
-    into legacy_id, legacy_revision
+    select candidate.id, candidate.shadow_revision, candidate.legacy_payload_hash
+    into legacy_id, legacy_revision, legacy_hash
     from public.crm_messages candidate
     where candidate.conversation_id = (p_payload->>'conversation_id')::uuid
       and candidate.legacy_history_index = (p_payload->>'legacy_history_index')::integer
       and candidate.meta_message_id is null
     order by candidate.created_at nulls last, candidate.id
-    limit 1;
+    limit 1
+    for update;
 
-    if legacy_id is not null and p_shadow_revision <= legacy_revision then
+    select target.legacy_payload_hash
+    into target_hash
+    from public.crm_messages target
+    where target.id = (p_payload->>'id')::uuid
+    for update;
+    target_exists := found;
+
+    if legacy_id is not null and target_exists then
+      if p_payload->>'legacy_payload_hash' is not null
+         and legacy_hash = p_payload->>'legacy_payload_hash'
+         and target_hash = p_payload->>'legacy_payload_hash' then
+        return 'duplicate_requires_reconciliation';
+      end if;
+      return 'identity_conflict';
+    end if;
+
+    if legacy_id is not null
+       and not (
+         p_shadow_revision > legacy_revision
+         or (p_historical and p_shadow_revision = 0 and legacy_revision = 0)
+       ) then
       return 'stale_ignored';
     end if;
-    if legacy_id is not null and not exists (
-      select 1 from public.crm_messages target
-      where target.id = (p_payload->>'id')::uuid
-    ) then
+    if legacy_id is not null then
       update public.crm_messages
       set id = (p_payload->>'id')::uuid
       where id = legacy_id;
@@ -297,8 +323,8 @@ begin
     media_type = excluded.media_type,
     media_mime_type = excluded.media_mime_type,
     media_filename = excluded.media_filename,
-    media_storage_key = excluded.media_storage_key,
-    media_storage_provider = excluded.media_storage_provider,
+    media_storage_key = coalesce(excluded.media_storage_key, public.crm_messages.media_storage_key),
+    media_storage_provider = coalesce(excluded.media_storage_provider, public.crm_messages.media_storage_provider),
     media_storage_failed = excluded.media_storage_failed,
     media_deleted = excluded.media_deleted,
     media_unavailable = excluded.media_unavailable,
@@ -314,11 +340,12 @@ begin
     sent_by_template = excluded.sent_by_template,
     reactions = excluded.reactions,
     raw_payload = excluded.raw_payload,
-    created_at = excluded.created_at,
+    created_at = coalesce(public.crm_messages.created_at, excluded.created_at),
     legacy_history_index = excluded.legacy_history_index,
     legacy_payload_hash = excluded.legacy_payload_hash,
     shadow_revision = excluded.shadow_revision
-  where excluded.shadow_revision > public.crm_messages.shadow_revision;
+  where excluded.shadow_revision > public.crm_messages.shadow_revision
+     or (p_historical and excluded.shadow_revision = 0 and public.crm_messages.shadow_revision = 0);
   get diagnostics affected = row_count;
   return case when affected = 0 then 'stale_ignored' else 'applied' end;
 end;
@@ -326,7 +353,8 @@ $$;
 
 create or replace function public.crm_shadow_upsert_pipeline_order(
   p_payload jsonb,
-  p_shadow_revision bigint
+  p_shadow_revision bigint,
+  p_historical boolean
 )
 returns text
 language plpgsql
@@ -351,7 +379,8 @@ begin
     phone_order = excluded.phone_order,
     updated_at = excluded.updated_at,
     shadow_revision = excluded.shadow_revision
-  where excluded.shadow_revision > public.crm_pipeline_order.shadow_revision;
+  where excluded.shadow_revision > public.crm_pipeline_order.shadow_revision
+     or (p_historical and excluded.shadow_revision = 0 and public.crm_pipeline_order.shadow_revision = 0);
   get diagnostics affected = row_count;
   return case when affected = 0 then 'stale_ignored' else 'applied' end;
 end;
@@ -359,7 +388,8 @@ $$;
 
 create or replace function public.crm_shadow_upsert_setting(
   p_payload jsonb,
-  p_shadow_revision bigint
+  p_shadow_revision bigint,
+  p_historical boolean
 )
 returns text
 language plpgsql
@@ -382,23 +412,24 @@ begin
     value = excluded.value,
     updated_at = excluded.updated_at,
     shadow_revision = excluded.shadow_revision
-  where excluded.shadow_revision > public.crm_settings.shadow_revision;
+  where excluded.shadow_revision > public.crm_settings.shadow_revision
+     or (p_historical and excluded.shadow_revision = 0 and public.crm_settings.shadow_revision = 0);
   get diagnostics affected = row_count;
   return case when affected = 0 then 'stale_ignored' else 'applied' end;
 end;
 $$;
 
-revoke execute on function public.crm_shadow_upsert_customer(jsonb, bigint) from public, anon, authenticated;
-revoke execute on function public.crm_shadow_upsert_conversation(jsonb, bigint) from public, anon, authenticated;
-revoke execute on function public.crm_shadow_upsert_message(jsonb, bigint) from public, anon, authenticated;
-revoke execute on function public.crm_shadow_upsert_pipeline_order(jsonb, bigint) from public, anon, authenticated;
-revoke execute on function public.crm_shadow_upsert_setting(jsonb, bigint) from public, anon, authenticated;
+revoke execute on function public.crm_shadow_upsert_customer(jsonb, bigint, boolean) from public, anon, authenticated;
+revoke execute on function public.crm_shadow_upsert_conversation(jsonb, bigint, boolean) from public, anon, authenticated;
+revoke execute on function public.crm_shadow_upsert_message(jsonb, bigint, boolean) from public, anon, authenticated;
+revoke execute on function public.crm_shadow_upsert_pipeline_order(jsonb, bigint, boolean) from public, anon, authenticated;
+revoke execute on function public.crm_shadow_upsert_setting(jsonb, bigint, boolean) from public, anon, authenticated;
 
-grant execute on function public.crm_shadow_upsert_customer(jsonb, bigint) to service_role;
-grant execute on function public.crm_shadow_upsert_conversation(jsonb, bigint) to service_role;
-grant execute on function public.crm_shadow_upsert_message(jsonb, bigint) to service_role;
-grant execute on function public.crm_shadow_upsert_pipeline_order(jsonb, bigint) to service_role;
-grant execute on function public.crm_shadow_upsert_setting(jsonb, bigint) to service_role;
+grant execute on function public.crm_shadow_upsert_customer(jsonb, bigint, boolean) to service_role;
+grant execute on function public.crm_shadow_upsert_conversation(jsonb, bigint, boolean) to service_role;
+grant execute on function public.crm_shadow_upsert_message(jsonb, bigint, boolean) to service_role;
+grant execute on function public.crm_shadow_upsert_pipeline_order(jsonb, bigint, boolean) to service_role;
+grant execute on function public.crm_shadow_upsert_setting(jsonb, bigint, boolean) to service_role;
 
 comment on column public.crm_customers.shadow_revision is 'Revisao monotônica por entidade para rejeitar shadow writes fora de ordem.';
 comment on table public.crm_settings is 'Configuracoes institucionais do CRM; acesso exclusivo do backend service_role.';

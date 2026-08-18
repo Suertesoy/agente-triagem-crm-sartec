@@ -29,6 +29,13 @@ function incrementFieldCounts(target, fields) {
   for (const field of fields) target[field] = (target[field] || 0) + 1;
 }
 
+function recordShadowResult(counters, entity, result) {
+  const other = result.other ?? (!["applied", "stale_ignored"].includes(result.status) ? 1 : 0);
+  if (other > 0) throw new Error(`catch-up ${entity} requer reconciliação manual (${other} resultado(s))`);
+  counters.shadowApplied[entity] += result.applied ?? (result.status === "applied" ? 1 : 0);
+  counters.shadowStaleIgnored[entity] += result.staleIgnored ?? (result.status === "stale_ignored" ? 1 : 0);
+}
+
 function checksumPlan(customers, conversations, messages, pipelineRows) {
   const hash = createHash("sha256");
   const groups = [
@@ -408,6 +415,10 @@ Contagens
   templates/eventos:        ${report.counters.templates}
   linhas de pipeline:       ${report.counters.pipelineRows}
 
+Resultado do catch-up administrativo
+  aplicados: ${JSON.stringify(report.counters.shadowApplied)}
+  stale ignorados: ${JSON.stringify(report.counters.shadowStaleIgnored)}
+
 Diagnóstico
   JSON inválido:             ${report.counters.invalidJson}
   sessões inválidas:        ${report.counters.invalidSessions}
@@ -466,6 +477,8 @@ export async function buildPlan(redisStore, { commit = false, inspectR2Object = 
       legacyBase64Bytes: 0,
       legacyBase64WithoutR2: 0,
       largestLegacyBase64Bytes: 0,
+      shadowApplied: { customers: 0, conversations: 0, messages: 0, pipelineRows: 0 },
+      shadowStaleIgnored: { customers: 0, conversations: 0, messages: 0, pipelineRows: 0 },
     },
     unmapped: { contact: {}, session: {}, message: {} },
     normalizedFallbacks: {},
@@ -627,10 +640,12 @@ export async function buildPlan(redisStore, { commit = false, inspectR2Object = 
   };
 }
 
-export async function commitPlan(plan) {
-  assertCommitAllowed(plan.report);
+export async function commitPlan(plan, {
+  store = new SupabaseCrmStore(),
+  supabaseEnabled = isSupabaseCrmEnabled(),
+} = {}) {
+  assertCommitAllowed(plan.report, { supabaseEnabled });
 
-  const store = new SupabaseCrmStore();
   let runId = null;
   try {
     runId = await store.startMigrationRun({
@@ -642,22 +657,25 @@ export async function commitPlan(plan) {
 
     const customerIds = new Map();
     for (const customer of plan.customers) {
-      customerIds.set(customer.phone, await store.upsertCustomer(customer));
+      const result = await store.upsertCustomer(customer);
+      customerIds.set(customer.phone, result.id);
+      recordShadowResult(plan.report.counters, "customers", result);
     }
 
     const conversationIds = new Map();
     for (const conversation of plan.conversations) {
       const phone = conversation.redis_key.slice("sartec:".length);
       conversation.customer_id = customerIds.get(phone) || conversation.customer_id;
-      const actualId = await store.upsertConversation(conversation);
-      conversationIds.set(conversation.id, actualId);
+      const result = await store.upsertConversation(conversation);
+      conversationIds.set(conversation.id, result.id);
+      recordShadowResult(plan.report.counters, "conversations", result);
     }
 
     for (const message of plan.messages) {
       message.conversation_id = conversationIds.get(message.conversation_id) || message.conversation_id;
     }
-    await store.upsertMessages(plan.messages);
-    await store.upsertPipelineOrder(plan.pipelineRows);
+    recordShadowResult(plan.report.counters, "messages", await store.upsertMessages(plan.messages));
+    recordShadowResult(plan.report.counters, "pipelineRows", await store.upsertPipelineOrder(plan.pipelineRows));
     await store.finishMigrationRun(runId, {
       status: "completed",
       counters: plan.report.counters,
