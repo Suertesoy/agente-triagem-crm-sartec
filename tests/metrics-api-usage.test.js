@@ -55,7 +55,7 @@ test("classifica origem por mensagem: humano, agente confirmado, template — ex
   const data = await callMetrics({ period: "tudo" });
   const cloud = data.apiUsage.cloudApi;
 
-  assert.equal(cloud.totalToCustomer, 3);
+  assert.equal(cloud.customerOutbound, 3);
   assert.equal(cloud.byOrigin.human, 1);
   assert.equal(cloud.byOrigin.agent, 1);
   assert.equal(cloud.byOrigin.template, 1);
@@ -87,22 +87,22 @@ test("mensagens sem createdAt: contam em 'tudo', ficam fora de 'hoje' e são rep
   ]);
 
   const all = await callMetrics({ period: "tudo" });
-  assert.equal(all.apiUsage.cloudApi.totalToCustomer, 1);
+  assert.equal(all.apiUsage.cloudApi.customerOutbound, 1);
   assert.equal(all.apiUsage.cloudApi.byDay.length, 0);
   assert.equal(all.apiUsage.dataNotes.undatedMessageCount, 1);
 
   const today = await callMetrics({ period: "hoje" });
-  assert.equal(today.apiUsage.cloudApi.totalToCustomer, 0);
+  assert.equal(today.apiUsage.cloudApi.customerOutbound, 0);
 });
 
 test("mensagem antiga não entra em 'hoje' mas entra em 'tudo'", async () => {
   await seedSession("5512900000404", [humanMsg({ createdAt: OLD })]);
 
   const today = await callMetrics({ period: "hoje" });
-  assert.equal(today.apiUsage.cloudApi.totalToCustomer, 0);
+  assert.equal(today.apiUsage.cloudApi.customerOutbound, 0);
 
   const all = await callMetrics({ period: "tudo" });
-  assert.equal(all.apiUsage.cloudApi.totalToCustomer, 1);
+  assert.equal(all.apiUsage.cloudApi.customerOutbound, 1);
   assert.equal(all.apiUsage.cloudApi.byDay.length, 1);
 });
 
@@ -128,7 +128,37 @@ test("encaminhamentos para Denise: lidos da lista dedicada, sem afetar o total a
   const cloud = data.apiUsage.cloudApi;
 
   assert.equal(cloud.internalForward.total, 2);
-  assert.equal(cloud.totalToCustomer, 1, "encaminhamento para Denise não é mensagem ao cliente");
+  assert.equal(cloud.customerOutbound, 1, "encaminhamento para Denise não é mensagem ao cliente");
+  assert.equal(cloud.internalOutbound, 2);
+  assert.equal(cloud.totalCloudApiOutbound, 3, "totalCloudApiOutbound = customerOutbound + internalOutbound");
+});
+
+test("totalCloudApiOutbound = customerOutbound + internalOutbound, e a estimativa de custo parte do total", async () => {
+  // 10 mensagens outbound para clientes (customerOutbound)
+  const clientHistory = Array.from({ length: 10 }, (_, i) => humanMsg({ metaMessageId: `wamid_h${i}` }));
+  await seedSession("5512900000410", clientHistory);
+
+  // 2 encaminhamentos internos para Denise (internalOutbound)
+  await rawClient.lpush("sartec:metrics:denise_forwards", JSON.stringify({ at: NOW, mediaType: "document" }));
+  await rawClient.lpush("sartec:metrics:denise_forwards", JSON.stringify({ at: NOW, mediaType: "image" }));
+
+  const data = await callMetrics({ period: "tudo" });
+  const cloud = data.apiUsage.cloudApi;
+
+  assert.equal(cloud.customerOutbound, 10);
+  assert.equal(cloud.internalOutbound, 2);
+  assert.equal(cloud.totalCloudApiOutbound, 12);
+
+  const original = process.env.META_SERVICE_MESSAGE_PRICE_BRL;
+  process.env.META_SERVICE_MESSAGE_PRICE_BRL = "1";
+  try {
+    const withPrice = await callMetrics({ period: "tudo" });
+    assert.equal(withPrice.apiUsage.cloudApi.totalCloudApiOutbound, 12);
+    assert.equal(withPrice.apiUsage.costEstimate.totalEstimateBRL, 12, "estimativa deve usar totalCloudApiOutbound (12), não só customerOutbound (10)");
+  } finally {
+    if (original === undefined) delete process.env.META_SERVICE_MESSAGE_PRICE_BRL;
+    else process.env.META_SERVICE_MESSAGE_PRICE_BRL = original;
+  }
 });
 
 test("chave sartec:metrics:* nunca é tratada como sessão pelo scan genérico", async () => {
@@ -159,7 +189,27 @@ test("estimativa de custo só aparece com META_SERVICE_MESSAGE_PRICE_BRL configu
 
 test("base vazia retorna apiUsage zerado sem erro", async () => {
   const data = await callMetrics({ period: "tudo" });
-  assert.equal(data.apiUsage.cloudApi.totalToCustomer, 0);
+  assert.equal(data.apiUsage.cloudApi.customerOutbound, 0);
+  assert.equal(data.apiUsage.cloudApi.internalOutbound, 0);
+  assert.equal(data.apiUsage.cloudApi.totalCloudApiOutbound, 0);
   assert.deepEqual(data.apiUsage.cloudApi.byOrigin, { human: 0, agent: 0, template: 0, unknown: 0 });
   assert.equal(data.apiUsage.costEstimate, null);
+});
+
+test("base sem sessões mas com encaminhamentos Denise: totalCloudApiOutbound e estimativa refletem só o interno", async () => {
+  await rawClient.lpush("sartec:metrics:denise_forwards", JSON.stringify({ at: NOW, mediaType: "document" }));
+
+  const original = process.env.META_SERVICE_MESSAGE_PRICE_BRL;
+  process.env.META_SERVICE_MESSAGE_PRICE_BRL = "2";
+  try {
+    const data = await callMetrics({ period: "tudo" });
+    const cloud = data.apiUsage.cloudApi;
+    assert.equal(cloud.customerOutbound, 0);
+    assert.equal(cloud.internalOutbound, 1);
+    assert.equal(cloud.totalCloudApiOutbound, 1);
+    assert.equal(data.apiUsage.costEstimate.totalEstimateBRL, 2);
+  } finally {
+    if (original === undefined) delete process.env.META_SERVICE_MESSAGE_PRICE_BRL;
+    else process.env.META_SERVICE_MESSAGE_PRICE_BRL = original;
+  }
 });

@@ -280,7 +280,7 @@
       background: rgba(255,255,255,.92);
       border: none;
       border-radius: 22px;
-      padding: 8px 18px;
+      padding: 8px 34px 8px 18px;
       font-size: .82rem;
       color: #1a1a2e;
       outline: none;
@@ -288,6 +288,29 @@
     }
     .header-search-input::placeholder { color: rgba(26,26,46,.42); }
     .header-search-input:focus { background: #fff; box-shadow: 0 0 0 3px rgba(255,255,255,.35); }
+    /* Spinner discreto dentro da própria barra — sinal visual imediato de que a busca está rodando */
+    .header-search-spinner {
+      display: none;
+      position: absolute;
+      right: 14px; top: 50%;
+      transform: translateY(-50%);
+      width: 13px; height: 13px; border-radius: 50%;
+      border: 2px solid rgba(26,42,94,.18); border-top-color: var(--brand-navy);
+      animation: org-spin .8s linear infinite;
+      pointer-events: none;
+    }
+    .header-search-spinner.visible { display: block; }
+    .contact-results-loading {
+      display: flex; align-items: center; justify-content: center; gap: 8px;
+      padding: 20px 14px; color: var(--text-secondary); font-size: .8rem;
+    }
+    .contact-results-error {
+      padding: 16px 14px; text-align: center; font-size: .78rem; color: var(--text-secondary);
+    }
+    .contact-results-error button {
+      display: block; margin: 8px auto 0; background: var(--brand-navy); color: #fff;
+      border: none; padding: 6px 16px; border-radius: 7px; cursor: pointer; font-size: .76rem; font-weight: 600;
+    }
     .contact-results {
       position: absolute;
       top: calc(100% + 6px);
@@ -5005,6 +5028,7 @@
         <input type="text" class="header-search-input" id="header-search-input"
           placeholder="Buscar contato, telefone ou empresa…"
           autocomplete="off" spellcheck="false">
+        <span class="header-search-spinner" id="header-search-spinner" aria-hidden="true"></span>
         <div class="contact-results" id="contact-results" style="display:none"></div>
       </div>
     </div>
@@ -6703,7 +6727,7 @@ function renderApiUsage(apiUsage) {
   const elConvs   = document.getElementById("api-usage-conversations");
   const elAvg     = document.getElementById("api-usage-avg");
 
-  if (elTotal)  elTotal.textContent  = _n(cloud.totalToCustomer);
+  if (elTotal)  elTotal.textContent  = _n(cloud.customerOutbound);
   if (elHuman)  elHuman.textContent  = _n(origin.human);
   if (elAgent)  elAgent.textContent  = _n(origin.agent);
   if (elTmpl)   elTmpl.textContent   = _n(origin.template);
@@ -6774,7 +6798,7 @@ function renderApiUsage(apiUsage) {
     }
     if (apiUsage.costEstimate) {
       const c = apiUsage.costEstimate;
-      notes.push(`Estimativa de custo (tarifa configurada: R$ ${c.priceBRL.toLocaleString("pt-BR", { minimumFractionDigits: 2 })}): <strong>R$ ${c.totalEstimateBRL.toLocaleString("pt-BR", { minimumFractionDigits: 2 })}</strong>`);
+      notes.push(`Estimativa de custo (tarifa configurada: R$ ${c.priceBRL.toLocaleString("pt-BR", { minimumFractionDigits: 2 })}) sobre ${_n(cloud.totalCloudApiOutbound)} envio(s) via Cloud API (cliente + interno): <strong>R$ ${c.totalEstimateBRL.toLocaleString("pt-BR", { minimumFractionDigits: 2 })}</strong>`);
     } else {
       notes.push(`Estimativa de custo: aguardando tarifa oficial da Meta.`);
     }
@@ -14051,6 +14075,7 @@ document.addEventListener("DOMContentLoaded", function() {
 let _srTimer = null;
 let _srReqId = 0;
 let _srList  = [];
+let _srAbort = null; // AbortController do GET /api/contacts em andamento (busca do cabeçalho)
 
 function relTimeCR(iso) {
   if (!iso) return "";
@@ -14068,16 +14093,55 @@ function closeContactResults() {
   if (r) { r.style.display = "none"; r.innerHTML = ""; }
 }
 
+function showHeaderSearchSpinner() {
+  document.getElementById("header-search-spinner")?.classList.add("visible");
+}
+function hideHeaderSearchSpinner() {
+  document.getElementById("header-search-spinner")?.classList.remove("visible");
+}
+
+// Estado "buscando" — mostrado assim que o fetch de fato começa (após o debounce).
+function showContactResultsLoading() {
+  const el = document.getElementById("contact-results");
+  if (!el) return;
+  el.innerHTML = `<div class="contact-results-loading"><span class="convs-loading-spinner"></span>Buscando contatos…</div>`;
+  el.style.display = "block";
+}
+
+function renderContactResultsError(q) {
+  const el = document.getElementById("contact-results");
+  if (!el) return;
+  el.innerHTML = `<div class="contact-results-error">
+    Não foi possível buscar agora. Verifique a conexão e tente novamente.
+    <button type="button" onclick="fetchContactSearch(${JSON.stringify(q)})">Tentar novamente</button>
+  </div>`;
+  el.style.display = "block";
+}
+
 async function fetchContactSearch(q) {
   const myId = ++_srReqId;
+  if (_srAbort) _srAbort.abort();
+  const ac = new AbortController();
+  _srAbort = ac;
+
+  showContactResultsLoading();
+  showHeaderSearchSpinner();
   try {
-    const res  = await fetch(`/api/contacts?search=${encodeURIComponent(q)}&limit=20`);
-    if (myId !== _srReqId) return;
-    if (!res.ok) return;
+    const res  = await fetch(`/api/contacts?search=${encodeURIComponent(q)}&limit=20`, { signal: ac.signal });
+    if (myId !== _srReqId) return; // resposta antiga — uma busca mais nova já assumiu
+    if (!res.ok) throw new Error("HTTP " + res.status);
     const data = await res.json();
     if (myId !== _srReqId) return;
+    hideHeaderSearchSpinner();
     renderContactResults(data.contacts || []);
-  } catch {}
+  } catch (e) {
+    if (e.name === "AbortError") return; // cancelamento intencional — uma busca mais nova já assumiu
+    if (myId !== _srReqId) return;
+    hideHeaderSearchSpinner();
+    renderContactResultsError(q);
+  } finally {
+    if (_srAbort === ac) _srAbort = null;
+  }
 }
 
 function renderContactResults(contacts) {
@@ -14112,7 +14176,7 @@ async function openContactResult(contact) {
   if (!contact?.phone) return;
   const inp = document.getElementById("header-search-input");
   if (inp) inp.value = "";
-  closeContactResults();
+  cancelHeaderSearch();
   const phone = contact.phone;
 
   // Contato já tem sessão ativa no Kanban — abre direto
@@ -14145,6 +14209,17 @@ async function openContactResult(contact) {
   }
 }
 
+// Cancela a busca em andamento (se houver) e limpa loading/resultados — usado
+// ao apagar o campo ou pressionar Escape, para nunca deixar spinner/dropdown
+// presos numa busca que o próprio atendente já abandonou.
+function cancelHeaderSearch() {
+  clearTimeout(_srTimer);
+  _srReqId++; // invalida qualquer resposta pendente que ainda chegue
+  if (_srAbort) { _srAbort.abort(); _srAbort = null; }
+  hideHeaderSearchSpinner();
+  closeContactResults();
+}
+
 (function initContactSearch() {
   const input = document.getElementById("header-search-input");
   const wrap  = document.getElementById("header-search-wrap");
@@ -14152,11 +14227,11 @@ async function openContactResult(contact) {
   input.addEventListener("input", () => {
     const q = input.value.trim();
     clearTimeout(_srTimer);
-    if (!q) { closeContactResults(); return; }
+    if (!q) { cancelHeaderSearch(); return; }
     _srTimer = setTimeout(() => fetchContactSearch(q), 300);
   });
   input.addEventListener("keydown", e => {
-    if (e.key === "Escape") { input.value = ""; closeContactResults(); }
+    if (e.key === "Escape") { input.value = ""; cancelHeaderSearch(); }
   });
   document.addEventListener("click", e => {
     if (!wrap.contains(e.target)) closeContactResults();

@@ -119,7 +119,9 @@ function classifyOutboundMessage(m) {
 
 function emptyApiUsageCloudApi() {
   return {
-    totalToCustomer: 0,
+    customerOutbound: 0,
+    internalOutbound: 0,
+    totalCloudApiOutbound: 0,
     byOrigin: { human: 0, agent: 0, template: 0, unknown: 0 },
     internalForward: { total: 0, byDay: [] },
     byType: { text: 0, image: 0, document: 0, audio: 0, template: 0 },
@@ -211,7 +213,20 @@ export default async function handler(req, res) {
 
     if (!allKeys.length) {
       const apiUsageEmpty = emptyApiUsageCloudApi();
-      apiUsageEmpty.internalForward = internalForward;
+      apiUsageEmpty.internalForward       = internalForward;
+      apiUsageEmpty.internalOutbound      = internalForward.total;
+      apiUsageEmpty.totalCloudApiOutbound = internalForward.total; // customerOutbound é 0 aqui
+
+      let emptyCostEstimate = null;
+      const emptyPriceRaw = process.env.META_SERVICE_MESSAGE_PRICE_BRL;
+      const emptyPriceBRL = emptyPriceRaw !== undefined ? parseFloat(emptyPriceRaw) : NaN;
+      if (!isNaN(emptyPriceBRL) && emptyPriceBRL >= 0) {
+        emptyCostEstimate = {
+          priceBRL: emptyPriceBRL,
+          totalEstimateBRL: Math.round(apiUsageEmpty.totalCloudApiOutbound * emptyPriceBRL * 100) / 100,
+        };
+      }
+
       return res.status(200).json({
         period, customerType, attendantFilter, categoryFilter,
         summary: { totalChats: 0, waitingChats: 0, resolvedChats: 0, triageIncompleteCount: 0,
@@ -220,7 +235,7 @@ export default async function handler(req, res) {
         attendants: [], funnel: emptyFunnel,
         demands: { lista: 0, cotacao_pj: 0, xerox: 0, produto: 0, duvida: 0, outro: 0 },
         pfvspj: emptyPfVsPj, alerts: emptyAlerts, alertsList: [], volumeByDay: [],
-        apiUsage: { cloudApi: apiUsageEmpty, dataNotes: { undatedMessageCount: 0 }, costEstimate: null }
+        apiUsage: { cloudApi: apiUsageEmpty, dataNotes: { undatedMessageCount: 0 }, costEstimate: emptyCostEstimate }
       });
     }
 
@@ -484,9 +499,20 @@ export default async function handler(req, res) {
       .sort((a, b) => a.month.localeCompare(b.month));
     const apiUsageDistinctConversations = apiUsageConversationsWithOutbound.size;
 
+    // customerOutbound = mensagens outbound para clientes (humano+agente+template).
+    // internalOutbound = encaminhamentos internos via Cloud API (hoje só Denise).
+    // totalCloudApiOutbound = soma dos dois — é o volume real de chamadas à Cloud API,
+    // a base correta para qualquer estimativa de custo futura (a Meta cobra pela
+    // chamada à API, não só pelas mensagens que chegam ao cliente).
+    const customerOutbound       = apiUsageTotalToCustomer;
+    const internalOutbound       = internalForward.total;
+    const totalCloudApiOutbound  = customerOutbound + internalOutbound;
+
     const apiUsage = {
       cloudApi: {
-        totalToCustomer: apiUsageTotalToCustomer,
+        customerOutbound,
+        internalOutbound,
+        totalCloudApiOutbound,
         byOrigin: apiUsageByOrigin,
         internalForward,
         byType: apiUsageByType,
@@ -494,7 +520,7 @@ export default async function handler(req, res) {
         byMonth: apiUsageByMonth,
         distinctConversations: apiUsageDistinctConversations,
         avgPerConversation: apiUsageDistinctConversations > 0
-          ? Math.round((apiUsageTotalToCustomer / apiUsageDistinctConversations) * 100) / 100
+          ? Math.round((customerOutbound / apiUsageDistinctConversations) * 100) / 100
           : 0,
         byClientType: apiUsageByClientType,
         byAttendant: attendants,
@@ -506,15 +532,17 @@ export default async function handler(req, res) {
     };
 
     // Tarifa opcional — nenhum preço é assumido/hardcoded. Só aparece se configurada.
-    // Aproximação simples (contagem × preço), não o modelo real de cobrança por
-    // conversa/sessão de 24h da Meta — serve só para uma estimativa de ordem de grandeza
-    // enquanto a tarifa oficial não é definida.
+    // Parte de totalCloudApiOutbound (cliente + interno), não só do tráfego para
+    // clientes — é o volume real de chamadas à Cloud API. Aproximação simples
+    // (contagem × preço), não o modelo real de cobrança por conversa/sessão de 24h
+    // da Meta — serve só para uma estimativa de ordem de grandeza enquanto a
+    // tarifa oficial não é definida.
     const priceRaw = process.env.META_SERVICE_MESSAGE_PRICE_BRL;
     const priceBRL = priceRaw !== undefined ? parseFloat(priceRaw) : NaN;
     if (!isNaN(priceBRL) && priceBRL >= 0) {
       apiUsage.costEstimate = {
         priceBRL,
-        totalEstimateBRL: Math.round(apiUsageTotalToCustomer * priceBRL * 100) / 100,
+        totalEstimateBRL: Math.round(totalCloudApiOutbound * priceBRL * 100) / 100,
       };
     }
 
