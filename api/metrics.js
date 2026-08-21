@@ -79,6 +79,80 @@ function matchesPeriod(timestamp, period, now) {
 // Normaliza nome/id de atendente para comparação
 function normAtt(s) { return (s || "").toLowerCase().trim().replace(/\s+/g, "_"); }
 
+// ── Uso da WhatsApp API — classificação por mensagem ──────────────────────
+// Eventos sintéticos que nunca representam um envio real pela Cloud API:
+//   template_status  → nota de status de entrega de template (webhook)
+//   reaction_event   → fallback de reação a uma mensagem (webhook)
+//   internal_note    → nota interna (ex: lista escolar do site) — nunca vai à Meta
+const NON_OUTBOUND_MESSAGE_TYPES = new Set(["template_status", "reaction_event", "internal_note"]);
+
+// Retorna { origin, type } para uma mensagem efetivamente enviada/aceita pela Meta,
+// ou null quando a mensagem não representa um envio outbound real (ou não há
+// confirmação confiável de que a Meta aceitou).
+//
+// Regra de "efetivamente enviado":
+//   - human/template só existem no histórico depois que a Meta confirma 200 OK
+//     (api/send.js e api/send-template.js só chamam saveToHistory/markTemplateSent
+//     após result.ok) — presença no histórico já significa aceito.
+//   - agent (bot) é gravado de forma otimista, antes da confirmação da Meta
+//     (api/webhook.js addMessage); metaMessageId só é preenchido depois que a
+//     Meta aceita — por isso exigimos metaMessageId para contar como enviado.
+function classifyOutboundMessage(m) {
+  if (!m || m.role === "user") return null;
+  if (m.messageType && NON_OUTBOUND_MESSAGE_TYPES.has(m.messageType)) return null;
+
+  let origin;
+  if (m.sentByTemplate === true || m.messageType === "template") {
+    origin = "template";
+  } else if (m.sentByHuman === true) {
+    origin = "human";
+  } else if (m.role === "assistant") {
+    origin = "agent";
+    if (!m.metaMessageId) return null; // bot: só conta o que a Meta realmente aceitou
+  } else {
+    origin = "unknown"; // formato inesperado — não atribuir arbitrariamente
+  }
+
+  const type = m.mediaType || (origin === "template" ? "template" : "text");
+  return { origin, type };
+}
+
+function emptyApiUsageCloudApi() {
+  return {
+    totalToCustomer: 0,
+    byOrigin: { human: 0, agent: 0, template: 0, unknown: 0 },
+    internalForward: { total: 0, byDay: [] },
+    byType: { text: 0, image: 0, document: 0, audio: 0, template: 0 },
+    byDay: [], byMonth: [],
+    distinctConversations: 0, avgPerConversation: 0,
+    byClientType: { pf: 0, pj: 0 },
+    byAttendant: [],
+  };
+}
+
+const DENISE_FORWARD_METRICS_KEY = "sartec:metrics:denise_forwards";
+
+// Lê a lista best-effort de encaminhamentos para Denise (api/forward-media.js).
+// Só existe dado a partir do momento em que essa instrumentação foi publicada —
+// não há como reconstruir encaminhamentos anteriores (a rota nunca gravou nada).
+async function readDeniseForwardEvents(redis) {
+  try {
+    const raw = await redis.lrange(DENISE_FORWARD_METRICS_KEY, 0, -1);
+    const events = [];
+    for (const item of raw) {
+      try {
+        const parsed = JSON.parse(item);
+        const t = parsed?.at ? new Date(parsed.at).getTime() : NaN;
+        if (!isNaN(t)) events.push({ t, mediaType: parsed.mediaType || "outro" });
+      } catch { /* entrada corrompida — ignora */ }
+    }
+    return events;
+  } catch (err) {
+    console.warn("[metrics] ⚠️ Não foi possível ler denise_forwards:", err.message);
+    return [];
+  }
+}
+
 export default async function handler(req, res) {
   if (req.method !== "GET") return res.status(405).json({ error: "Method Not Allowed" });
 
@@ -114,10 +188,30 @@ export default async function handler(req, res) {
     do {
       const [nextCursor, found] = await redis.scan(cursor, "MATCH", "sartec:*", "COUNT", 250);
       cursor = nextCursor;
-      allKeys.push(...found.filter(k => !k.includes(":contact:") && k !== "sartec:pipelineOrder"));
+      allKeys.push(...found.filter(k => !k.includes(":contact:") && !k.includes(":metrics:") && k !== "sartec:pipelineOrder"));
     } while (cursor !== "0");
 
+    const now = Date.now();
+
+    // Encaminhamentos para Denise — lista separada (api/forward-media.js), lida uma
+    // única vez aqui e agregada por dia dentro do período selecionado.
+    const deniseEvents = await readDeniseForwardEvents(redis);
+    const deniseByDayMap = {};
+    let deniseTotal = 0;
+    for (const ev of deniseEvents) {
+      if (!matchesPeriod(ev.t, period, now)) continue;
+      deniseTotal++;
+      const d = new Date(ev.t).toISOString().split("T")[0];
+      deniseByDayMap[d] = (deniseByDayMap[d] || 0) + 1;
+    }
+    const deniseByDay = Object.keys(deniseByDayMap)
+      .map(date => ({ date, count: deniseByDayMap[date] }))
+      .sort((a, b) => a.date.localeCompare(b.date));
+    const internalForward = { total: deniseTotal, byDay: deniseByDay };
+
     if (!allKeys.length) {
+      const apiUsageEmpty = emptyApiUsageCloudApi();
+      apiUsageEmpty.internalForward = internalForward;
       return res.status(200).json({
         period, customerType, attendantFilter, categoryFilter,
         summary: { totalChats: 0, waitingChats: 0, resolvedChats: 0, triageIncompleteCount: 0,
@@ -125,7 +219,8 @@ export default async function handler(req, res) {
           windowClosedCount: 0, windowWaitingTemplateCount: 0, windowOpenCount: 0 },
         attendants: [], funnel: emptyFunnel,
         demands: { lista: 0, cotacao_pj: 0, xerox: 0, produto: 0, duvida: 0, outro: 0 },
-        pfvspj: emptyPfVsPj, alerts: emptyAlerts, alertsList: [], volumeByDay: []
+        pfvspj: emptyPfVsPj, alerts: emptyAlerts, alertsList: [], volumeByDay: [],
+        apiUsage: { cloudApi: apiUsageEmpty, dataNotes: { undatedMessageCount: 0 }, costEstimate: null }
       });
     }
 
@@ -135,8 +230,6 @@ export default async function handler(req, res) {
       const chunkValues = await redis.mget(...allKeys.slice(i, i + 200));
       values.push(...chunkValues);
     }
-
-    const now = Date.now();
 
     // Acumuladores principais
     let totalChats = 0, waitingChats = 0, resolvedChats = 0, triageIncompleteCount = 0;
@@ -151,6 +244,16 @@ export default async function handler(req, res) {
       pf: { novo: 0, em_atendimento: 0, orcamento_enviado: 0, confirmado: 0, finalizado: 0, resolvido: 0 },
       pj: { novo: 0, em_cotacao: 0, proposta_enviada: 0, confirmado: 0, entregue: 0, resolvido: 0 }
     };
+
+    // Acumuladores de "Uso da WhatsApp API" (contagem por mensagem, não por conversa)
+    const apiUsageByOrigin = { human: 0, agent: 0, template: 0, unknown: 0 };
+    const apiUsageByType   = { text: 0, image: 0, document: 0, audio: 0, template: 0 };
+    const apiUsageByDayMap   = {};
+    const apiUsageByMonthMap = {};
+    const apiUsageByClientType = { pf: 0, pj: 0 };
+    const apiUsageConversationsWithOutbound = new Set();
+    let apiUsageTotalToCustomer = 0;
+    let apiUsageUndatedCount = 0;
 
     // Acumuladores para comparativo PF vs PJ
     const pvp = {
@@ -258,6 +361,33 @@ export default async function handler(req, res) {
         }
       }
 
+      // 7b. Uso da WhatsApp API — classificação por mensagem (origem/tipo/dia)
+      let convHadOutbound = false;
+      for (const m of history) {
+        const classified = classifyOutboundMessage(m);
+        if (!classified) continue;
+
+        const mDate = m.createdAt ? new Date(m.createdAt) : null;
+        const mTime = mDate && !isNaN(mDate.getTime()) ? mDate.getTime() : null;
+        if (!matchesPeriod(mTime, period, now)) continue;
+
+        apiUsageTotalToCustomer++;
+        apiUsageByOrigin[classified.origin]++;
+        if (apiUsageByType.hasOwnProperty(classified.type)) apiUsageByType[classified.type]++;
+        apiUsageByClientType[ctKey]++;
+        convHadOutbound = true;
+
+        if (mTime) {
+          const dayStr   = mDate.toISOString().split("T")[0];
+          const monthStr = dayStr.slice(0, 7);
+          apiUsageByDayMap[dayStr]     = (apiUsageByDayMap[dayStr]     || 0) + 1;
+          apiUsageByMonthMap[monthStr] = (apiUsageByMonthMap[monthStr] || 0) + 1;
+        } else {
+          apiUsageUndatedCount++;
+        }
+      }
+      if (convHadOutbound) apiUsageConversationsWithOutbound.add(phone);
+
       // 8. Templates
       if (session.lastTemplateDeliveryStatus) {
         const ts = session.lastTemplateDeliveryStatus.toLowerCase();
@@ -344,6 +474,50 @@ export default async function handler(req, res) {
       resolvedCount: att.resolvedConversations.size
     })).sort((a, b) => b.messagesSent - a.messagesSent);
 
+    // ── Monta apiUsage.cloudApi — namespace reservado para permitir "businessApp"
+    // (Coexistence / smb_message_echoes) no futuro sem quebrar o formato da resposta.
+    const apiUsageByDay = Object.keys(apiUsageByDayMap)
+      .map(date => ({ date, count: apiUsageByDayMap[date] }))
+      .sort((a, b) => a.date.localeCompare(b.date));
+    const apiUsageByMonth = Object.keys(apiUsageByMonthMap)
+      .map(month => ({ month, count: apiUsageByMonthMap[month] }))
+      .sort((a, b) => a.month.localeCompare(b.month));
+    const apiUsageDistinctConversations = apiUsageConversationsWithOutbound.size;
+
+    const apiUsage = {
+      cloudApi: {
+        totalToCustomer: apiUsageTotalToCustomer,
+        byOrigin: apiUsageByOrigin,
+        internalForward,
+        byType: apiUsageByType,
+        byDay: apiUsageByDay,
+        byMonth: apiUsageByMonth,
+        distinctConversations: apiUsageDistinctConversations,
+        avgPerConversation: apiUsageDistinctConversations > 0
+          ? Math.round((apiUsageTotalToCustomer / apiUsageDistinctConversations) * 100) / 100
+          : 0,
+        byClientType: apiUsageByClientType,
+        byAttendant: attendants,
+      },
+      dataNotes: {
+        undatedMessageCount: apiUsageUndatedCount,
+      },
+      costEstimate: null,
+    };
+
+    // Tarifa opcional — nenhum preço é assumido/hardcoded. Só aparece se configurada.
+    // Aproximação simples (contagem × preço), não o modelo real de cobrança por
+    // conversa/sessão de 24h da Meta — serve só para uma estimativa de ordem de grandeza
+    // enquanto a tarifa oficial não é definida.
+    const priceRaw = process.env.META_SERVICE_MESSAGE_PRICE_BRL;
+    const priceBRL = priceRaw !== undefined ? parseFloat(priceRaw) : NaN;
+    if (!isNaN(priceBRL) && priceBRL >= 0) {
+      apiUsage.costEstimate = {
+        priceBRL,
+        totalEstimateBRL: Math.round(apiUsageTotalToCustomer * priceBRL * 100) / 100,
+      };
+    }
+
     return res.status(200).json({
       period, customerType, attendantFilter, categoryFilter,
       summary: {
@@ -374,7 +548,8 @@ export default async function handler(req, res) {
         triageIncomplete15m: triage15m, noAttendant: noAtt
       },
       alertsList,
-      volumeByDay
+      volumeByDay,
+      apiUsage
     });
   } catch (err) {
     console.error("[metrics] ❌", err.message);

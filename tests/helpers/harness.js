@@ -21,12 +21,18 @@ process.env.R2_DISABLED              = "true"; // evita chamadas reais ao S3/R2 
 
 register(pathToFileURL(path.join(HERE, "hooks.js")).href, import.meta.url);
 
-const REPO_ROOT   = path.resolve(HERE, "..", "..");
-const WEBHOOK_URL = pathToFileURL(path.join(REPO_ROOT, "api", "webhook.js")).href;
-const QUEUE_URL   = pathToFileURL(path.join(REPO_ROOT, "api", "queue.js")).href;
+const REPO_ROOT          = path.resolve(HERE, "..", "..");
+const WEBHOOK_URL        = pathToFileURL(path.join(REPO_ROOT, "api", "webhook.js")).href;
+const QUEUE_URL          = pathToFileURL(path.join(REPO_ROOT, "api", "queue.js")).href;
+const SEND_URL           = pathToFileURL(path.join(REPO_ROOT, "api", "send.js")).href;
+const METRICS_URL        = pathToFileURL(path.join(REPO_ROOT, "api", "metrics.js")).href;
+const FORWARD_MEDIA_URL  = pathToFileURL(path.join(REPO_ROOT, "api", "forward-media.js")).href;
 
-export const { default: handler }      = await import(WEBHOOK_URL);
-export const { default: queueHandler } = await import(QUEUE_URL);
+export const { default: handler }             = await import(WEBHOOK_URL);
+export const { default: queueHandler }        = await import(QUEUE_URL);
+export const { default: sendHandler }         = await import(SEND_URL);
+export const { default: metricsHandler }      = await import(METRICS_URL);
+export const { default: forwardMediaHandler } = await import(FORWARD_MEDIA_URL);
 export const FakeRedis                 = (await import(pathToFileURL(path.join(HERE, "fake-ioredis.js")).href)).default;
 export const anthropicSpy              = await import(pathToFileURL(path.join(HERE, "fake-anthropic.js")).href);
 
@@ -39,11 +45,15 @@ let fetchCalls = [];
 globalThis.fetch = async (url, opts) => {
   fetchCalls.push({ url: String(url), opts });
 
-  // Envio de mensagem de texto ao cliente (Graph API "/messages")
+  // Envio de mensagem ao cliente (Graph API ".../messages")
   if (String(url).includes("graph.facebook.com") && String(url).includes("/messages")) {
     return { ok: true, json: async () => ({ messages: [{ id: "wamid_out_" + fetchCalls.length }] }) };
   }
-  // Lookup de metadados de mídia (Graph API "/v19.0/{mediaId}")
+  // Upload de mídia do atendente para a Meta (Graph API ".../media", api/send.js e api/forward-media.js)
+  if (String(url).includes("graph.facebook.com") && String(url).endsWith("/media")) {
+    return { ok: true, json: async () => ({ id: "media_upload_" + fetchCalls.length }) };
+  }
+  // Lookup de metadados de mídia recebida (Graph API "/v19.0/{mediaId}", api/webhook.js)
   if (String(url).includes("graph.facebook.com") && !String(url).includes("/messages")) {
     return { ok: true, json: async () => ({ url: FAKE_MEDIA_URL, mime_type: "audio/ogg" }) };
   }
@@ -134,6 +144,32 @@ export async function callQueue() {
   const res = fakeRes();
   await queueHandler(req, res);
   return res._body;
+}
+
+// Chama o handler real de api/send.js (envio humano de texto/imagem/documento/áudio).
+export async function callSend(body) {
+  resetFetchCalls();
+  const req = { method: "POST", body };
+  const res = fakeRes();
+  await sendHandler(req, res);
+  return { res, calls: getFetchCalls() };
+}
+
+// Chama o handler real de api/metrics.js. query aceita period/customerType/attendant/category.
+export async function callMetrics(query = {}) {
+  const req = { method: "GET", query };
+  const res = fakeRes();
+  await metricsHandler(req, res);
+  return res._body;
+}
+
+// Chama o handler real de api/forward-media.js (encaminhamento interno para Denise).
+export async function callForwardMedia(body) {
+  resetFetchCalls();
+  const req = { method: "POST", body };
+  const res = fakeRes();
+  await forwardMediaHandler(req, res);
+  return { res, calls: getFetchCalls() };
 }
 
 export async function getSession(phone) {

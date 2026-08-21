@@ -33,6 +33,10 @@ const MIME_TO_EXT = {
   "audio/ogg":        "ogg",
   "audio/mpeg":       "mp3",
   "audio/mp3":        "mp3",
+  "audio/mp4":        "m4a",
+  "audio/webm":       "webm",
+  "audio/aac":        "aac",
+  "audio/amr":        "amr",
   "video/mp4":        "mp4",
   // Documentos Office
   "application/msword":                                                          "doc",

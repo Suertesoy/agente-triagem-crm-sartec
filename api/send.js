@@ -4,6 +4,10 @@
 //   Texto:    { to, message, type: "text" }
 //   Imagem:   { to, type: "image",    mediaBase64, mimeType, caption? }
 //   Documento:{ to, type: "document", mediaBase64, mimeType, filename, caption? }
+//   Áudio:    { to, type: "audio",    mediaBase64, mimeType }
+//             mimeType deve ser "audio/mp4" ou "audio/ogg" (sem parâmetros
+//             de codec) — a Meta Cloud API aceita esses dois nativamente.
+//             "audio/ogg" é enviado como nota de voz nativa (voice: true).
 // ============================================================
 
 import Redis from "ioredis";
@@ -138,6 +142,9 @@ export default async function handler(req, res) {
     }
     if (type === "document") {
       return await sendDocument(req, res, body, PHONE_NUMBER_ID, ACCESS_TOKEN);
+    }
+    if (type === "audio") {
+      return await sendAudio(req, res, body, PHONE_NUMBER_ID, ACCESS_TOKEN);
     }
     return await sendText(req, res, body, PHONE_NUMBER_ID, ACCESS_TOKEN);
   } catch (err) {
@@ -403,6 +410,116 @@ async function sendDocument(req, res, body, PHONE_NUMBER_ID, ACCESS_TOKEN) {
   if (!docSaved) console.warn(`[send/document] ⚠️ Documento entregue à Meta mas não persistido no Redis (+${to})`);
 
   return res.status(200).json({ success: true, historyPersisted: docSaved });
+}
+
+// ── Envio de áudio ────────────────────────────────────────
+// A Meta Cloud API não aceita legenda em mensagens de áudio, por isso não
+// há campo caption/filename aqui. mimeType deve chegar já normalizado
+// (sem parâmetros de codec) — "audio/mp4" ou "audio/ogg".
+const VOICE_CAPABLE_MIME_TYPES = new Set(["audio/ogg"]);
+
+async function sendAudio(req, res, body, PHONE_NUMBER_ID, ACCESS_TOKEN) {
+  const { to, mediaBase64, mimeType, replyToMessageId } = body;
+
+  if (!mediaBase64 || !mimeType) {
+    return res.status(400).json({ error: "Campos mediaBase64 e mimeType são obrigatórios para type audio" });
+  }
+
+  // 1. Upload para a Meta
+  const binaryData = Buffer.from(mediaBase64, "base64");
+  console.log(`[send/audio] upload start mime=${mimeType} size=${binaryData.length}`);
+
+  const uploadResult = await callMetaWithRetry(
+    `https://graph.facebook.com/v19.0/${PHONE_NUMBER_ID}/media`,
+    () => {
+      const form = new FormData();
+      form.append("messaging_product", "whatsapp");
+      form.append("type", mimeType);
+      form.append("file", new Blob([binaryData], { type: mimeType }), "audio");
+      return { method: "POST", headers: { Authorization: `Bearer ${ACCESS_TOKEN}` }, body: form };
+    },
+    "send/audio-upload"
+  );
+
+  if (!uploadResult.ok) {
+    const _ue = uploadResult.data?.error || {};
+    console.error(`[send/audio] falha upload meta code=${_ue.code} msg="${_ue.message}"`);
+    return metaErrRes(res, "Erro ao fazer upload do áudio para a Meta API", uploadResult);
+  }
+
+  const mediaId = uploadResult.data.id;
+  console.log(`[send/audio] upload ok media_id=${mediaId} attempts=${uploadResult.attempts}`);
+
+  // 2. Envia o áudio via media_id — voice:true só para audio/ogg (nota de voz nativa)
+  const audioPayload = { id: mediaId };
+  if (VOICE_CAPABLE_MIME_TYPES.has(mimeType)) audioPayload.voice = true;
+
+  const msgPayload = {
+    messaging_product: "whatsapp",
+    recipient_type: "individual",
+    to,
+    type: "audio",
+    audio: audioPayload,
+  };
+  if (replyToMessageId && typeof replyToMessageId === "string") {
+    msgPayload.context = { message_id: replyToMessageId };
+  }
+
+  const metaResult = await callMetaWithRetry(
+    `https://graph.facebook.com/v19.0/${PHONE_NUMBER_ID}/messages`,
+    {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${ACCESS_TOKEN}`,
+      },
+      body: JSON.stringify(msgPayload),
+    },
+    "send/audio"
+  );
+
+  if (!metaResult.ok) {
+    const _se = metaResult.data?.error || {};
+    console.error(`[send/audio] falha send code=${_se.code} msg="${_se.message}"`);
+    return metaErrRes(res, "Erro ao enviar áudio pela Meta API", metaResult);
+  }
+
+  const metaMessageId = metaResult.data?.messages?.[0]?.id || null;
+  console.log(`[send/audio] send ok metaMessageId=${metaMessageId}${replyToMessageId ? " (reply)" : ""} attempts=${metaResult.attempts}`);
+
+  // 3. Upload para R2 (best-effort; falha não cancela envio já realizado)
+  let r2AudioResult = null;
+  try {
+    r2AudioResult = await uploadMedia(binaryData, mimeType, to, metaMessageId || `audio_${Date.now()}`);
+  } catch (r2Err) {
+    console.warn(`[send/audio] ⚠️ R2 upload falhou: ${String(r2Err.message || "").substring(0, 80)}`);
+  }
+
+  // 4. Salva no histórico — sem base64 para não estourar Redis
+  const audioEntry = {
+    role:             "assistant",
+    content:          "",
+    sentByHuman:      true,
+    mediaType:        "audio",
+    sentMedia:        true,
+    mediaMimeType:    mimeType,
+    attendantId:      body.attendantId   || null,
+    attendantName:    body.attendantName || null,
+    metaMessageId,
+    deliveryStatus:   "sent",
+    deliveryStatusAt: new Date().toISOString(),
+  };
+  if (r2AudioResult) {
+    audioEntry.mediaStorageKey      = r2AudioResult.storageKey;
+    audioEntry.mediaStorageProvider = "cloudflare-r2";
+  } else {
+    audioEntry.mediaStorageFailed   = true;
+  }
+  if (replyToMessageId) audioEntry.replyToMsgId = replyToMessageId;
+  const audioSaved = await saveToHistory(to, audioEntry);
+  if (!audioSaved) console.warn(`[send/audio] ⚠️ Áudio entregue à Meta mas não persistido no Redis (+${to})`);
+
+  return res.status(200).json({ success: true, historyPersisted: audioSaved });
 }
 
 // ── Aplica status pendente de entrega se houver (race condition fix) ─────

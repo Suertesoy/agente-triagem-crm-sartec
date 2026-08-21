@@ -1167,6 +1167,7 @@
     .convs-search {
       padding: 12px;
       border-bottom: 1px solid var(--border);
+      position: relative;
     }
     .convs-search input {
       width: 100%;
@@ -1179,6 +1180,18 @@
       background: #fff;
     }
     .convs-search input:focus { border-color: var(--brand-navy); }
+    /* Spinner discreto dentro do próprio campo — some sinal visual imediato de que a busca está rodando */
+    .convs-search-spinner {
+      display: none;
+      position: absolute;
+      right: 22px; top: 50%;
+      transform: translateY(-50%);
+      width: 13px; height: 13px; border-radius: 50%;
+      border: 2px solid rgba(26,42,94,.18); border-top-color: var(--brand-navy);
+      animation: org-spin .8s linear infinite;
+      pointer-events: none;
+    }
+    .convs-search-spinner.visible { display: block; }
 
     .convs-list {
       flex: 1;
@@ -2652,6 +2665,110 @@
       opacity: .35; cursor: not-allowed;
       border-color: var(--border) !important; color: var(--text-muted) !important;
     }
+
+    /* ── Microfone: gravação e envio de áudio ── */
+    .btn-mic {
+      background: none;
+      border: 1px solid var(--border);
+      color: var(--text-secondary);
+      border-radius: 8px;
+      width: 38px;
+      height: 38px;
+      font-size: 1rem;
+      cursor: pointer;
+      display: flex; /* visível em desktop e mobile — diferente de .btn-camera */
+      align-items: center;
+      justify-content: center;
+      flex-shrink: 0;
+      transition: border-color .15s, color .15s;
+    }
+    .btn-mic:hover { border-color: var(--brand-navy); color: var(--brand-navy); }
+    .btn-mic:disabled { opacity: .35; cursor: not-allowed; }
+
+    .mic-recording-bar {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      padding: 8px 10px;
+      margin-bottom: 8px;
+      background: #fff5f5;
+      border: 1px solid #fecaca;
+      border-radius: 8px;
+    }
+    .mic-rec-dot {
+      width: 9px; height: 9px; border-radius: 50%;
+      background: var(--brand-red, #d33);
+      flex-shrink: 0;
+      animation: mic-rec-pulse 1.1s ease-in-out infinite;
+    }
+    @keyframes mic-rec-pulse {
+      0%, 100% { opacity: 1; }
+      50%      { opacity: .3; }
+    }
+    .mic-rec-time {
+      font-variant-numeric: tabular-nums;
+      font-feature-settings: "tnum";
+      font-weight: 700;
+      font-size: .85rem;
+      color: #991b1b;
+      flex-shrink: 0;
+    }
+    .mic-rec-cancel, .mic-rec-stop {
+      margin-left: auto;
+      border: none;
+      border-radius: 7px;
+      padding: 6px 13px;
+      font-size: .78rem;
+      font-weight: 700;
+      cursor: pointer;
+      flex-shrink: 0;
+    }
+    .mic-rec-cancel { background: none; color: var(--text-secondary); }
+    .mic-rec-cancel:hover { color: var(--brand-red, #d33); }
+    .mic-rec-stop { background: var(--brand-navy); color: #fff; }
+    .mic-rec-stop:hover { background: var(--brand-navy-mid); }
+
+    .audio-preview-bar {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      padding: 8px 10px;
+      margin-bottom: 8px;
+      background: #f8f9fc;
+      border: 1px solid var(--border);
+      border-radius: 8px;
+    }
+    .audio-preview-player { flex: 1; min-width: 0; }
+    .audio-preview-duration {
+      font-size: .72rem;
+      color: var(--text-secondary);
+      font-variant-numeric: tabular-nums;
+      flex-shrink: 0;
+    }
+    .btn-clear-audio {
+      background: none;
+      border: 1px solid var(--border);
+      color: var(--text-secondary);
+      width: 26px; height: 26px;
+      border-radius: 50%;
+      cursor: pointer;
+      font-size: .78rem;
+      flex-shrink: 0;
+    }
+    .btn-clear-audio:hover { border-color: var(--brand-red, #d33); color: var(--brand-red, #d33); }
+    .btn-send-audio {
+      background: var(--brand-navy);
+      color: #fff;
+      border: none;
+      border-radius: 7px;
+      padding: 6px 14px;
+      font-size: .8rem;
+      font-weight: 700;
+      cursor: pointer;
+      flex-shrink: 0;
+    }
+    .btn-send-audio:hover    { background: var(--brand-navy-mid); }
+    .btn-send-audio:disabled { opacity: .4; cursor: default; }
 
     .composer-row textarea {
       flex: 1;
@@ -4159,6 +4276,7 @@
       /* Composer: botões com área de toque mínima de 42px */
       .btn-attach { width:42px;height:42px; }
       .btn-camera { width:42px;height:42px; }
+      .btn-mic { width:42px;height:42px; }
       .btn-quickmsg { width:42px;height:42px;padding:0;justify-content:center; }
       .qm-btn-label { display:none; }
       .btn-send { height:42px;min-width:60px; }
@@ -4956,6 +5074,7 @@
     </div>
     <div class="convs-search">
       <input type="search" id="convs-search-input" placeholder="🔍  Buscar por nome ou número..." oninput="handleConvsSearch()">
+      <span class="convs-search-spinner" id="convs-search-spinner" aria-hidden="true"></span>
     </div>
     <button class="convs-new-btn" onclick="openNewConvoModal()">✏️ Nova conversa</button>
     <div class="convs-filter">
@@ -5131,6 +5250,64 @@
         <strong>Tempo operacional em preparação:</strong> os tempos acima são brutos e incluem períodos sem atendentes ativos. O cálculo com desconto de pausas será disponibilizado quando o registro de presença por atendente for instrumentado.
       </div>
 
+      <!-- Uso da WhatsApp API -->
+      <div class="metrics-row full-width">
+        <div class="metrics-block">
+          <h3>Uso da WhatsApp API <span style="font-size:.75rem;font-weight:500;color:var(--text-muted);">— mensagens enviadas pela Cloud API no período</span></h3>
+          <div class="metrics-grid" id="api-usage-grid">
+            <div class="metric-card">
+              <span class="metric-val" id="api-usage-total">-</span>
+              <span class="metric-label">Total enviado pela API</span>
+              <p class="metric-desc">Humano + agente + templates no período</p>
+            </div>
+            <div class="metric-card">
+              <span class="metric-val" id="api-usage-human">-</span>
+              <span class="metric-label">Humanos</span>
+              <p class="metric-desc">Enviadas por atendentes pelo CRM</p>
+            </div>
+            <div class="metric-card">
+              <span class="metric-val" id="api-usage-agent">-</span>
+              <span class="metric-label">Agente</span>
+              <p class="metric-desc">Enviadas automaticamente pelo bot</p>
+            </div>
+            <div class="metric-card">
+              <span class="metric-val" id="api-usage-template">-</span>
+              <span class="metric-label">Templates</span>
+              <p class="metric-desc">Templates aprovados enviados via API</p>
+            </div>
+            <div class="metric-card">
+              <span class="metric-val" id="api-usage-denise">-</span>
+              <span class="metric-label">Encaminhamentos p/ Denise</span>
+              <p class="metric-desc">Envio interno via Cloud API — não é mensagem ao cliente</p>
+            </div>
+            <div class="metric-card">
+              <span class="metric-val" id="api-usage-conversations">-</span>
+              <span class="metric-label">Conversas com envio</span>
+              <p class="metric-desc">Conversas distintas com pelo menos 1 envio</p>
+            </div>
+            <div class="metric-card">
+              <span class="metric-val" id="api-usage-avg">-</span>
+              <span class="metric-label">Média por conversa</span>
+              <p class="metric-desc">Mensagens enviadas ÷ conversas com envio</p>
+            </div>
+          </div>
+          <div class="metrics-operational-note" id="api-usage-notes" style="margin-top:16px;"></div>
+        </div>
+      </div>
+
+      <div class="metrics-row">
+        <div class="metrics-block">
+          <h3>Uso da API por Tipo</h3>
+          <div id="api-usage-by-type" class="demand-list"></div>
+        </div>
+        <div class="metrics-block">
+          <h3>Mensagens de API por Dia</h3>
+          <div class="chart-container" id="api-usage-volume-chart">
+            <!-- Gráfico de barras verticais em CSS puro — mesmo padrão de Volume de Conversas por Dia -->
+          </div>
+        </div>
+      </div>
+
       <!-- 3. Produtividade por Atendente + Volume por Dia -->
       <div class="metrics-row">
         <div class="metrics-block">
@@ -5301,11 +5478,24 @@
           <button class="btn-clear-img" onclick="clearImage('modal')" title="Remover">✕</button>
         </div>
         <div class="img-queue-bar" id="modal-img-queue-bar"></div>
+        <div class="mic-recording-bar" id="modal-mic-recording-bar" style="display:none">
+          <span class="mic-rec-dot"></span>
+          <span class="mic-rec-time" id="modal-mic-rec-time">00:00</span>
+          <button type="button" class="mic-rec-cancel" onclick="cancelMicRecording('modal')">Cancelar</button>
+          <button type="button" class="mic-rec-stop" onclick="stopMicRecording('modal')">Parar</button>
+        </div>
+        <div class="audio-preview-bar" id="modal-audio-preview-bar" style="display:none">
+          <div class="audio-preview-player" id="modal-audio-preview-player"></div>
+          <span class="audio-preview-duration" id="modal-audio-preview-duration"></span>
+          <button type="button" class="btn-clear-audio" onclick="discardPendingAudio('modal')" title="Excluir">✕</button>
+          <button type="button" class="btn-send-audio" onclick="sendAudioMessage('modal')">Enviar</button>
+        </div>
         <div class="composer-row">
           <button class="btn-attach" onclick="handleAttachClick('modal')" title="Imagem / PDF">📎</button>
           <input type="file" id="modal-file-input" accept="image/jpeg,image/png,image/gif,image/webp,application/pdf" multiple style="display:none" onchange="handleImageSelect(event,'modal')">
           <input type="file" id="modal-camera-input" accept="image/*" capture="environment" style="display:none" onchange="handleImageSelect(event,'modal')">
           <button class="btn-camera" onclick="handleCameraClick('modal')" title="Câmera">📷</button>
+          <button class="btn-mic" id="modal-mic-btn" onclick="handleMicClick('modal')" title="Gravar áudio">🎤</button>
           <button class="btn-emoji" id="modal-emoji-btn" onclick="toggleEmojiPicker('modal'); event.stopPropagation();" title="Emojis aprovados">🙂</button>
           <button class="btn-quickmsg" id="modal-quickmsg-btn" onclick="openQuickMessages('modal'); event.stopPropagation();" aria-label="Mensagens rápidas" title="Mensagens rápidas"><span class="qm-btn-icon">💬</span><span class="qm-btn-label">Msgs rápidas</span></button>
           <textarea id="modal-msg-input" placeholder="Digite sua mensagem..." rows="1"
@@ -5586,6 +5776,8 @@ let _convsChatRequestSeq = 0;    // guard anti-corrida: incrementado a cada aber
 let pendingMedia      = {};                          // { modal: {type,base64,mimeType,filename}, convs: {...} }
 const pendingImages   = { modal: [], convs: [] };    // fila de até 10 imagens por prefix
 const pendingDocuments = { modal: [], convs: [] };   // fila de PDFs para envio sequencial
+let pendingAudio       = { modal: null, convs: null }; // { base64, mimeType, durationSec } — gravação parada, aguardando confirmação
+const _micState        = { modal: null, convs: null }; // { recorder, stream, chunks, sendMime, startedAt, timerInterval } — gravação em andamento
 const _isSending      = { modal: false, convs: false }; // trava contra envio concorrente
 const _replyTarget  = { modal: null, convs: null };
 const _cardUnreadCount    = {};        // phone → 0 ou 1 (há msg do cliente ainda não vista)
@@ -5695,6 +5887,7 @@ let _activeQueueAbort  = null; // AbortController do GET /api/queue em andamento
 let _convsSearchDebounce = null; // timer do debounce da busca (300ms)
 let _convsRequestSeq     = 0;    // só a resposta mais recente de /api/conversations é aplicada
 let _contactsRequestSeq  = 0;    // idem para /api/contacts
+let _activeContactsAbort = null; // AbortController do GET /api/contacts em andamento
 let _pendingMoveSeq    = 0;    // token único por movimentação otimista pendente
 const pendingCardMoves = new Map(); // phone -> { moveId, kind: "status"|"order", ... }
 let _priPickerPhone      = null;
@@ -6429,6 +6622,9 @@ function renderMetricsData(data) {
     }
   }
   
+  // Uso da WhatsApp API
+  renderApiUsage(data.apiUsage || {});
+
   // Comparativo PF vs PJ
   renderPfVsPj(data.pfvspj || {});
 
@@ -6491,6 +6687,98 @@ function renderMetricsData(data) {
         `;
       }).join("");
     }
+  }
+}
+
+function renderApiUsage(apiUsage) {
+  const cloud = apiUsage.cloudApi || {};
+  const origin = cloud.byOrigin || {};
+  const _n = (v) => v !== null && v !== undefined ? v : 0;
+
+  const elTotal   = document.getElementById("api-usage-total");
+  const elHuman   = document.getElementById("api-usage-human");
+  const elAgent   = document.getElementById("api-usage-agent");
+  const elTmpl    = document.getElementById("api-usage-template");
+  const elDenise  = document.getElementById("api-usage-denise");
+  const elConvs   = document.getElementById("api-usage-conversations");
+  const elAvg     = document.getElementById("api-usage-avg");
+
+  if (elTotal)  elTotal.textContent  = _n(cloud.totalToCustomer);
+  if (elHuman)  elHuman.textContent  = _n(origin.human);
+  if (elAgent)  elAgent.textContent  = _n(origin.agent);
+  if (elTmpl)   elTmpl.textContent   = _n(origin.template);
+  if (elDenise) elDenise.textContent = _n(cloud.internalForward?.total);
+  if (elConvs)  elConvs.textContent  = _n(cloud.distinctConversations);
+  if (elAvg)    elAvg.textContent    = (cloud.avgPerConversation || 0).toLocaleString("pt-BR", { maximumFractionDigits: 2 });
+
+  // Por tipo
+  const typeEl = document.getElementById("api-usage-by-type");
+  if (typeEl) {
+    const labelsMap = { text: "Texto", image: "Imagem", document: "Documento", audio: "Áudio", template: "Template" };
+    const byType = cloud.byType || {};
+    const items = Object.keys(labelsMap).map(key => ({ key, label: labelsMap[key], count: byType[key] || 0 }));
+    const total = items.reduce((a, d) => a + d.count, 0);
+    if (total === 0) {
+      typeEl.innerHTML = `<div style="text-align:center;padding:24px 0;color:var(--text-secondary);font-size:.8rem;">Sem envios neste período</div>`;
+    } else {
+      const maxCount = Math.max(...items.map(d => d.count), 1);
+      typeEl.innerHTML = items.map(d => {
+        const widthPct = Math.round((d.count / maxCount) * 100);
+        return `
+          <div class="demand-item">
+            <div class="demand-lbl">${esc(d.label)}</div>
+            <div class="demand-bar-bg">
+              <div class="demand-bar-fill" style="width: ${widthPct}%"></div>
+            </div>
+            <div class="demand-count">${d.count}</div>
+          </div>
+        `;
+      }).join("");
+    }
+  }
+
+  // Mensagens de API por dia (mesmo padrão do gráfico de Volume de Conversas)
+  const chartEl = document.getElementById("api-usage-volume-chart");
+  if (chartEl) {
+    const byDay = cloud.byDay || [];
+    if (!byDay.length) {
+      chartEl.innerHTML = `<div style="text-align:center;width:100%;padding:48px 0;color:var(--text-secondary);font-size:.8rem;">Sem envios neste período</div>`;
+    } else {
+      const maxCount = Math.max(...byDay.map(d => d.count), 1);
+      chartEl.innerHTML = byDay.map(day => {
+        const heightPct = Math.min(100, Math.max(5, Math.round((day.count / maxCount) * 100)));
+        let label = day.date;
+        try {
+          const parts = day.date.split("-");
+          if (parts.length === 3) label = `${parts[2]}/${parts[1]}`;
+        } catch {}
+        return `
+          <div class="chart-bar-wrap">
+            <div class="chart-bar" style="height: ${heightPct}%" data-tooltip="${day.count} mensagens em ${day.date}"></div>
+            <span class="chart-label">${label}</span>
+          </div>
+        `;
+      }).join("");
+    }
+  }
+
+  // Notas: PF/PJ, dados sem data, e estimativa de custo (só se configurada)
+  const notesEl = document.getElementById("api-usage-notes");
+  if (notesEl) {
+    const byClientType = cloud.byClientType || {};
+    const notes = [];
+    notes.push(`PF: <strong>${_n(byClientType.pf)}</strong> &nbsp;·&nbsp; PJ: <strong>${_n(byClientType.pj)}</strong>`);
+    const undated = apiUsage.dataNotes?.undatedMessageCount || 0;
+    if (undated > 0) {
+      notes.push(`${undated} mensagem(ns) sem data registrada — incluída(s) no total, fora das séries por dia/mês.`);
+    }
+    if (apiUsage.costEstimate) {
+      const c = apiUsage.costEstimate;
+      notes.push(`Estimativa de custo (tarifa configurada: R$ ${c.priceBRL.toLocaleString("pt-BR", { minimumFractionDigits: 2 })}): <strong>R$ ${c.totalEstimateBRL.toLocaleString("pt-BR", { minimumFractionDigits: 2 })}</strong>`);
+    } else {
+      notes.push(`Estimativa de custo: aguardando tarifa oficial da Meta.`);
+    }
+    notesEl.innerHTML = notes.map(n => `<div>${n}</div>`).join("");
   }
 }
 
@@ -7891,6 +8179,7 @@ async function openChat(phone) {
   pendingMedia.modal = null;
   clearReplyTarget("modal");
   clearImage("modal");
+  resetMicComposer("modal");
 
   document.getElementById("modal-messages").innerHTML = "";
   document.getElementById("modal-chat-name").textContent = "Carregando...";
@@ -8315,6 +8604,7 @@ function closeModal() {
   document.body.classList.remove("modal-open");
   document.documentElement.classList.remove("modal-open");
   clearImage("modal");
+  resetMicComposer("modal");
   loadQueue();
 }
 
@@ -8332,11 +8622,13 @@ async function loadConversations() {
     const data   = await res.json();
     if (mySeq !== _convsRequestSeq) return; // resposta antiga — uma busca mais nova já assumiu
     allConversationsList = data.conversations || [];
+    hideConvsSearchSpinner();
     if (convsSectionMode === 'convs') renderConvsList(allConversationsList);
   } catch (e) {
     console.error("[loadConversations]", e);
     if (mySeq !== _convsRequestSeq) return; // falha de requisição já substituída — ignora
     if (convsSectionMode !== 'convs') return; // não sobrescreve lista de contatos
+    hideConvsSearchSpinner();
     const list = document.getElementById("convs-list");
     if (list) list.innerHTML = `<div style="padding:24px 16px;text-align:center;color:var(--text-secondary)">
       <div style="font-size:.85rem;margin-bottom:12px">Não foi possível carregar as conversas agora. Verifique a conexão e tente novamente.</div>
@@ -8472,6 +8764,7 @@ function buildConvItem(c) {
 
 async function openConvsChat(phone, redisKey, isArchive) {
   clearReplyTarget("convs");
+  resetMicComposer("convs");
   const _preserveUnread = shouldPreserveUnreadOnOpen();
   if (!_preserveUnread) {
     markCurrentChatInboundSeen(phone); // marca a última msg do cliente como vista
@@ -8541,11 +8834,24 @@ async function openConvsChat(phone, redisKey, isArchive) {
         <div class="img-queue-bar" id="convs-img-queue-bar"></div>
         <div class="composer-lock-bar" id="convs-composer-lock" style="display:none"></div>
         <div class="reply-bar" id="convs-reply-bar" style="display:none"><span class="reply-bar-label">Respondendo:</span><span class="reply-bar-text" id="convs-reply-text"></span><button class="reply-bar-cancel" onclick="clearReplyTarget('convs')" title="Cancelar resposta">✕</button></div>
+        <div class="mic-recording-bar" id="convs-mic-recording-bar" style="display:none">
+          <span class="mic-rec-dot"></span>
+          <span class="mic-rec-time" id="convs-mic-rec-time">00:00</span>
+          <button type="button" class="mic-rec-cancel" onclick="cancelMicRecording('convs')">Cancelar</button>
+          <button type="button" class="mic-rec-stop" onclick="stopMicRecording('convs')">Parar</button>
+        </div>
+        <div class="audio-preview-bar" id="convs-audio-preview-bar" style="display:none">
+          <div class="audio-preview-player" id="convs-audio-preview-player"></div>
+          <span class="audio-preview-duration" id="convs-audio-preview-duration"></span>
+          <button type="button" class="btn-clear-audio" onclick="discardPendingAudio('convs')" title="Excluir">✕</button>
+          <button type="button" class="btn-send-audio" onclick="sendAudioMessage('convs')">Enviar</button>
+        </div>
         <div class="composer-row">
           <button class="btn-attach" onclick="handleAttachClick('convs')" title="Imagem / PDF">📎</button>
           <input type="file" id="convs-file-input" accept="image/jpeg,image/png,image/gif,image/webp,application/pdf" multiple style="display:none" onchange="handleImageSelect(event,'convs')">
           <input type="file" id="convs-camera-input" accept="image/*" capture="environment" style="display:none" onchange="handleImageSelect(event,'convs')">
           <button class="btn-camera" onclick="handleCameraClick('convs')" title="Câmera">📷</button>
+          <button class="btn-mic" id="convs-mic-btn" onclick="handleMicClick('convs')" title="Gravar áudio">🎤</button>
           <button class="btn-emoji" id="convs-emoji-btn" onclick="toggleEmojiPicker('convs'); event.stopPropagation();" title="Emojis aprovados">🙂</button>
           <button class="btn-quickmsg" id="convs-quickmsg-btn" onclick="openQuickMessages('convs'); event.stopPropagation();" aria-label="Mensagens rápidas" title="Mensagens rápidas"><span class="qm-btn-icon">💬</span><span class="qm-btn-label">Msgs rápidas</span></button>
           <textarea id="convs-msg-input" placeholder="Digite sua mensagem..." rows="1"
@@ -9826,6 +10132,275 @@ function handleCameraClick(prefix) {
     return;
   }
   document.getElementById(`${prefix}-camera-input`)?.click();
+}
+
+// ╔══════════════════════════════════════════════════════════════╗
+// ║  GRAVAÇÃO E ENVIO DE ÁUDIO                                    ║
+// ╚══════════════════════════════════════════════════════════════╝
+// Formato: prioriza audio/mp4 (AAC) — suportado nativamente pelo Chrome/Edge
+// desde a v123 (2024) e aceito diretamente pela WhatsApp Cloud API, sem
+// transcodificação. audio/ogg;codecs=opus é o segundo caminho (ex: Firefox),
+// enviado como nota de voz nativa (voice:true). A Cloud API NÃO aceita o
+// contêiner webm (padrão do MediaRecorder no Chrome/Edge sem essas opções),
+// por isso, se nenhum dos dois formatos acima estiver disponível, a gravação
+// é recusada com uma mensagem clara em vez de tentar enviar algo incompatível.
+const AUDIO_MIME_CANDIDATES = [
+  { mime: "audio/mp4",                 sendMime: "audio/mp4", voice: false },
+  { mime: "audio/mp4;codecs=mp4a.40.2", sendMime: "audio/mp4", voice: false },
+  { mime: "audio/ogg;codecs=opus",     sendMime: "audio/ogg", voice: true  },
+];
+const MIC_MAX_RECORDING_SEC = 10 * 60; // limite de segurança — evita gravação esquecida ligada
+
+function pickSupportedAudioMime() {
+  if (typeof MediaRecorder === "undefined" || !MediaRecorder.isTypeSupported) return null;
+  for (const cand of AUDIO_MIME_CANDIDATES) {
+    try { if (MediaRecorder.isTypeSupported(cand.mime)) return cand; } catch { /* segue tentando */ }
+  }
+  return null;
+}
+
+function humanizeMicError(err) {
+  const name = err?.name || "";
+  if (name === "NotAllowedError" || name === "PermissionDeniedError" || name === "SecurityError") {
+    return "Não consegui acessar o microfone. Verifique a permissão do navegador.";
+  }
+  if (name === "NotFoundError" || name === "DevicesNotFoundError") {
+    return "Nenhum microfone encontrado neste dispositivo.";
+  }
+  if (name === "NotReadableError" || name === "TrackStartError") {
+    return "O microfone está sendo usado por outro programa.";
+  }
+  return "Não consegui iniciar a gravação. Tente novamente.";
+}
+
+function fmtMicTime(totalSec) {
+  const m = Math.floor(totalSec / 60);
+  const s = Math.max(0, totalSec % 60);
+  return `${String(m).padStart(2, "0")}:${String(s).padStart(2, "0")}`;
+}
+
+function isComposerWindowClosed(prefix) {
+  const windowBar = document.getElementById(`${prefix}-window-bar`);
+  return !!windowBar && (windowBar.classList.contains("ws-closed") || windowBar.classList.contains("ws-waiting"));
+}
+
+async function handleMicClick(prefix) {
+  if (_isSending[prefix]) { showToast("Aguarde — envio em andamento.", "t-warn"); return; }
+  if (_micState[prefix]) return; // já gravando — botão Parar/Cancelar cuida do resto
+  if (pendingAudio[prefix]) { showToast("Envie ou exclua o áudio gravado antes de iniciar outro.", "t-warn"); return; }
+  if (isComposerWindowClosed(prefix)) {
+    showToast("Janela fechada — use um template para retomar", "t-warn");
+    return;
+  }
+
+  const picked = pickSupportedAudioMime();
+  if (!picked) {
+    showToast("Seu navegador não é compatível com envio de áudio pelo CRM. Atualize o Chrome/Edge.", "t-err");
+    return;
+  }
+
+  let stream;
+  try {
+    stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+  } catch (err) {
+    showToast(humanizeMicError(err), "t-err");
+    return;
+  }
+
+  let recorder;
+  try {
+    recorder = new MediaRecorder(stream, { mimeType: picked.mime });
+  } catch (err) {
+    stream.getTracks().forEach(t => t.stop());
+    showToast(humanizeMicError(err), "t-err");
+    return;
+  }
+
+  const chunks = [];
+  recorder.ondataavailable = (e) => { if (e.data && e.data.size > 0) chunks.push(e.data); };
+
+  const state = {
+    recorder, stream, chunks,
+    sendMime: picked.sendMime,
+    voice: !!picked.voice,
+    startedAt: Date.now(),
+    timerInterval: null,
+  };
+  _micState[prefix] = state;
+
+  recorder.start();
+  showMicRecordingBar(prefix);
+  state.timerInterval = setInterval(() => updateMicTimer(prefix), 1000);
+  updateMicTimer(prefix);
+}
+
+function updateMicTimer(prefix) {
+  const state = _micState[prefix];
+  if (!state) return;
+  const elapsedSec = Math.floor((Date.now() - state.startedAt) / 1000);
+  const timeEl = document.getElementById(`${prefix}-mic-rec-time`);
+  if (timeEl) timeEl.textContent = fmtMicTime(elapsedSec);
+  if (elapsedSec >= MIC_MAX_RECORDING_SEC) {
+    showToast("Limite de 10 minutos de gravação atingido — parando automaticamente.", "t-warn");
+    stopMicRecording(prefix);
+  }
+}
+
+function showMicRecordingBar(prefix) {
+  const bar = document.getElementById(`${prefix}-mic-recording-bar`);
+  if (bar) bar.style.display = "flex";
+  const timeEl = document.getElementById(`${prefix}-mic-rec-time`);
+  if (timeEl) timeEl.textContent = "00:00";
+}
+
+function hideMicRecordingBar(prefix) {
+  const bar = document.getElementById(`${prefix}-mic-recording-bar`);
+  if (bar) bar.style.display = "none";
+}
+
+// Libera as tracks de áudio — sempre chamado ao sair da gravação (enviar, cancelar,
+// erro ou troca de conversa), para nunca deixar o microfone "preso" ligado.
+function releaseMicStream(prefix) {
+  const state = _micState[prefix];
+  if (!state) return;
+  if (state.timerInterval) clearInterval(state.timerInterval);
+  if (state.stream) state.stream.getTracks().forEach(t => t.stop());
+  _micState[prefix] = null;
+}
+
+// Cancela a gravação em andamento (se houver) sem montar preview — usado pelo
+// botão "Cancelar" e como rede de segurança ao trocar de conversa/fechar o composer.
+function cancelMicRecording(prefix) {
+  const state = _micState[prefix];
+  if (!state) return;
+  try {
+    state.recorder.onstop = null; // descarta silenciosamente, sem preview
+    if (state.recorder.state !== "inactive") state.recorder.stop();
+  } catch { /* recorder já pode estar parado */ }
+  releaseMicStream(prefix);
+  hideMicRecordingBar(prefix);
+}
+
+function stopMicRecording(prefix) {
+  const state = _micState[prefix];
+  if (!state || state.recorder.state === "inactive") return;
+  state.recorder.onstop = async () => {
+    const durationSec = Math.floor((Date.now() - state.startedAt) / 1000);
+    const blob = new Blob(state.chunks, { type: state.sendMime });
+    releaseMicStream(prefix);
+    hideMicRecordingBar(prefix);
+    if (!blob.size) {
+      showToast("Gravação vazia — tente novamente.", "t-warn");
+      return;
+    }
+    try {
+      const base64 = await blobToBase64(blob);
+      pendingAudio[prefix] = { base64, mimeType: state.sendMime, durationSec };
+      showAudioPreview(prefix);
+    } catch {
+      showToast("Não consegui processar o áudio gravado. Tente novamente.", "t-err");
+    }
+  };
+  state.recorder.stop();
+}
+
+function blobToBase64(blob) {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(String(reader.result).split(",")[1] || "");
+    reader.onerror = () => reject(reader.error);
+    reader.readAsDataURL(blob);
+  });
+}
+
+function showAudioPreview(prefix) {
+  const bar        = document.getElementById(`${prefix}-audio-preview-bar`);
+  const playerHost = document.getElementById(`${prefix}-audio-preview-player`);
+  const durationEl = document.getElementById(`${prefix}-audio-preview-duration`);
+  const audio      = pendingAudio[prefix];
+  if (!bar || !playerHost || !audio) return;
+  playerHost.innerHTML = "";
+  playerHost.appendChild(createAudioPlayer(null, audio.base64, audio.mimeType));
+  if (durationEl) durationEl.textContent = fmtMicTime(audio.durationSec || 0);
+  bar.style.display = "flex";
+}
+
+function discardPendingAudio(prefix) {
+  pendingAudio[prefix] = null;
+  const bar = document.getElementById(`${prefix}-audio-preview-bar`);
+  if (bar) bar.style.display = "none";
+  const playerHost = document.getElementById(`${prefix}-audio-preview-player`);
+  if (playerHost) playerHost.innerHTML = "";
+}
+
+// Rede de segurança chamada ao trocar de conversa/fechar o composer — nunca deixa
+// gravação presa nem áudio de uma conversa "vazando" para outra.
+function resetMicComposer(prefix) {
+  cancelMicRecording(prefix);
+  discardPendingAudio(prefix);
+}
+
+async function sendAudioMessage(prefix) {
+  const phone = getPhoneForPrefix(prefix);
+  const audio = pendingAudio[prefix];
+  if (!phone || !audio) return;
+
+  if (isComposerWindowClosed(prefix)) {
+    showToast("Janela fechada — use um template para retomar", "t-warn");
+    return;
+  }
+  if (_isSending[prefix]) { showToast("Aguarde — envio em andamento.", "t-warn"); return; }
+
+  const att = getCurrentAttendant();
+  const messagesId = prefix === "modal" ? "modal-messages" : "convs-messages";
+  const container   = document.getElementById(messagesId);
+
+  _isSending[prefix] = true;
+  const previewBar = document.getElementById(`${prefix}-audio-preview-bar`);
+  const sendBtnEl  = previewBar?.querySelector(".btn-send-audio");
+  if (sendBtnEl) sendBtnEl.disabled = true;
+
+  appendBubble(container, {
+    role: "assistant", content: "", sentByHuman: true,
+    mediaType: "audio", mediaData: audio.base64, mediaMimeType: audio.mimeType,
+    attendantId: att?.id, attendantName: att?.name,
+  }, true);
+  scrollToBottom(container);
+  if (previewBar) previewBar.style.display = "none";
+
+  try {
+    const payload = {
+      to: phone, type: "audio", mediaBase64: audio.base64, mimeType: audio.mimeType,
+      attendantId:   att?.id   || null,
+      attendantName: att?.name || null,
+    };
+    const res = await fetch("/api/send", {
+      method:  "POST",
+      headers: { "Content-Type": "application/json" },
+      body:    JSON.stringify(payload),
+    });
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({}));
+      console.error("[sendAudio] ❌", err.detail || err.error);
+      removeLastOptimistic(container);
+      showAudioPreview(prefix); // pendingAudio segue intacto — permite reenviar
+      showToast("Não consegui enviar o áudio. Tente novamente.", "t-err");
+    } else {
+      pendingAudio[prefix] = null;
+      prefix === "modal" ? await refreshModal() : await refreshConvsChat(phone);
+      showToast("Áudio enviado");
+      await ensureAttendantAssumedOnMessage(phone, prefix);
+      autoAdvanceAfterHumanReply(phone);
+    }
+  } catch (e) {
+    console.error("[sendAudio] ❌ rede:", e?.message);
+    removeLastOptimistic(container);
+    showAudioPreview(prefix);
+    showToast("Não consegui enviar o áudio. Verifique a conexão e tente novamente.", "t-err");
+  } finally {
+    _isSending[prefix] = false;
+    if (sendBtnEl) sendBtnEl.disabled = false;
+  }
 }
 
 // ── Renderiza fila de thumbnails ──────────────────────────────────────────────
@@ -11116,10 +11691,12 @@ function lockComposerResolved(prefix, phone, clientType) {
   const fileInput  = document.getElementById(`${prefix}-file-input`);
   const lockBar    = document.getElementById(`${prefix}-composer-lock`);
   const quickMsgBtn = document.getElementById(`${prefix}-quickmsg-btn`);
+  const micBtn     = document.getElementById(`${prefix}-mic-btn`);
   if (textarea)   { textarea.disabled = true;  textarea.placeholder = "Atendimento resolvido"; }
   if (sendBtn)    sendBtn.disabled = true;
   if (fileInput)  fileInput.disabled = true;
   if (quickMsgBtn) quickMsgBtn.disabled = true;
+  if (micBtn)     micBtn.disabled = true;
   if (lockBar) {
     lockBar.style.display = "flex";
     lockBar.className = "composer-lock-bar resolved-lock";
@@ -11234,11 +11811,13 @@ function lockComposer(prefix, reason) {
   const fileInput  = document.getElementById(`${prefix}-file-input`);
   const lockBar    = document.getElementById(`${prefix}-composer-lock`);
   const quickMsgBtn = document.getElementById(`${prefix}-quickmsg-btn`);
+  const micBtn     = document.getElementById(`${prefix}-mic-btn`);
 
   if (textarea)   { textarea.disabled = true;  textarea.placeholder = "Janela encerrada"; }
   if (sendBtn)    sendBtn.disabled = true;
   if (fileInput)  fileInput.disabled = true;
   if (quickMsgBtn) quickMsgBtn.disabled = true;
+  if (micBtn)     micBtn.disabled = true;
 
   if (lockBar) {
     lockBar.style.display = "flex";
@@ -11395,11 +11974,13 @@ function unlockComposer(prefix) {
   const fileInput  = document.getElementById(`${prefix}-file-input`);
   const lockBar    = document.getElementById(`${prefix}-composer-lock`);
   const quickMsgBtn = document.getElementById(`${prefix}-quickmsg-btn`);
+  const micBtn     = document.getElementById(`${prefix}-mic-btn`);
 
   if (textarea)   { textarea.disabled = false; textarea.placeholder = "Digite sua mensagem..."; }
   if (sendBtn)    sendBtn.disabled = false;
   if (fileInput)  fileInput.disabled = false;
   if (quickMsgBtn) quickMsgBtn.disabled = false;
+  if (micBtn)     micBtn.disabled = false;
   if (lockBar)    lockBar.style.display = "none";
 
 }
@@ -12001,6 +12582,13 @@ function showConvsListLoading() {
   if (!list) return;
   list._lastSig = null; // força re-render quando o resultado chegar
   list.innerHTML = '<div class="convs-list-loading"><span class="convs-loading-spinner"></span>Buscando...</div>';
+  document.getElementById('convs-search-spinner')?.classList.add('visible');
+}
+
+// Some assim que o resultado (sucesso ou erro) chega — evita o spinner do campo
+// ficar girando indefinidamente enquanto a lista já mostra outra coisa.
+function hideConvsSearchSpinner() {
+  document.getElementById('convs-search-spinner')?.classList.remove('visible');
 }
 
 function setConvsMode(mode) {
@@ -12086,26 +12674,35 @@ function setConvSort(sort) {
 
 async function loadContacts() {
   const mySeq  = ++_contactsRequestSeq;
+  if (_activeContactsAbort) _activeContactsAbort.abort();
+  const ac = new AbortController();
+  _activeContactsAbort = ac;
+
   const search = document.getElementById('convs-search-input')?.value || '';
   const list   = document.getElementById('convs-list');
   try {
     const url = `/api/contacts?limit=50${search ? `&search=${encodeURIComponent(search)}` : ''}`;
-    const res  = await fetch(url);
+    const res  = await fetch(url, { signal: ac.signal });
     if (!res.ok) throw new Error('HTTP ' + res.status);
     const data = await res.json();
     if (mySeq !== _contactsRequestSeq) return; // resposta antiga — uma busca mais nova já assumiu
     if (convsSectionMode !== 'contacts') return; // modo mudou durante o fetch — não sobrescreve conversas
+    hideConvsSearchSpinner();
     renderContactsList(data.contacts || []);
   } catch (e) {
+    if (e.name === 'AbortError') return; // cancelamento intencional — uma busca mais nova já assumiu
     console.error('[loadContacts]', e);
     if (mySeq !== _contactsRequestSeq) return; // falha de requisição já substituída — ignora
     if (convsSectionMode !== 'contacts') return; // modo mudou durante o fetch
+    hideConvsSearchSpinner();
     if (list) list.innerHTML = `<div style="padding:24px 16px;text-align:center;color:var(--text-secondary)">
       <div style="font-size:.85rem;margin-bottom:12px">Não foi possível carregar os contatos agora. Verifique a conexão e tente novamente.</div>
       <button onclick="loadContacts()" style="background:var(--brand-navy);color:#fff;border:none;padding:8px 18px;border-radius:8px;cursor:pointer;font-size:.8rem;font-weight:600">
         Tentar novamente
       </button>
     </div>`;
+  } finally {
+    if (_activeContactsAbort === ac) _activeContactsAbort = null;
   }
 }
 

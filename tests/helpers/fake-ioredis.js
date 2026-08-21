@@ -4,6 +4,7 @@
 const store = new Map();
 const expiresAt = new Map();
 const sets = new Map();
+const lists = new Map();
 let clockOffsetMs = 0;
 
 function now() {
@@ -13,6 +14,7 @@ function now() {
 function purgeExpired(key) {
   if (expiresAt.has(key) && expiresAt.get(key) <= now()) {
     store.delete(key);
+    lists.delete(key);
     expiresAt.delete(key);
   }
 }
@@ -155,11 +157,63 @@ export default class FakeRedis {
     };
   }
 
+  // ── Lista (subconjunto usado pela métrica best-effort de encaminhamentos Denise) ──
+  async lpush(key, ...values) {
+    purgeExpired(key);
+    if (!lists.has(key)) lists.set(key, []);
+    const arr = lists.get(key);
+    for (const v of values) arr.unshift(v);
+    return arr.length;
+  }
+
+  async ltrim(key, start, stop) {
+    purgeExpired(key);
+    const arr = lists.get(key) || [];
+    const len = arr.length;
+    const s = start < 0 ? Math.max(len + start, 0) : start;
+    const e = Math.min(stop < 0 ? len + stop : stop, len - 1);
+    lists.set(key, s > e || len === 0 ? [] : arr.slice(s, e + 1));
+    return "OK";
+  }
+
+  async lrange(key, start, stop) {
+    purgeExpired(key);
+    const arr = lists.get(key) || [];
+    const len = arr.length;
+    const s = start < 0 ? Math.max(len + start, 0) : start;
+    const e = Math.min(stop < 0 ? len + stop : stop, len - 1);
+    return s > e || len === 0 ? [] : arr.slice(s, e + 1);
+  }
+
+  async expire(key, seconds) {
+    purgeExpired(key);
+    if (!store.has(key) && !lists.has(key)) return 0;
+    expiresAt.set(key, now() + Number(seconds) * 1000);
+    return 1;
+  }
+
+  multi() {
+    const ops = [];
+    const self = this;
+    const chain = {
+      lpush(key, ...values) { ops.push(() => self.lpush(key, ...values)); return chain; },
+      ltrim(key, start, stop) { ops.push(() => self.ltrim(key, start, stop)); return chain; },
+      expire(key, seconds) { ops.push(() => self.expire(key, seconds)); return chain; },
+      async exec() {
+        const results = [];
+        for (const op of ops) results.push([null, await op()]);
+        return results;
+      },
+    };
+    return chain;
+  }
+
   // Test-only helpers — not part of the real ioredis API.
   static _reset() {
     store.clear();
     expiresAt.clear();
     sets.clear();
+    lists.clear();
     clockOffsetMs = 0;
   }
 

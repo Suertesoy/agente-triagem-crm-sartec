@@ -14,6 +14,21 @@ const GRAPH_VERSION = "v19.0"; // mantém a mesma versão já usada por api/send
 const TRANSIENT_META_CODES = new Set([1, 2, 4, 17, 131000]);
 const forwardingNow = new Set();
 
+// Contador de métricas — best-effort, nunca bloqueia nem afeta o encaminhamento em si.
+// Lista capada usada só pela aba Métricas (api/metrics.js) para medir volume desde a implementação.
+const DENISE_FORWARD_METRICS_KEY = "sartec:metrics:denise_forwards";
+const DENISE_FORWARD_METRICS_CAP = 19999;
+const DENISE_FORWARD_METRICS_TTL = 60 * 60 * 24 * 90; // 90 dias — mesma janela de retenção do restante do histórico
+
+function recordDeniseForwardMetric(redis, mediaType) {
+  redis.multi()
+    .lpush(DENISE_FORWARD_METRICS_KEY, JSON.stringify({ at: new Date().toISOString(), mediaType }))
+    .ltrim(DENISE_FORWARD_METRICS_KEY, 0, DENISE_FORWARD_METRICS_CAP)
+    .expire(DENISE_FORWARD_METRICS_KEY, DENISE_FORWARD_METRICS_TTL)
+    .exec()
+    .catch((err) => console.warn("[forward-media] métrica não persistida:", err.message));
+}
+
 let redisClient = null;
 
 function getRedis() {
@@ -274,6 +289,7 @@ export default async function handler(req, res) {
     }
 
     console.log(`[forward-media] enviado para Denise source=+${phone} idx=${index} type=${media.mediaType} size=${originalBytes.length}`);
+    recordDeniseForwardMetric(getRedis(), media.mediaType);
     return res.status(200).json({ success: true, message: "Enviado para Denise" });
   } catch (error) {
     console.error("[forward-media]", error.message);
