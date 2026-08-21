@@ -1197,10 +1197,25 @@
     .contact-avatar { width:38px; height:38px; border-radius:50%; background:var(--brand-navy); color:#fff; font-weight:700; font-size:.8rem; display:flex; align-items:center; justify-content:center; flex-shrink:0; }
     .contact-avatar.pj { background:var(--pj-color); }
     .contact-info { flex:1; min-width:0; }
-    .contact-name-row { display:flex; align-items:baseline; gap:4px; margin-bottom:2px; }
+    .contact-name-row { display:flex; align-items:center; gap:4px; margin-bottom:2px; }
     .contact-name { font-size:.84rem; font-weight:600; color:var(--text-primary); white-space:nowrap; overflow:hidden; text-overflow:ellipsis; flex:1; min-width:0; }
     .contact-time { font-size:.65rem; color:var(--text-muted); flex-shrink:0; }
-    .contact-phone { font-size:.7rem; color:var(--text-secondary); margin-bottom:3px; }
+    .contact-phone { font-size:.82rem; color:var(--text-primary); margin-bottom:3px; font-variant-numeric:tabular-nums; }
+    .contact-phone-row, .copy-value-row { display:flex; align-items:center; gap:5px; min-width:0; }
+    .copy-icon-btn {
+      width:25px; height:25px; padding:0; border:0; border-radius:6px;
+      display:inline-flex; align-items:center; justify-content:center; flex-shrink:0;
+      background:transparent; color:var(--text-muted); cursor:pointer;
+      transition:background .12s,color .12s,transform .12s;
+    }
+    .copy-icon-btn:hover, .copy-icon-btn:focus-visible { background:rgba(26,42,94,.09); color:var(--brand-navy); outline:none; }
+    .copy-icon-btn:focus-visible { box-shadow:0 0 0 2px rgba(59,130,246,.28); }
+    .copy-icon-btn.copied { color:#15803d; background:#dcfce7; }
+    .copy-icon-btn svg { width:14px; height:14px; pointer-events:none; }
+    .copy-icon-btn.on-dark { color:rgba(255,255,255,.72); }
+    .copy-icon-btn.on-dark:hover, .copy-icon-btn.on-dark:focus-visible { color:#fff; background:rgba(255,255,255,.16); box-shadow:0 0 0 2px rgba(255,255,255,.2); }
+    .copy-icon-btn.on-dark.copied { color:#dcfce7; background:rgba(22,163,74,.38); }
+    .card-phone-line { display:flex; align-items:center; gap:4px; margin-top:2px; color:var(--text-secondary); font-size:.76rem; font-variant-numeric:tabular-nums; }
     .contact-meta { display:flex; align-items:center; gap:4px; flex-wrap:wrap; }
     .contact-type-badge { font-size:.52rem; font-weight:700; padding:1px 5px; border-radius:4px; text-transform:uppercase; background:#f3f4f6; color:#374151; }
     .contact-status-badge { font-size:.52rem; font-weight:700; padding:1px 5px; border-radius:4px; text-transform:uppercase; background:#e0e7ff; color:#3730a3; }
@@ -1251,8 +1266,10 @@
     .cd-header { display:flex; align-items:center; gap:14px; margin-bottom:20px; padding-bottom:16px; border-bottom:1px solid var(--border); }
     .cd-avatar { width:48px; height:48px; border-radius:50%; background:var(--brand-navy); color:#fff; font-weight:700; font-size:1rem; display:flex; align-items:center; justify-content:center; flex-shrink:0; }
     .cd-avatar.pj { background:var(--pj-color); }
-    .cd-title { font-size:.95rem; font-weight:700; color:var(--text-primary); }
-    .cd-subtitle { font-size:.72rem; color:var(--text-secondary); margin-top:2px; }
+    .cd-title { font-size:1rem; font-weight:700; color:var(--text-primary); }
+    .cd-subtitle { font-size:.88rem; color:var(--text-primary); margin-top:3px; font-variant-numeric:tabular-nums; }
+    .cd-identity { flex:1; min-width:0; }
+    .cd-identity .copy-value-row > span:first-child { min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
     .cd-section { margin-bottom:20px; }
     .cd-section-title { font-size:.6rem; font-weight:800; text-transform:uppercase; letter-spacing:.1em; color:var(--text-muted); border-bottom:1px solid var(--border); padding-bottom:6px; margin-bottom:10px; }
     .cd-grid { display:grid; grid-template-columns:1fr 1fr; gap:6px 20px; margin-bottom:4px; }
@@ -1985,6 +2002,34 @@
       transition: opacity .15s;
     }
     .bubble-img:hover { opacity: .88; }
+
+    /* ── Menu contextual único para mídias recebidas ── */
+    .bubble.has-media-menu { position:relative; }
+    .media-menu-trigger {
+      position:absolute; top:5px; right:5px; z-index:2;
+      width:30px; height:30px; padding:0; border:0; border-radius:50%;
+      display:flex; align-items:center; justify-content:center;
+      background:rgba(255,255,255,.88); color:#374151; cursor:pointer;
+      box-shadow:0 1px 5px rgba(0,0,0,.18); opacity:.74;
+      transition:opacity .12s,background .12s;
+    }
+    .media-menu-trigger:hover, .media-menu-trigger:focus-visible { opacity:1; background:#fff; outline:none; box-shadow:0 0 0 2px rgba(59,130,246,.28),0 1px 5px rgba(0,0,0,.18); }
+    .media-menu-trigger svg { width:16px; height:16px; pointer-events:none; }
+    .media-action-menu {
+      position:fixed; z-index:10030; display:none; min-width:196px; padding:5px;
+      background:#fff; color:#1f2937; border:1px solid rgba(0,0,0,.1); border-radius:10px;
+      box-shadow:0 10px 28px rgba(15,23,42,.2);
+    }
+    .media-action-menu.visible { display:block; }
+    .media-action-item {
+      width:100%; min-height:40px; padding:8px 10px; border:0; border-radius:7px;
+      display:flex; align-items:center; gap:9px; background:transparent; color:inherit;
+      font:600 .78rem/1.2 inherit; text-align:left; cursor:pointer;
+    }
+    .media-action-item:hover, .media-action-item:focus-visible { background:#eef2ff; color:var(--brand-navy); outline:none; }
+    .media-action-item:disabled { opacity:.55; cursor:wait; }
+    .media-action-item svg { width:16px; height:16px; flex-shrink:0; }
+    @media (hover:none) { .media-menu-trigger { opacity:1; width:34px; height:34px; } .media-action-item { min-height:44px; } }
 
     /* ── Cards de PDF / Planilhas e Documentos Compactos ── */
     .media-doc-card {
@@ -5166,7 +5211,14 @@
     <div class="modal-header">
       <button class="modal-hdr-btn" onclick="closeModal()">✕</button>
       <div class="info">
-        <h2 id="modal-chat-name">—</h2>
+        <div class="copy-value-row">
+          <h2 id="modal-chat-name">—</h2>
+          <button class="copy-icon-btn on-dark" id="modal-copy-name" type="button" title="Copiar nome" aria-label="Copiar nome"></button>
+        </div>
+        <div class="copy-value-row" style="margin-top:2px;">
+          <span id="modal-chat-phone" style="font-size:.82rem;font-variant-numeric:tabular-nums;opacity:.92;"></span>
+          <button class="copy-icon-btn on-dark" id="modal-copy-phone" type="button" title="Copiar telefone" aria-label="Copiar telefone"></button>
+        </div>
         <div class="info-sub">
           <span id="modal-chat-badge"></span>
           <span id="modal-pipeline-status" style="opacity:.8"></span>
@@ -5257,7 +5309,7 @@
           <button class="btn-emoji" id="modal-emoji-btn" onclick="toggleEmojiPicker('modal'); event.stopPropagation();" title="Emojis aprovados">🙂</button>
           <button class="btn-quickmsg" id="modal-quickmsg-btn" onclick="openQuickMessages('modal'); event.stopPropagation();" aria-label="Mensagens rápidas" title="Mensagens rápidas"><span class="qm-btn-icon">💬</span><span class="qm-btn-label">Msgs rápidas</span></button>
           <textarea id="modal-msg-input" placeholder="Digite sua mensagem..." rows="1"
-            onkeydown="handleEnter(event,'modal')" oninput="autoResize(this)"></textarea>
+            onkeydown="handleEnter(event,'modal')" oninput="autoResize(this)" onpaste="handleComposerPaste(event,'modal')"></textarea>
           <button class="btn-introduce" onclick="introduceAttendant('modal')" title="Me apresentar">Me apresentar</button>
           <button class="btn-send" id="modal-send-btn" onclick="sendMessage('modal')">Enviar</button>
         </div>
@@ -5697,6 +5749,75 @@ let pdfBlobUrl = null;
 // ╚══════════════════════════════════════════════════════════════╝
 const esc = (s) =>
   String(s || "").replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;").replace(/"/g,"&quot;");
+
+const COPY_ICON_SVG = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="9" y="9" width="11" height="11" rx="2"></rect><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path></svg>';
+const CHECK_ICON_SVG = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m5 12 4 4L19 6"></path></svg>';
+
+function formatPhoneDisplay(raw) {
+  const n = String(raw || "").replace(/\D/g, "");
+  if (n.startsWith("55") && n.length >= 12) {
+    const local = n.slice(4);
+    const localPretty = local.length === 9
+      ? `${local.slice(0, 5)} ${local.slice(5)}`
+      : `${local.slice(0, 4)} ${local.slice(4)}`;
+    return `+55 ${n.slice(2, 4)} ${localPretty}`;
+  }
+  return n ? `+${n}` : "";
+}
+
+function copyButtonHTML(value, label, extraClass = "") {
+  if (!value) return "";
+  return `<button type="button" class="copy-icon-btn ${extraClass}" data-copy-value="${esc(value)}" data-copy-label="${esc(label)}" onclick="event.stopPropagation();copyContactValue(this)" title="Copiar ${esc(label.toLowerCase())}" aria-label="Copiar ${esc(label.toLowerCase())}">${COPY_ICON_SVG}</button>`;
+}
+
+function configureCopyButton(button, value, label) {
+  if (!button) return;
+  button.dataset.copyValue = value || "";
+  button.dataset.copyLabel = label;
+  button.innerHTML = COPY_ICON_SVG;
+  button.title = `Copiar ${label.toLowerCase()}`;
+  button.setAttribute("aria-label", `Copiar ${label.toLowerCase()}`);
+  button.onclick = (event) => { event.stopPropagation(); copyContactValue(button); };
+}
+
+async function writeClipboardText(value) {
+  if (navigator.clipboard?.writeText && window.isSecureContext) {
+    await navigator.clipboard.writeText(value);
+    return;
+  }
+  const fallback = document.createElement("textarea");
+  fallback.value = value;
+  fallback.setAttribute("readonly", "");
+  fallback.style.cssText = "position:fixed;left:-9999px;top:0;opacity:0";
+  document.body.appendChild(fallback);
+  fallback.select();
+  const copied = document.execCommand("copy");
+  fallback.remove();
+  if (!copied) throw new Error("Clipboard indisponível");
+}
+
+async function copyContactValue(button) {
+  const value = button?.dataset.copyValue || "";
+  const label = button?.dataset.copyLabel || "Valor";
+  if (!button || !value) return;
+  try {
+    await writeClipboardText(value);
+    clearTimeout(button._copyResetTimer);
+    button.classList.add("copied");
+    button.innerHTML = CHECK_ICON_SVG;
+    button.title = `${label} copiado`;
+    button.setAttribute("aria-label", `${label} copiado`);
+    button._copyResetTimer = setTimeout(() => {
+      if (!button.isConnected) return;
+      button.classList.remove("copied");
+      button.innerHTML = COPY_ICON_SVG;
+      button.title = `Copiar ${label.toLowerCase()}`;
+      button.setAttribute("aria-label", `Copiar ${label.toLowerCase()}`);
+    }, 1800);
+  } catch {
+    showToast("Não foi possível copiar. Selecione o valor manualmente.", "t-err");
+  }
+}
 
 function demandClass(t) {
   return { lista:"dt-lista", cotacao_pj:"dt-cotacao_pj", xerox:"dt-xerox",
@@ -7266,8 +7387,13 @@ function buildCard(c, col, cols) {
           onblur="saveCardField(this,'clientName'); this.contentEditable='false'"
           onkeydown="if(event.key==='Enter'){event.preventDefault();this.blur()}"
           title="${esc(c.clientName)} — duplo clique para editar">${esc(c.clientName)}</span>
+        ${copyButtonHTML(c.clientName, "Nome")}
         ${isIncomplete ? `<span class="badge-triagem">Triagem ⚠️</span>` : ""}
         ${isTemplateFailed ? `<span class="badge-template-failed" title="${esc(errTooltip)}">Mensagem não entregue ⚠️</span>` : ""}
+      </div>
+      <div class="card-phone-line">
+        <span>${esc(formatPhoneDisplay(c.phone))}</span>
+        ${copyButtonHTML(c.phone, "Telefone")}
       </div>
       ${attendantChip}
     </div>
@@ -8067,6 +8193,9 @@ function buildSummaryHTML(data) {
 function renderModal(data) {
   document.getElementById("modal-chat-name").textContent =
     data.clientName || data.phone || "—";
+  document.getElementById("modal-chat-phone").textContent = formatPhoneDisplay(data.phone);
+  configureCopyButton(document.getElementById("modal-copy-name"), data.clientName || data.phone || "—", "Nome");
+  configureCopyButton(document.getElementById("modal-copy-phone"), data.phone, "Telefone");
 
   document.getElementById("modal-chat-badge").innerHTML =
     `<span class="demand-tag ${demandClass(data.demandType)}">${demandLabel(data.demandType)}</span>`;
@@ -8374,7 +8503,14 @@ async function openConvsChat(phone, redisKey, isArchive) {
     <div style="background:var(--brand-navy);color:#fff;padding:12px 16px;display:flex;align-items:center;gap:10px;flex-shrink:0">
       <button class="mob-back-btn" onclick="closeMobChat()">&#8592; Voltar</button>
       <div style="flex:1;min-width:0">
-        <div id="convs-chat-name" style="font-size:.9rem;font-weight:700;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">Carregando...</div>
+        <div class="copy-value-row">
+          <div id="convs-chat-name" style="font-size:.96rem;font-weight:700;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">Carregando...</div>
+          <button class="copy-icon-btn on-dark" id="convs-copy-name" type="button" title="Copiar nome" aria-label="Copiar nome"></button>
+        </div>
+        <div class="copy-value-row" style="margin-top:2px;">
+          <span id="convs-chat-phone" style="font-size:.82rem;font-variant-numeric:tabular-nums;opacity:.92;"></span>
+          <button class="copy-icon-btn on-dark" id="convs-copy-phone" type="button" title="Copiar telefone" aria-label="Copiar telefone"></button>
+        </div>
         <div id="convs-chat-sub" style="font-size:.7rem;opacity:.75;display:flex;gap:8px;margin-top:2px"></div>
       </div>
       <button onclick="showContactFromChat('${esc(phone)}')"
@@ -8413,7 +8549,7 @@ async function openConvsChat(phone, redisKey, isArchive) {
           <button class="btn-emoji" id="convs-emoji-btn" onclick="toggleEmojiPicker('convs'); event.stopPropagation();" title="Emojis aprovados">🙂</button>
           <button class="btn-quickmsg" id="convs-quickmsg-btn" onclick="openQuickMessages('convs'); event.stopPropagation();" aria-label="Mensagens rápidas" title="Mensagens rápidas"><span class="qm-btn-icon">💬</span><span class="qm-btn-label">Msgs rápidas</span></button>
           <textarea id="convs-msg-input" placeholder="Digite sua mensagem..." rows="1"
-            onkeydown="handleEnter(event,'convs')" oninput="autoResize(this)"></textarea>
+            onkeydown="handleEnter(event,'convs')" oninput="autoResize(this)" onpaste="handleComposerPaste(event,'convs')"></textarea>
           <button class="btn-introduce" onclick="introduceAttendant('convs')" title="Me apresentar">Me apresentar</button>
           <button class="btn-send" id="convs-send-btn" onclick="sendMessage('convs')">Enviar</button>
         </div>
@@ -8470,6 +8606,10 @@ function renderConvsChat(data) {
   if (!nameEl) return;
 
   nameEl.textContent = data.clientName || data.phone || "—";
+  const phoneEl = document.getElementById("convs-chat-phone");
+  if (phoneEl) phoneEl.textContent = formatPhoneDisplay(data.phone);
+  configureCopyButton(document.getElementById("convs-copy-name"), data.clientName || data.phone || "—", "Nome");
+  configureCopyButton(document.getElementById("convs-copy-phone"), data.phone, "Telefone");
   if (subEl) {
     subEl.innerHTML = `
       <span class="demand-tag ${demandClass(data.demandType)}" style="font-size:.6rem;padding:1px 5px">${demandLabel(data.demandType)}</span>
@@ -8699,6 +8839,240 @@ function getQuotedPreview(msg, history) {
   return result;
 }
 
+const MEDIA_MENU_ICONS = {
+  denise: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m22 2-7 20-4-9-9-4Z"></path><path d="M22 2 11 13"></path></svg>',
+  download: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><path d="m7 10 5 5 5-5"></path><path d="M12 15V3"></path></svg>',
+  print: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 9V2h12v7"></path><path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"></path><rect x="6" y="14" width="12" height="8"></rect></svg>',
+  edit: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9"></path><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4Z"></path></svg>',
+  remove: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h18"></path><path d="M8 6V4h8v2"></path><path d="m19 6-1 14H6L5 6"></path></svg>',
+};
+
+const _forwardingMedia = new Set();
+let _openMediaMenu = null;
+
+function mediaExtension(mimeType) {
+  return ({
+    "image/jpeg":"jpg", "image/jpg":"jpg", "image/png":"png", "image/webp":"webp", "image/gif":"gif",
+    "application/pdf":"pdf", "application/msword":"doc",
+    "application/vnd.openxmlformats-officedocument.wordprocessingml.document":"docx",
+    "application/vnd.ms-excel":"xls",
+    "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet":"xlsx",
+  })[String(mimeType || "").toLowerCase()] || "bin";
+}
+
+function safeMediaFilename(value, mediaType, mimeType, createdAt) {
+  const clean = String(value || "").replace(/[\\/:*?"<>|\u0000-\u001f]/g, "-").trim();
+  if (clean) return clean;
+  let day = new Date().toISOString().slice(0, 10);
+  try { if (createdAt) day = new Date(createdAt).toISOString().slice(0, 10); } catch {}
+  return `${mediaType === "image" ? "lista-escolar" : "documento-recebido"}-${day}.${mediaExtension(mimeType)}`;
+}
+
+// Abstração única para URL R2, storage key e base64 legado.
+function getMessageMedia(msg, sourcePhone, sourceKey, historyIndex) {
+  const mediaType = msg.mediaType || (msg.mediaMimeType === "application/pdf" ? "document" : null);
+  const mimeType = msg.mediaMimeType || (mediaType === "image" ? "image/jpeg" : "application/octet-stream");
+  const available = !msg.mediaUnavailable && !msg.mediaDeleted && !!(msg.mediaUrl || msg.mediaData);
+  return {
+    available,
+    mediaType,
+    mimeType,
+    filename: safeMediaFilename(msg.mediaFilename, mediaType, mimeType, msg.createdAt),
+    mediaUrl: msg.mediaUrl || null,
+    mediaStorageKey: msg.mediaStorageKey || null,
+    mediaData: msg.mediaData || null,
+    messageId: msg.metaMessageId || null,
+    sourcePhone,
+    sourceKey,
+    historyIndex,
+  };
+}
+
+function base64ToOriginalBlob(base64, mimeType) {
+  const raw = String(base64 || "");
+  const clean = raw.startsWith("data:") ? raw.slice(raw.indexOf(",") + 1) : raw;
+  const binary = atob(clean);
+  const bytes = new Uint8Array(binary.length);
+  for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
+  return new Blob([bytes], { type: mimeType || "application/octet-stream" });
+}
+
+async function getOriginalMediaBlob(media) {
+  if (!media?.available) throw new Error("Mídia indisponível");
+  if (media.mediaUrl) {
+    const response = await fetch(media.mediaUrl);
+    if (!response.ok) throw new Error(`Falha ao buscar mídia (${response.status})`);
+    const bytes = await response.arrayBuffer();
+    return new Blob([bytes], { type: media.mimeType || response.headers.get("content-type") || "application/octet-stream" });
+  }
+  if (media.mediaData) return base64ToOriginalBlob(media.mediaData, media.mimeType);
+  throw new Error("Arquivo original não localizado");
+}
+
+async function downloadOriginalMedia(media) {
+  try {
+    const blob = await getOriginalMediaBlob(media);
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.href = url;
+    link.download = media.filename;
+    document.body.appendChild(link);
+    link.click();
+    link.remove();
+    setTimeout(() => URL.revokeObjectURL(url), 30000);
+  } catch (error) {
+    // URL assinada ainda pode ser aberta quando o bucket não expõe CORS para fetch.
+    if (media?.mediaUrl) window.open(media.mediaUrl, "_blank", "noopener");
+    else showToast("Não foi possível baixar o arquivo original.", "t-err");
+  }
+}
+
+async function printOriginalMedia(media) {
+  const printWindow = window.open("", "_blank");
+  if (!printWindow) { showToast("Permita pop-ups para imprimir o arquivo.", "t-warn"); return; }
+  printWindow.document.write('<!doctype html><title>Preparando impressão…</title><p style="font:14px sans-serif;padding:20px">Preparando arquivo original…</p>');
+  try {
+    const blob = await getOriginalMediaBlob(media);
+    const url = URL.createObjectURL(blob);
+    if (String(media.mimeType || "").toLowerCase().includes("pdf")) {
+      printWindow.document.open();
+      printWindow.document.write(`<!doctype html><html><head><title>${esc(media.filename)}</title><style>html,body,iframe{width:100%;height:100%;margin:0;border:0;overflow:hidden}</style></head><body><iframe id="original-pdf" src="${url}"></iframe></body></html>`);
+      printWindow.document.close();
+      const frame = printWindow.document.getElementById("original-pdf");
+      frame.onload = () => { try { frame.contentWindow.focus(); frame.contentWindow.print(); } catch {} };
+    } else if (media.mediaType === "image") {
+      printWindow.document.open();
+      printWindow.document.write(`<!doctype html><html><head><title>${esc(media.filename)}</title><style>@page{margin:8mm}html,body{margin:0;width:100%;height:100%}body{display:flex;align-items:center;justify-content:center}img{display:block;max-width:100%;max-height:100vh;width:auto;height:auto;object-fit:contain}@media print{body{height:auto;min-height:100vh}img{max-height:calc(100vh - 16mm)}}</style></head><body><img id="original-image" src="${url}" alt=""></body></html>`);
+      printWindow.document.close();
+      printWindow.document.getElementById("original-image").onload = () => setTimeout(() => { printWindow.focus(); printWindow.print(); }, 80);
+    } else {
+      // Formatos Office dependem do suporte nativo/associação do navegador.
+      printWindow.location.href = url;
+    }
+    setTimeout(() => URL.revokeObjectURL(url), 120000);
+  } catch {
+    if (media?.mediaUrl) printWindow.location.href = media.mediaUrl;
+    else { printWindow.close(); showToast("Não foi possível preparar a impressão.", "t-err"); }
+  }
+}
+
+function closeMediaActionMenu() {
+  const menu = document.getElementById("media-action-menu");
+  if (menu) menu.classList.remove("visible");
+  _openMediaMenu?.setAttribute?.("aria-expanded", "false");
+  _openMediaMenu = null;
+}
+
+function addMediaMenuItem(menu, icon, label, handler, options = {}) {
+  const button = document.createElement("button");
+  button.type = "button";
+  button.className = "media-action-item";
+  button.setAttribute("role", "menuitem");
+  button.innerHTML = `${MEDIA_MENU_ICONS[icon]}<span>${label}</span>`;
+  if (options.title) button.title = options.title;
+  button.onclick = async (event) => { event.stopPropagation(); await handler(button); };
+  menu.appendChild(button);
+  return button;
+}
+
+async function forwardMediaToDenise(media, button) {
+  const key = `${media.sourceKey || media.sourcePhone}:${media.historyIndex}:${media.messageId || "sem-id"}`;
+  if (_forwardingMedia.has(key)) return;
+  if (!window.confirm("Enviar este arquivo para Denise?")) return;
+  _forwardingMedia.add(key);
+  const label = button.querySelector("span");
+  const originalText = label?.textContent || "Enviar para Denise";
+  button.disabled = true;
+  if (label) label.textContent = "Enviando…";
+  try {
+    const response = await fetch("/api/forward-media", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        sourcePhone: media.sourcePhone,
+        sourceKey: media.sourceKey,
+        historyIndex: media.historyIndex,
+        messageId: media.messageId,
+      }),
+    });
+    const data = await response.json().catch(() => ({}));
+    if (!response.ok) throw new Error([data.error, data.detail].filter(Boolean).join(" "));
+    closeMediaActionMenu();
+    showToast("Enviado para Denise");
+  } catch (error) {
+    button.disabled = false;
+    if (label) label.textContent = originalText;
+    showToast(error.message || "Não foi possível enviar para Denise.", "t-err");
+  } finally {
+    _forwardingMedia.delete(key);
+  }
+}
+
+function openMessageMediaMenu(event, media, msg, editableContent) {
+  event.stopPropagation();
+  let menu = document.getElementById("media-action-menu");
+  if (!menu) {
+    menu = document.createElement("div");
+    menu.id = "media-action-menu";
+    menu.className = "media-action-menu";
+    menu.setAttribute("role", "menu");
+    document.body.appendChild(menu);
+  }
+  if (_openMediaMenu === event.currentTarget) { closeMediaActionMenu(); return; }
+  if (_openMediaMenu) closeMediaActionMenu();
+  menu.innerHTML = "";
+  addMediaMenuItem(menu, "denise", "Enviar para Denise", (button) => forwardMediaToDenise(media, button));
+  addMediaMenuItem(menu, "download", "Baixar", () => { closeMediaActionMenu(); return downloadOriginalMedia(media); });
+  addMediaMenuItem(menu, "print", "Imprimir", () => { closeMediaActionMenu(); return printOriginalMedia(media); });
+  if (isSiteSchoolListMessage(editableContent)) {
+    addMediaMenuItem(menu, "edit", "Editar lista", () => { closeMediaActionMenu(); openSchoolListOrganize(editableContent, msg); });
+  }
+  if (!String(media.sourceKey || "").includes(":archive:")) {
+    addMediaMenuItem(menu, "remove", "Remover do armazenamento", (button) => {
+      closeMediaActionMenu();
+      return removeMedia(media.sourcePhone, media.historyIndex, button);
+    }, { title: "A mensagem permanece no histórico" });
+  }
+
+  menu.classList.add("visible");
+  const triggerRect = event.currentTarget.getBoundingClientRect();
+  const menuRect = menu.getBoundingClientRect();
+  const left = Math.max(8, Math.min(window.innerWidth - menuRect.width - 8, triggerRect.right - menuRect.width));
+  let top = triggerRect.bottom + 5;
+  if (top + menuRect.height > window.innerHeight - 8) top = Math.max(8, triggerRect.top - menuRect.height - 5);
+  menu.style.left = `${left}px`;
+  menu.style.top = `${top}px`;
+  _openMediaMenu = event.currentTarget;
+  _openMediaMenu.setAttribute("aria-expanded", "true");
+  menu.querySelector("button")?.focus();
+}
+
+function appendReceivedMediaMenu(bubble, msg, media, content) {
+  if (!media.available || (media.mediaType !== "image" && media.mediaType !== "document")) return;
+  bubble.classList.add("has-media-menu");
+  const trigger = document.createElement("button");
+  trigger.type = "button";
+  trigger.className = "media-menu-trigger";
+  trigger.title = "Ações do arquivo";
+  trigger.setAttribute("aria-label", "Abrir ações do arquivo");
+  trigger.setAttribute("aria-haspopup", "menu");
+  trigger.setAttribute("aria-expanded", "false");
+  trigger.innerHTML = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m6 9 6 6 6-6"></path></svg>';
+  trigger.onclick = (event) => openMessageMediaMenu(event, media, msg, content);
+  bubble.appendChild(trigger);
+}
+
+document.addEventListener("click", (event) => {
+  const menu = document.getElementById("media-action-menu");
+  if (menu?.classList.contains("visible") && !menu.contains(event.target)) closeMediaActionMenu();
+});
+document.addEventListener("keydown", (event) => {
+  if (event.key === "Escape" && document.getElementById("media-action-menu")?.classList.contains("visible")) {
+    closeMediaActionMenu();
+    event.stopImmediatePropagation();
+  }
+});
+
 function appendBubble(container, msg, optimistic = false, history = null, historyIndex = null) {
   const { role, content, sentByHuman, mediaType, mediaData, mediaMimeType, mediaFilename,
           mediaUrl, mediaUnavailable, mediaDeleted, sentMedia, mediaStorageFailed,
@@ -8766,6 +9140,12 @@ function appendBubble(container, msg, optimistic = false, history = null, histor
 
   const wrap = document.createElement("div");
   wrap.className = `bubble-wrap ${role === "user" ? "left" : "right"}`;
+
+  const _mediaSourcePhone = container.id === "modal-messages" ? openModalPhone : openConvsPhone;
+  const _mediaSourceKey = container.id === "modal-messages"
+    ? (_mediaSourcePhone ? `sartec:${_mediaSourcePhone}` : null)
+    : (openConvsRedisKey || (_mediaSourcePhone ? `sartec:${_mediaSourcePhone}` : null));
+  const _messageMedia = getMessageMedia(msg, _mediaSourcePhone, _mediaSourceKey, historyIndex);
 
   const bubble = document.createElement("div");
   let cls = "client", label = "";
@@ -8861,7 +9241,7 @@ function appendBubble(container, msg, optimistic = false, history = null, histor
     const _isWord = (mediaMimeType || "").includes("wordprocessing") || /docx?/.test(mediaFilename || "") || (mediaMimeType || "").includes("msword");
     const _docIcon = _isPdf ? "📄" : _isSheet ? "📊" : _isWord ? "📝" : "📎";
     const _docLabel = mediaFilename || (_isPdf ? "Documento PDF" : "Documento");
-    const card = buildMediaCard(_docIcon, _docLabel, mediaData, mediaMimeType || "application/pdf", _isPdf, mediaUrl);
+    const card = buildMediaCard(_docIcon, _docLabel, mediaData, mediaMimeType || "application/pdf", _isPdf, mediaUrl, role !== "user");
     bubble.appendChild(card);
     if (content) {
       const txt = document.createElement("div");
@@ -8891,7 +9271,7 @@ function appendBubble(container, msg, optimistic = false, history = null, histor
     mediaMimeType?.includes("xlsx") ||
     mediaMimeType?.includes("xls")
   )) {
-    const card = buildMediaCard("📊", "Planilha", mediaData, mediaMimeType, false, mediaUrl);
+    const card = buildMediaCard("📊", "Planilha", mediaData, mediaMimeType, false, mediaUrl, role !== "user");
     bubble.appendChild(card);
 
   // ── Áudio ──
@@ -8926,10 +9306,14 @@ function appendBubble(container, msg, optimistic = false, history = null, histor
     bubble.appendChild(_textNode);
   }
 
+  if (role === "user" && !optimistic) {
+    appendReceivedMediaMenu(bubble, msg, _messageMedia, content);
+  }
+
 
 
   // ── Botão "Remover mídia" ────────────────────────────────────────────────────
-  if (!optimistic && historyIndex !== null && !mediaDeleted && !mediaUnavailable &&
+  if (role !== "user" && !optimistic && historyIndex !== null && !mediaDeleted && !mediaUnavailable &&
       (mediaUrl || mediaData)) {
     const _rmPhone = container.id === "modal-messages" ? openModalPhone : openConvsPhone;
     if (_rmPhone) {
@@ -8960,7 +9344,7 @@ function appendBubble(container, msg, optimistic = false, history = null, histor
   wrap.appendChild(bubble);
 
   // ── Linha de ações abaixo da bolha (fora da bolha) ──
-  if (role === "user" && !optimistic && isSiteSchoolListMessage(content)) {
+  if (role === "user" && !optimistic && isSiteSchoolListMessage(content) && !_messageMedia.available) {
     const _actRow = document.createElement("div");
     _actRow.className = "msg-actions-row";
     const _orgBtn = document.createElement("button");
@@ -9134,23 +9518,30 @@ function storeMedia(base64, mimeType, mediaUrl) {
   return key;
 }
 
-function buildMediaCard(icon, name, base64, mimeType, canView, mediaUrl) {
+function buildMediaCard(icon, name, base64, mimeType, canView, mediaUrl, showActions = true) {
   const key  = storeMedia(base64, mimeType, mediaUrl);
   const card = document.createElement("div");
   card.className = "media-doc-card";
 
-  const actionsHtml = canView
+  const actionsHtml = !showActions ? "" : (canView
     ? `<button class="btn-media" onclick="viewMedia('${key}')">Visualizar</button>
        <button class="btn-media" onclick="dlMedia('${key}','${esc(name)}')">Baixar</button>`
-    : `<button class="btn-media" onclick="dlMedia('${key}','${esc(name)}')">Baixar</button>`;
+    : `<button class="btn-media" onclick="dlMedia('${key}','${esc(name)}')">Baixar</button>`);
 
   card.innerHTML = `
     <div class="media-doc-main">
       <span class="media-doc-icon">${icon}</span>
       <div class="media-doc-name" title="${esc(name)}">${esc(name)}</div>
     </div>
-    <div class="media-doc-actions">${actionsHtml}</div>
+    ${actionsHtml ? `<div class="media-doc-actions">${actionsHtml}</div>` : ""}
   `;
+  if (!showActions && canView) {
+    card.style.cursor = "pointer";
+    card.tabIndex = 0;
+    card.title = "Clique para visualizar";
+    card.onclick = () => viewMedia(key);
+    card.onkeydown = (event) => { if (event.key === "Enter" || event.key === " ") { event.preventDefault(); viewMedia(key); } };
+  }
   return card;
 }
 
@@ -9476,6 +9867,31 @@ const _MAX_PDF_BYTES = 7 * 1024 * 1024; // 7 MB — base64 ~9.3 MB < 10 MB bodyP
 async function handleImageSelect(event, prefix) {
   const files = Array.from(event.target.files || []);
   event.target.value = "";
+  await ingestComposerFiles(prefix, files);
+}
+
+async function handleComposerPaste(event, prefix) {
+  const imageFiles = Array.from(event.clipboardData?.items || [])
+    .filter(item => item.kind === "file" && item.type?.startsWith("image/"))
+    .map((item, index) => {
+      const pasted = item.getAsFile();
+      if (!pasted) return null;
+      const ext = (pasted.type.split("/")[1] || "png").replace("jpeg", "jpg");
+      return pasted.name && pasted.name !== "image.png"
+        ? pasted
+        : new File([pasted], `imagem-colada-${Date.now()}-${index + 1}.${ext}`, { type: pasted.type });
+    })
+    .filter(Boolean);
+
+  // Clipboard sem imagem segue o comportamento nativo: texto continua sendo colado.
+  if (!imageFiles.length) return;
+  event.preventDefault();
+  await ingestComposerFiles(prefix, imageFiles);
+}
+
+// Upload manual, câmera e Ctrl+V convergem para a mesma fila e compressão.
+async function ingestComposerFiles(prefix, filesInput) {
+  const files = Array.from(filesInput || []);
   if (!files.length) return;
 
   // ── PDF: fila de documentos (substitui fluxo de arquivo único) ──
@@ -11762,7 +12178,7 @@ function renderContactsList(contacts) {
 function buildContactItem(c) {
   const name     = c.clientName || c.whatsappName || c.phone || '—';
   const isPJ     = c.clientType === 'pj';
-  const phoneStr = c.phone ? `+${c.phone}` : '';
+  const phoneStr = formatPhoneDisplay(c.phone);
 
   const item = document.createElement('div');
   item.className = 'contact-item';
@@ -11773,8 +12189,9 @@ function buildContactItem(c) {
     <div class="contact-info">
       <div class="contact-name-row">
         <span class="contact-name">${esc(name)}</span>
+        ${copyButtonHTML(name, "Nome")}
       </div>
-      ${phoneStr ? `<div class="contact-phone">${esc(phoneStr)}</div>` : ''}
+      ${phoneStr ? `<div class="contact-phone-row"><span class="contact-phone">${esc(phoneStr)}</span>${copyButtonHTML(c.phone, "Telefone")}</div>` : ''}
     </div>
     <button class="contact-reopen-btn">Abrir contato</button>
   `;
@@ -11804,7 +12221,7 @@ function openContactDetail(c) {
 
   const name     = c.clientName || c.whatsappName || c.phone || '—';
   const isPJ     = c.clientType === 'pj';
-  const phoneStr = c.phone ? `+${c.phone}` : '';
+  const phoneStr = formatPhoneDisplay(c.phone);
 
   const demandOptions = [
     { v: '',           l: '— Sem categoria' },
@@ -11826,9 +12243,9 @@ function openContactDetail(c) {
       <div class="cd-wrap">
         <div class="cd-header">
           <div class="cd-avatar ${isPJ ? 'pj' : ''}">${esc(initials(name))}</div>
-          <div>
-            <div class="cd-title">${esc(name)}</div>
-            <div class="cd-subtitle">${esc(phoneStr)}</div>
+          <div class="cd-identity">
+            <div class="copy-value-row"><span class="cd-title">${esc(name)}</span>${copyButtonHTML(name, "Nome")}</div>
+            <div class="copy-value-row"><span class="cd-subtitle">${esc(phoneStr)}</span>${copyButtonHTML(c.phone, "Telefone")}</div>
           </div>
         </div>
 
@@ -11926,10 +12343,12 @@ async function saveContactEdit(phone, prefix = 'cd') {
     if (openConvsPhone === phone) {
       const el = document.getElementById("convs-chat-name");
       if (el) el.textContent = clientName || phone;
+      configureCopyButton(document.getElementById("convs-copy-name"), clientName || phone, "Nome");
     }
     if (openModalPhone === phone) {
       const el = document.getElementById("modal-chat-name");
       if (el) el.textContent = clientName || phone;
+      configureCopyButton(document.getElementById("modal-copy-name"), clientName || phone, "Nome");
       if (demandType !== undefined) {
         const elBadge = document.getElementById("modal-chat-badge");
         if (elBadge) elBadge.innerHTML = `<span class="demand-tag ${demandClass(demandType)}">${demandLabel(demandType)}</span>`;
@@ -12043,7 +12462,7 @@ async function openContactDetailContextual(phone, parentElement, onBackCallback,
 function buildContextualContactFormHTML(c, prefix) {
   const name     = c.clientName || c.whatsappName || c.phone || '—';
   const isPJ     = c.clientType === 'pj';
-  const phoneStr = c.phone ? `+${c.phone}` : '';
+  const phoneStr = formatPhoneDisplay(c.phone);
 
   const demandOptions = [
     { v: '',           l: '— Sem categoria' },
@@ -12069,9 +12488,9 @@ function buildContextualContactFormHTML(c, prefix) {
           </svg>
         </button>
         <div class="cd-avatar ${isPJ ? 'pj' : ''}">${esc(initials(name))}</div>
-        <div style="flex:1;">
-          <div class="cd-title">${esc(name)}</div>
-          <div class="cd-subtitle">${esc(phoneStr)}</div>
+        <div class="cd-identity">
+          <div class="copy-value-row"><span class="cd-title">${esc(name)}</span>${copyButtonHTML(name, "Nome")}</div>
+          <div class="copy-value-row"><span class="cd-subtitle">${esc(phoneStr)}</span>${copyButtonHTML(c.phone, "Telefone")}</div>
         </div>
       </div>
 
