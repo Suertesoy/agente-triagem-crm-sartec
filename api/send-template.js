@@ -11,6 +11,13 @@
 //   TEMPLATE_PJ_PROSPECTING_NAME     (padrão: "sartec_prospeccao_pj")
 //   TEMPLATE_LANGUAGE_CODE           (padrão: "pt_BR")
 //
+// attendance_resume com botão Quick Reply (template retomar_atendimento_v2):
+//   TEMPLATE_ATTENDANCE_RESUME_QUICK_REPLY       ("true" para enviar o componente
+//     de botão — manter "false"/ausente enquanto o template ativo (v1) não tiver
+//     um botão Quick Reply aprovado na Meta, senão a Cloud API rejeita o envio)
+//   TEMPLATE_ATTENDANCE_RESUME_BUTTON_PAYLOAD    (padrão: "attendance_resume_continue"
+//     — payload estável enviado como override do botão; ver api/webhook.js)
+//
 // Após envio com sucesso, salva na sessão Redis:
 //   templateSentAt       → ISO da hora de envio
 //   lastTemplateType     → tipo enviado
@@ -55,6 +62,22 @@ function getTemplateName(templateType) {
 
 function getLanguageCode() {
   return (process.env.TEMPLATE_LANGUAGE_CODE || "pt_BR").trim();
+}
+
+// ── Componente de botão Quick Reply (attendance_resume / retomar_atendimento_v2) ──
+// Desligado por padrão: o template hoje ativo (v1) não tem botão aprovado na Meta,
+// e enviar um componente "button" para um template sem esse botão faz a Cloud API
+// rejeitar o envio inteiro. Ativar só depois de trocar TEMPLATE_ATTENDANCE_RESUME_NAME
+// para a versão com o botão aprovado (ex.: retomar_atendimento_v2).
+function getQuickReplyButtonConfig(templateType) {
+  if (templateType !== "attendance_resume") return null;
+  const enabled = String(process.env.TEMPLATE_ATTENDANCE_RESUME_QUICK_REPLY || "false")
+    .trim().toLowerCase() === "true";
+  if (!enabled) return null;
+  return {
+    index:   "0",
+    payload: (process.env.TEMPLATE_ATTENDANCE_RESUME_BUTTON_PAYLOAD || "attendance_resume_continue").trim(),
+  };
 }
 
 // Vercel: body pequeno é suficiente para templates
@@ -118,16 +141,32 @@ export default async function handler(req, res) {
   };
 
   // Adiciona parâmetros do corpo apenas se houver variáveis
+  const templateComponents = [];
   if (variables.length > 0) {
-    templatePayload.template.components = [
-      {
-        type: "body",
-        parameters: variables.map((v) => ({
-          type: "text",
-          text: String(v || " "),   // Meta rejeita string vazia
-        })),
-      },
-    ];
+    templateComponents.push({
+      type: "body",
+      parameters: variables.map((v) => ({
+        type: "text",
+        text: String(v || " "),   // Meta rejeita string vazia
+      })),
+    });
+  }
+
+  // Botão Quick Reply — só quando explicitamente habilitado (ver getQuickReplyButtonConfig)
+  const quickReplyButton = getQuickReplyButtonConfig(templateType);
+  if (quickReplyButton) {
+    templateComponents.push({
+      type:      "button",
+      sub_type:  "quick_reply",
+      index:     quickReplyButton.index,
+      parameters: [
+        { type: "payload", payload: quickReplyButton.payload },
+      ],
+    });
+  }
+
+  if (templateComponents.length > 0) {
+    templatePayload.template.components = templateComponents;
   }
 
   console.log(`[send-template] POST to=+${phoneNorm} templateType=${templateType} templateName=${templateName}`);
@@ -210,7 +249,7 @@ function buildNewProspectSession(phone, clientName, clientType) {
 
 // ── Monta texto renderizado do template substituindo variáveis ───────────────
 const _TEMPLATE_BASE_TEXTS = {
-  attendance_resume: "Olá, {{1}}, aqui é da Sartec Papelaria. Recebemos sua solicitação anteriormente e gostaríamos de continuar seu atendimento. Pode responder esta mensagem para continuarmos?",
+  attendance_resume: "Olá, {{1}}, aqui é da Sartec Papelaria. Recebemos sua solicitação anteriormente e gostaríamos de continuar seu atendimento. Toque no botão abaixo para continuar.",
   budget_update:     "Olá, {{1}}, temos uma atualização sobre seu orçamento na Sartec Papelaria. Pode responder esta mensagem para continuarmos?",
   pj_prospecting:    "Olá, {{1}}, aqui é da Sartec Papelaria. Gostaríamos de apresentar nossas condições especiais para empresas. Pode responder esta mensagem?",
 };

@@ -827,6 +827,11 @@ function addMessage(session, role, content, meta = {}) {
   if (meta.metaMessageId)           item.metaMessageId           = meta.metaMessageId;
   if (meta.replyToMsgId)            item.replyToMsgId            = meta.replyToMsgId;
   if (meta.replyToFrom)             item.replyToFrom             = meta.replyToFrom;
+  // messageType/templateType: usado por cliques em botão de Quick Reply (ex.: "button" +
+  // "attendance_resume") para o histórico refletir a origem do clique — mesmos campos que
+  // markTemplateSent() já usa para o evento de template enviado.
+  if (meta.messageType)             item.messageType              = meta.messageType;
+  if (meta.templateType)            item.templateType             = meta.templateType;
   if (meta.mediaType)               item.mediaType               = meta.mediaType;
   if (meta.mediaMimeType)           item.mediaMimeType           = meta.mediaMimeType;
   // R2: salvar storage key em vez de base64 — guarda tamanho mas nunca o binário
@@ -2799,6 +2804,90 @@ async function handleIncomingMessage(req, res) {
               console.error("[Doc/window] ❌", _e.message);
             }
             await sendTextMessage(from, "Recebi seu arquivo 📎 Vou passar para a equipe dar uma olhada 🤝");
+            continue;
+          }
+
+          // ── BOTÃO — clique em Quick Reply de um template (ex.: retomar_atendimento) ──
+          // Cloud API: message.type === "button", com message.button.{text,payload}
+          // e message.context.id apontando para o WAMID do template que continha o botão.
+          if (type === "button") {
+            const btnText   = message.button?.text ?? "";
+            const btnPayload = message.button?.payload ?? "";
+            const contextId  = message.context?.id || null;
+            const msgId      = message.id;
+            console.log(`[Button] +${from} texto="${btnText}" payload="${btnPayload}" context.id=${contextId || "—"}`);
+
+            const buttonMeta = { ...msgMeta, messageType: "button" };
+            let buttonReply = null;
+
+            try {
+              let isCurrentResume  = false;
+              let alreadyProcessed = false;
+
+              await withSessionLock(getRedis(), from, async () => {
+                const session = await loadSession(from);
+
+                // Idempotência: redelivery do mesmo wamid não duplica o clique no histórico.
+                alreadyProcessed = Boolean(msgId) && Array.isArray(session.history) &&
+                  session.history.some((m) => m.metaMessageId === msgId);
+                if (alreadyProcessed) {
+                  console.log(`[Button] ⏭ redelivery ignorada — metaMessageId=${msgId} já registrado +${from}`);
+                  return;
+                }
+
+                // Sinal 1+2: só é a retomada ATUAL se ainda estávamos esperando resposta
+                // exatamente do template attendance_resume (não budget_update/pj_prospecting).
+                const isWaitingResume = session.templateWaitingReply && session.lastTemplateType === "attendance_resume";
+                // Sinal 3: quando a Cloud API manda context.id, ele precisa apontar para o
+                // MESMO template que a sessão registrou como o mais recente enviado — evita
+                // que um clique em um botão antigo (de um template de dias atrás) reabra a
+                // retomada por cima de um estado atual já diferente.
+                const contextMatches = !contextId || !session.lastTemplateMessageId || contextId === session.lastTemplateMessageId;
+                isCurrentResume = isWaitingResume && contextMatches;
+
+                if (isCurrentResume) {
+                  // Sinal 4 (informativo, não bloqueante): o payload esperado é configurado em
+                  // TEMPLATE_ATTENDANCE_RESUME_BUTTON_PAYLOAD no envio (send-template.js). Se a Meta
+                  // devolver algo diferente (ex.: template cadastrado sem override de payload, ou
+                  // env var trocada entre o envio e a resposta), os sinais 1-3 já são suficientes —
+                  // não deixamos de retomar só por causa do texto/payload visível do botão.
+                  const expectedPayload = (process.env.TEMPLATE_ATTENDANCE_RESUME_BUTTON_PAYLOAD || "attendance_resume_continue").trim();
+                  if (btnPayload && btnPayload !== expectedPayload && btnPayload !== btnText) {
+                    console.log(`[Button] ℹ️ payload inesperado="${btnPayload}" (esperado="${expectedPayload}") — retomando mesmo assim via templateWaitingReply+lastTemplateType+context.id`);
+                  }
+                  // O clique é mensagem real do cliente — reabre a janela de 24h, exatamente
+                  // como chatWithAgent() faz antes de chamar handleTemplateResumeReply() para
+                  // as retomadas por texto/áudio/documento (handleTemplateResumeReply não mexe
+                  // nesses campos sozinha).
+                  const _btnNow = new Date();
+                  session.lastUserMessageAt = _btnNow.toISOString();
+                  session.windowExpiresAt   = new Date(_btnNow.getTime() + 24 * 60 * 60 * 1000).toISOString();
+                  buttonMeta.templateType = "attendance_resume";
+                  await handleTemplateResumeReply(session, from, btnText || "Continuar", buttonMeta, _btnNow);
+                  return;
+                }
+
+                if (isWaitingResume && !contextMatches) {
+                  // Clique em template ANTIGO — ainda é mensagem real do cliente (reabre a
+                  // janela via chatWithAgent abaixo), mas não deixamos o estado desse clique
+                  // obsoleto sobrescrever uma conversa atual/ativa diferente.
+                  console.log(`[Button] ⚠️ clique em template antigo — context.id=${contextId} ≠ lastTemplateMessageId=${session.lastTemplateMessageId}. Tratando como mensagem inbound normal, sem reabrir a retomada.`);
+                  session.templateWaitingReply = false;
+                  await saveSession(from, session);
+                }
+              });
+
+              // Não era a retomada atual (ou não havia nenhuma retomada em espera) —
+              // segue pelo mesmo caminho de qualquer mensagem de texto normal do cliente,
+              // preservando shouldRespond()/janela/PJ/resolvido etc. sem duplicar essa lógica.
+              if (!isCurrentResume && !alreadyProcessed) {
+                buttonReply = await chatWithAgent(from, btnText || "Continuar", null, name, buttonMeta);
+              }
+            } catch (err) {
+              console.error("[Button] ❌", err.message);
+            }
+
+            if (buttonReply) await sendTextMessage(from, buttonReply);
             continue;
           }
 

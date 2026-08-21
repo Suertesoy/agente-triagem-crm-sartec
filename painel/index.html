@@ -3006,6 +3006,20 @@
       font-weight: 700;
       font-style: normal;
     }
+    .tmpl-preview-btn {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 6px;
+      margin-top: 10px;
+      padding: 7px 10px;
+      background: #fff;
+      border: 1px solid #c8d4ee;
+      border-radius: 7px;
+      color: #1d6ee0;
+      font-size: .78rem;
+      font-weight: 700;
+    }
     .tmpl-vars-form { display: flex; flex-direction: column; gap: 10px; padding-bottom: 4px; }
     .tmpl-var-row   { display: flex; flex-direction: column; gap: 4px; }
     .tmpl-var-row label {
@@ -5617,7 +5631,7 @@
         <div style="display:flex;flex-direction:column;gap:7px" id="ncm-tmpl-options">
           <div class="tmpl-card" data-ncm-type="attendance_resume" onclick="selectNcmTemplate('attendance_resume')">
             <div class="tmpl-card-title">↩ Retomar atendimento</div>
-            <div class="tmpl-card-text">"Olá, [nome], aqui é da Sartec Papelaria. Recebemos sua solicitação anteriormente e gostaríamos de continuar seu atendimento."</div>
+            <div class="tmpl-card-text">"Olá, [nome], aqui é da Sartec Papelaria. Recebemos sua solicitação anteriormente e gostaríamos de continuar seu atendimento. Toque no botão abaixo para continuar." — botão Quick Reply: Continuar</div>
           </div>
           <div class="tmpl-card tmpl-card-blocked" data-ncm-type="budget_update">
             <div class="tmpl-card-title">📋 Orçamento <span class="tmpl-blocked-label">Em breve</span></div>
@@ -9629,10 +9643,12 @@ function appendBubble(container, msg, optimistic = false, history = null, histor
       bubble.appendChild(txt);
     }
 
-  // ── Texto ──
+  // ── Texto (ou clique em botão Quick Reply de template) ──
   } else {
     const _textNode = document.createElement("span");
-    _textNode.textContent = content || "";
+    _textNode.textContent = msg.messageType === "button"
+      ? "✓ " + (content || "Continuar")
+      : (content || "");
     bubble.appendChild(_textNode);
   }
 
@@ -11786,13 +11802,13 @@ function updateWindowUI(prefix, data) {
   } else if (ws === "waiting_template_reply") {
     const tds = data.lastTemplateDeliveryStatus;
     let tmplLabel  = "Template enviado.";
-    let tmplDetail = "Aguardando resposta do cliente para retomar.";
+    let tmplDetail = "Aguardando o cliente tocar em “Continuar” ou responder à mensagem.";
     if (tds === "delivered") {
       tmplLabel  = "Template entregue.";
-      tmplDetail = "O cliente recebeu o template. Aguardando resposta para reabrir a janela.";
+      tmplDetail = "O cliente recebeu o template. Aguardando o cliente tocar em “Continuar” ou responder para reabrir a janela.";
     } else if (tds === "read") {
       tmplLabel  = "Template lido.";
-      tmplDetail = "O cliente leu o template. Aguardando resposta para reabrir a janela.";
+      tmplDetail = "O cliente leu o template. Aguardando o cliente tocar em “Continuar” ou responder para reabrir a janela.";
     } else if (!tds || tds === "accepted") {
       tmplLabel  = "Template solicitado à Meta.";
       tmplDetail = "Aguardando confirmação de entrega.";
@@ -11847,7 +11863,7 @@ function lockComposer(prefix, reason) {
     lockBar.style.display = "flex";
     if (reason === "waiting") {
       lockBar.className = "composer-lock-bar ws-waiting-lock";
-      lockBar.innerHTML = `<span>⏳ Aguardando resposta do cliente ao template enviado. Quando o cliente responder, a janela reabre.</span><button class="btn-resend-template" onclick="resendTemplate('${prefix}')" title="Reenviar se a mensagem anterior não chegou">Reenviar</button>`;
+      lockBar.innerHTML = `<span>⏳ Aguardando o cliente tocar em “Continuar” ou responder à mensagem. Quando isso acontecer, a janela reabre.</span><button class="btn-resend-template" onclick="resendTemplate('${prefix}')" title="Reenviar se a mensagem anterior não chegou">Reenviar</button>`;
     } else if (reason === "failed_template") {
       // Falha confirmada: pula cooldown e mostra botão "Tentar novamente"
       lockBar.className = "composer-lock-bar ws-failed-lock";
@@ -12023,9 +12039,14 @@ let selectedTemplateType = null;
 const TEMPLATE_CONFIGS = {
   attendance_resume: {
     title:   "↩ Retomar atendimento",
-    text:    "Olá, {{1}}, aqui é da Sartec Papelaria. Recebemos sua solicitação anteriormente e gostaríamos de continuar seu atendimento. Pode responder esta mensagem para continuarmos?",
+    text:    "Olá, {{1}}, aqui é da Sartec Papelaria. Recebemos sua solicitação anteriormente e gostaríamos de continuar seu atendimento. Toque no botão abaixo para continuar.",
     vars: [
       { label: "Nome do cliente", placeholder: "Ex: João Silva", defaultKey: "clientName" },
+    ],
+    // Preview do botão Quick Reply aprovado na Meta (retomar_atendimento_v2).
+    // O envio real do componente de botão é controlado no backend (send-template.js).
+    buttons: [
+      { label: "Continuar" },
     ],
   },
   budget_update: {
@@ -12148,7 +12169,16 @@ function updateNcmPreview() {
     text = text.replace(`{{${i + 1}}}`, display);
   });
 
-  document.getElementById("ncm-preview").innerHTML = text;
+  document.getElementById("ncm-preview").innerHTML = text + renderTemplatePreviewButtons(config);
+}
+
+// Renderiza o(s) botão(ões) Quick Reply do template no preview (mockup visual —
+// não afeta o payload real de envio, que é decidido no backend).
+function renderTemplatePreviewButtons(config) {
+  if (!config.buttons?.length) return "";
+  return config.buttons.map((b) =>
+    `<div class="tmpl-preview-btn">↩ ${esc(b.label)}</div>`
+  ).join("");
 }
 
 // Envia a nova conversa por template
@@ -12310,7 +12340,7 @@ function updateTemplatePreview() {
     text = text.replace(`{{${i + 1}}}`, display);  // já escapado, sem &amp; etc.
   });
 
-  document.getElementById("tmpl-preview").innerHTML = text;
+  document.getElementById("tmpl-preview").innerHTML = text + renderTemplatePreviewButtons(config);
 }
 
 // Envia o template via POST /api/send-template
