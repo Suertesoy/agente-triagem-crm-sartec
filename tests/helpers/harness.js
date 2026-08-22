@@ -39,6 +39,7 @@ export const { default: forwardMediaHandler } = await import(FORWARD_MEDIA_URL);
 export const { default: burstSweepHandler }   = await import(BURST_SWEEP_URL);
 export const FakeRedis                 = (await import(pathToFileURL(path.join(HERE, "fake-ioredis.js")).href)).default;
 export const anthropicSpy              = await import(pathToFileURL(path.join(HERE, "fake-anthropic.js")).href);
+export const { S3Client: FakeS3Client } = await import(pathToFileURL(path.join(HERE, "fake-s3.js")).href);
 
 export const rawClient = new FakeRedis();
 

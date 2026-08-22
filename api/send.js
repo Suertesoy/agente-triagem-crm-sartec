@@ -11,10 +11,26 @@
 //             Os bytes são validados de verdade antes do upload (container +
 //             codec real — ver lib/audio-validation.js); filename é opcional,
 //             senão é inferido do mimeType (ex.: audio/mp4 → audio.m4a).
+//
+//             TESTE A/B — envio de áudio via link do R2 (não mais media_id):
+//             mesmo com container MP4 + AAC comprovado nos dois lados
+//             (navegador e backend), a Meta ainda devolvia 131053 dizendo
+//             processar o arquivo como application/octet-stream no upload
+//             multipart /media. Para eliminar essa etapa da equação, o áudio
+//             agora sobe para o R2 ANTES da Meta, confirma o Content-Type
+//             salvo via HEAD, gera uma URL presigned (R2_ENDPOINT continua
+//             privado — a URL carrega a assinatura, não expõe credenciais) e
+//             envia via `audio.link` em vez de `audio.id`. O caminho antigo
+//             (upload multipart → media_id) continua implementado em
+//             sendAudioViaMediaIdLegacy() — não foi removido, e é usado
+//             automaticamente como fallback se o R2 estiver indisponível
+//             (R2_DISABLED=true ou envs ausentes). Imagem/documento não
+//             foram alterados nesta rodada.
 // ============================================================
 
 import Redis from "ioredis";
-import { uploadMedia } from "./_lib/media-storage.js";
+import { randomUUID } from "node:crypto";
+import { uploadMedia, headMediaObject, getMediaUrl } from "./_lib/media-storage.js";
 import { withSessionLock } from "../lib/redis-lock.js";
 import { inspectAudioBytes, inferAudioFilename } from "../lib/audio-validation.js";
 
@@ -430,6 +446,8 @@ const AUDIO_REJECT_MESSAGES = {
 };
 const AUDIO_REJECT_DEFAULT_MESSAGE = "O áudio enviado não pôde ser validado como um arquivo compatível com o WhatsApp.";
 
+const AUDIO_LINK_TTL_SECONDS = 900; // 15min — tempo confortável para a Meta buscar o arquivo via audio.link
+
 async function sendAudio(req, res, body, PHONE_NUMBER_ID, ACCESS_TOKEN) {
   const { to, mediaBase64, mimeType, replyToMessageId, filename } = body;
 
@@ -449,9 +467,113 @@ async function sendAudio(req, res, body, PHONE_NUMBER_ID, ACCESS_TOKEN) {
     });
   }
 
-  // 2. Upload para a Meta
-  console.log(`[send/audio] upload start mime=${mimeType} size=${binaryData.length}`);
   const uploadFilename = filename || inferAudioFilename(mimeType);
+
+  // 2. Upload para o R2 ANTES da Meta (ver comentário no topo do arquivo).
+  // Ainda não existe metaMessageId nesta etapa — usa um ID sintético estável,
+  // só para compor a storage key; não precisa ser renomeado depois.
+  const syntheticId = `out_audio_${Date.now()}_${randomUUID()}`;
+  let r2Result = null;
+  try {
+    r2Result = await uploadMedia(binaryData, mimeType, to, syntheticId);
+  } catch (r2Err) {
+    console.error(`[send/audio] ⚠️ upload R2 falhou (${r2Err.message}) — usando caminho legado media_id`);
+  }
+
+  if (!r2Result) {
+    // R2_DISABLED=true ou envs ausentes/erro — fallback automático para o
+    // caminho antigo, mantido propositalmente para restauração rápida.
+    return sendAudioViaMediaIdLegacy(req, res, body, PHONE_NUMBER_ID, ACCESS_TOKEN, { binaryData, uploadFilename });
+  }
+
+  // 3. Confirma o Content-Type realmente salvo no R2 antes de usar o link.
+  const head = await headMediaObject(r2Result.storageKey);
+  if (!head.exists || head.mimeType !== mimeType) {
+    console.error(
+      `[send/audio] ❌ HEAD R2 inconsistente key=${r2Result.storageKey} ` +
+      `esperado=${mimeType} obtido=${head.mimeType ?? "—"} exists=${head.exists}`
+    );
+    return res.status(502).json({ error: "Falha ao confirmar o áudio armazenado antes do envio." });
+  }
+  console.log(`[send/audio] R2 OK key=${r2Result.storageKey} mime=${head.mimeType} size=${head.size}`);
+
+  // 4. URL presigned (HTTPS, sem header Authorization adicional; bucket
+  // continua privado — a assinatura vem embutida na própria URL/query string).
+  const audioUrl = await getMediaUrl(r2Result.storageKey, AUDIO_LINK_TTL_SECONDS);
+
+  // 5. Envia por audio.link em vez de audio.id — voice:true só para audio/ogg.
+  const audioPayload = { link: audioUrl };
+  if (VOICE_CAPABLE_MIME_TYPES.has(mimeType)) audioPayload.voice = true;
+
+  const msgPayload = {
+    messaging_product: "whatsapp",
+    recipient_type: "individual",
+    to,
+    type: "audio",
+    audio: audioPayload,
+  };
+  if (replyToMessageId && typeof replyToMessageId === "string") {
+    msgPayload.context = { message_id: replyToMessageId };
+  }
+
+  const metaResult = await callMetaWithRetry(
+    `https://graph.facebook.com/v19.0/${PHONE_NUMBER_ID}/messages`,
+    {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${ACCESS_TOKEN}`,
+      },
+      body: JSON.stringify(msgPayload),
+    },
+    "send/audio-link"
+  );
+
+  if (!metaResult.ok) {
+    const _se = metaResult.data?.error || {};
+    console.error(`[send/audio] ❌ falha send (link) code=${_se.code} msg="${_se.message}" key=${r2Result.storageKey}`);
+    // Decisão (documentada): NÃO apaga o objeto do R2 nesta falha — mantém
+    // para diagnóstico (ex.: baixar e inspecionar o arquivo exato que a Meta
+    // rejeitou). Custo de armazenamento é desprezível; apagar adicionaria
+    // mais um ponto de falha best-effort sem benefício claro aqui.
+    return metaErrRes(res, "Erro ao enviar áudio pela Meta API", metaResult);
+  }
+
+  const metaMessageId = metaResult.data?.messages?.[0]?.id || null;
+  console.log(`[send/audio] ✅ enviado via link metaMessageId=${metaMessageId}${replyToMessageId ? " (reply)" : ""} attempts=${metaResult.attempts}`);
+
+  // 6. Salva no histórico — a storage key já existe desde o passo 2.
+  const audioEntry = {
+    role:                 "assistant",
+    content:              "",
+    sentByHuman:          true,
+    mediaType:            "audio",
+    sentMedia:            true,
+    mediaMimeType:        mimeType,
+    mediaStorageKey:      r2Result.storageKey,
+    mediaStorageProvider: "cloudflare-r2",
+    attendantId:          body.attendantId   || null,
+    attendantName:        body.attendantName || null,
+    metaMessageId,
+    deliveryStatus:       "sent",
+    deliveryStatusAt:     new Date().toISOString(),
+  };
+  if (replyToMessageId) audioEntry.replyToMsgId = replyToMessageId;
+  const audioSaved = await saveToHistory(to, audioEntry);
+  if (!audioSaved) console.warn(`[send/audio] ⚠️ Áudio entregue à Meta mas não persistido no Redis (+${to})`);
+
+  return res.status(200).json({ success: true, historyPersisted: audioSaved });
+}
+
+// ── Caminho legado: upload multipart /media + envio por media_id ─────────
+// Mantido de propósito (não removido) para restauração rápida — ver
+// comentário no topo do arquivo. Usado automaticamente como fallback quando
+// o upload para o R2 não está disponível (R2_DISABLED=true ou envs ausentes).
+// binaryData/uploadFilename já vêm validados e decididos pelo chamador.
+async function sendAudioViaMediaIdLegacy(req, res, body, PHONE_NUMBER_ID, ACCESS_TOKEN, { binaryData, uploadFilename }) {
+  const { to, mimeType, replyToMessageId } = body;
+
+  console.log(`[send/audio] upload (legado media_id) start mime=${mimeType} size=${binaryData.length}`);
 
   const uploadResult = await callMetaWithRetry(
     `https://graph.facebook.com/v19.0/${PHONE_NUMBER_ID}/media`,
@@ -467,14 +589,13 @@ async function sendAudio(req, res, body, PHONE_NUMBER_ID, ACCESS_TOKEN) {
 
   if (!uploadResult.ok) {
     const _ue = uploadResult.data?.error || {};
-    console.error(`[send/audio] falha upload meta code=${_ue.code} msg="${_ue.message}"`);
+    console.error(`[send/audio] falha upload meta (legado) code=${_ue.code} msg="${_ue.message}"`);
     return metaErrRes(res, "Erro ao fazer upload do áudio para a Meta API", uploadResult);
   }
 
   const mediaId = uploadResult.data.id;
-  console.log(`[send/audio] upload ok media_id=${mediaId} attempts=${uploadResult.attempts}`);
+  console.log(`[send/audio] upload ok (legado) media_id=${mediaId} attempts=${uploadResult.attempts}`);
 
-  // 3. Envia o áudio via media_id — voice:true só para audio/ogg (nota de voz nativa)
   const audioPayload = { id: mediaId };
   if (VOICE_CAPABLE_MIME_TYPES.has(mimeType)) audioPayload.voice = true;
 
@@ -504,22 +625,21 @@ async function sendAudio(req, res, body, PHONE_NUMBER_ID, ACCESS_TOKEN) {
 
   if (!metaResult.ok) {
     const _se = metaResult.data?.error || {};
-    console.error(`[send/audio] falha send code=${_se.code} msg="${_se.message}"`);
+    console.error(`[send/audio] falha send (legado) code=${_se.code} msg="${_se.message}"`);
     return metaErrRes(res, "Erro ao enviar áudio pela Meta API", metaResult);
   }
 
   const metaMessageId = metaResult.data?.messages?.[0]?.id || null;
-  console.log(`[send/audio] send ok metaMessageId=${metaMessageId}${replyToMessageId ? " (reply)" : ""} attempts=${metaResult.attempts}`);
+  console.log(`[send/audio] send ok (legado) metaMessageId=${metaMessageId}${replyToMessageId ? " (reply)" : ""} attempts=${metaResult.attempts}`);
 
-  // 4. Upload para R2 (best-effort; falha não cancela envio já realizado)
+  // Upload para R2 (best-effort, pós-envio — comportamento histórico deste caminho)
   let r2AudioResult = null;
   try {
     r2AudioResult = await uploadMedia(binaryData, mimeType, to, metaMessageId || `audio_${Date.now()}`);
   } catch (r2Err) {
-    console.warn(`[send/audio] ⚠️ R2 upload falhou: ${String(r2Err.message || "").substring(0, 80)}`);
+    console.warn(`[send/audio] ⚠️ R2 upload (legado, pós-envio) falhou: ${String(r2Err.message || "").substring(0, 80)}`);
   }
 
-  // 5. Salva no histórico — sem base64 para não estourar Redis
   const audioEntry = {
     role:             "assistant",
     content:          "",
@@ -541,7 +661,7 @@ async function sendAudio(req, res, body, PHONE_NUMBER_ID, ACCESS_TOKEN) {
   }
   if (replyToMessageId) audioEntry.replyToMsgId = replyToMessageId;
   const audioSaved = await saveToHistory(to, audioEntry);
-  if (!audioSaved) console.warn(`[send/audio] ⚠️ Áudio entregue à Meta mas não persistido no Redis (+${to})`);
+  if (!audioSaved) console.warn(`[send/audio] ⚠️ Áudio entregue à Meta mas não persistido no Redis (legado) (+${to})`);
 
   return res.status(200).json({ success: true, historyPersisted: audioSaved });
 }
