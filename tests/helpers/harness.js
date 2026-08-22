@@ -28,6 +28,7 @@ const SEND_URL           = pathToFileURL(path.join(REPO_ROOT, "api", "send.js"))
 const SEND_TEMPLATE_URL  = pathToFileURL(path.join(REPO_ROOT, "api", "send-template.js")).href;
 const METRICS_URL        = pathToFileURL(path.join(REPO_ROOT, "api", "metrics.js")).href;
 const FORWARD_MEDIA_URL  = pathToFileURL(path.join(REPO_ROOT, "api", "forward-media.js")).href;
+const BURST_SWEEP_URL    = pathToFileURL(path.join(REPO_ROOT, "api", "agent-burst-sweep.js")).href;
 
 export const { default: handler }             = await import(WEBHOOK_URL);
 export const { default: queueHandler }        = await import(QUEUE_URL);
@@ -35,6 +36,7 @@ export const { default: sendHandler }         = await import(SEND_URL);
 export const { default: sendTemplateHandler } = await import(SEND_TEMPLATE_URL);
 export const { default: metricsHandler }      = await import(METRICS_URL);
 export const { default: forwardMediaHandler } = await import(FORWARD_MEDIA_URL);
+export const { default: burstSweepHandler }   = await import(BURST_SWEEP_URL);
 export const FakeRedis                 = (await import(pathToFileURL(path.join(HERE, "fake-ioredis.js")).href)).default;
 export const anthropicSpy              = await import(pathToFileURL(path.join(HERE, "fake-anthropic.js")).href);
 
@@ -135,6 +137,33 @@ export function buttonWebhookBody(phone, {
   };
 }
 
+// Simula o clique num Reply Button PF/PJ (mensagem interativa da Cloud API,
+// NÃO um template Quick Reply). Formato oficial: message.type === "interactive",
+// message.interactive.type === "button_reply", .button_reply.{id,title}.
+export function interactiveButtonWebhookBody(phone, {
+  msgId  = "wamid_" + Math.random().toString(36).slice(2),
+  name   = "Cliente Teste",
+  id     = "client_type_pf",
+  title  = id === "client_type_pj" ? "Pessoa jurídica" : "Pessoa física",
+} = {}) {
+  return {
+    object: "whatsapp_business_account",
+    entry: [{
+      changes: [{
+        value: {
+          contacts: [{ wa_id: phone, profile: { name } }],
+          messages: [{
+            from: phone,
+            id: msgId,
+            type: "interactive",
+            interactive: { type: "button_reply", button_reply: { id, title } },
+          }],
+        },
+      }],
+    }],
+  };
+}
+
 export function audioWebhookBody(phone, { msgId = "wamid_" + Math.random().toString(36).slice(2), name = "Cliente Teste", mediaId = "media_" + Math.random().toString(36).slice(2) } = {}) {
   return {
     object: "whatsapp_business_account",
@@ -143,6 +172,45 @@ export function audioWebhookBody(phone, { msgId = "wamid_" + Math.random().toStr
         value: {
           contacts: [{ wa_id: phone, profile: { name } }],
           messages: [{ from: phone, id: msgId, type: "audio", audio: { id: mediaId } }],
+        },
+      }],
+    }],
+  };
+}
+
+export function imageWebhookBody(phone, {
+  msgId   = "wamid_" + Math.random().toString(36).slice(2),
+  name    = "Cliente Teste",
+  mediaId = "media_" + Math.random().toString(36).slice(2),
+  caption = "",
+} = {}) {
+  return {
+    object: "whatsapp_business_account",
+    entry: [{
+      changes: [{
+        value: {
+          contacts: [{ wa_id: phone, profile: { name } }],
+          messages: [{ from: phone, id: msgId, type: "image", image: { id: mediaId, caption } }],
+        },
+      }],
+    }],
+  };
+}
+
+export function documentWebhookBody(phone, {
+  msgId    = "wamid_" + Math.random().toString(36).slice(2),
+  name     = "Cliente Teste",
+  mediaId  = "media_" + Math.random().toString(36).slice(2),
+  filename = "arquivo.docx",
+  mimeType = "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+} = {}) {
+  return {
+    object: "whatsapp_business_account",
+    entry: [{
+      changes: [{
+        value: {
+          contacts: [{ wa_id: phone, profile: { name } }],
+          messages: [{ from: phone, id: msgId, type: "document", document: { id: mediaId, filename, mime_type: mimeType } }],
         },
       }],
     }],
@@ -175,6 +243,24 @@ export async function sendButton(phone, opts) {
   const req = { method: "POST", body: buttonWebhookBody(phone, opts) };
   const res = fakeRes();
   await handler(req, res);
+  return { res, calls: getFetchCalls() };
+}
+
+// Envia um clique em Reply Button PF/PJ simulado pelo handler real do webhook.
+export async function sendInteractiveButton(phone, opts) {
+  resetFetchCalls();
+  const req = { method: "POST", body: interactiveButtonWebhookBody(phone, opts) };
+  const res = fakeRes();
+  await handler(req, res);
+  return { res, calls: getFetchCalls() };
+}
+
+// Dispara o sweep de burst (equivalente a uma execução do Vercel Cron Job).
+export async function callBurstSweep() {
+  resetFetchCalls();
+  const req = { method: "GET", headers: {} };
+  const res = fakeRes();
+  await burstSweepHandler(req, res);
   return { res, calls: getFetchCalls() };
 }
 

@@ -149,27 +149,34 @@ describe("catálogo do site — marcador vence histórico do contato", () => {
 });
 
 describe("catálogo do site — fallback de segurança", () => {
-  test("[SITE_CATALOGO_ORCAMENTO] sem tipo válido não ativa o bypass (segue para triagem/Anthropic)", async () => {
+  // Nota (rodada PF/PJ + burst): sem os dois marcadores válidos, a mensagem cai
+  // no fluxo normal de PRIMEIRO CONTATO — que agora é determinístico (Reply
+  // Buttons PF/PJ) ANTES de chamar Claude, não mais "sempre chama a Anthropic".
+  // O que este teste protege continua válido: o bypass do catálogo (que pula
+  // toda a triagem e vai direto para atendimento humano) não deve ativar.
+  test("[SITE_CATALOGO_ORCAMENTO] sem tipo válido não ativa o bypass (cai no 1º contato normal — Reply Buttons)", async () => {
     anthropicSpy.resetAnthropicSpy();
     const phone = "+5512910000006";
     await sendText(
       phone,
-      "[SITE_CATALOGO_ORCAMENTO]\n\nOlá, quero um orçamento mas esqueci de escolher PF ou PJ no site.",
+      "[SITE_CATALOGO_ORCAMENTO]\n\nOlá, quero um orçamento mas esqueci de indicar o tipo de cliente no site.",
       { msgId: "wamid_fallback_1" }
     );
     const s = await getSession(phone);
     assert.notEqual(s.handoffDone, true, "não deve forçar handoff sem tipo válido");
     assert.notEqual(s.requestSource, "site_catalog_quote");
-    assert.equal(anthropicSpy.callCount, 1, "deve cair no fluxo normal, que chama a Anthropic");
+    assert.equal(s.pfPjPromptSent, true, "deve cair no 1º contato normal e mostrar os Reply Buttons PF/PJ");
+    assert.equal(anthropicSpy.callCount, 0, "1º contato agora é determinístico — não chama a Anthropic");
   });
 
   test("[TIPO_CLIENTE:PF] sem marcador de origem não ativa o bypass", async () => {
     anthropicSpy.resetAnthropicSpy();
     const phone = "+5512910000007";
-    await sendText(phone, "[TIPO_CLIENTE:PF]\n\nSou pessoa física, quero saber o horário.", { msgId: "wamid_fallback_2" });
+    await sendText(phone, "[TIPO_CLIENTE:PF]\n\nQueria saber o horário de vocês, por favor.", { msgId: "wamid_fallback_2" });
     const s = await getSession(phone);
     assert.notEqual(s.requestSource, "site_catalog_quote");
-    assert.equal(anthropicSpy.callCount, 1);
+    assert.equal(s.pfPjPromptSent, true, "deve cair no 1º contato normal e mostrar os Reply Buttons PF/PJ");
+    assert.equal(anthropicSpy.callCount, 0);
   });
 });
 

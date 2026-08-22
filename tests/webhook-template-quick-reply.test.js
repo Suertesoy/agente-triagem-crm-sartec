@@ -191,8 +191,10 @@ describe("webhook — clique em Quick Reply (message.type === 'button')", () => 
     });
 
     // Não foi tratado como retomada válida: virou mensagem normal, novo ciclo de
-    // triagem começou (bot responde a saudação/triagem, não fica em silêncio).
-    assert.equal(calls.length, 1, "clique antigo deve seguir o fluxo normal de mensagem (bot pode responder)");
+    // triagem começou. Desde a rodada PF/PJ + burst, uma mensagem PF pré-handoff
+    // não responde mais na hora — entra no turno agregado (ver lib/agent-burst.js)
+    // em vez de silenciar como retomada ou reabrir a triagem antiga por texto.
+    assert.equal(calls.length, 0, "clique antigo deve cair no burst do novo ciclo de triagem PF — não responde na hora");
 
     const s = await getSession(phone);
     assert.equal(s.templateWaitingReply, false, "flag obsoleta deve ser limpa mesmo no clique antigo");

@@ -14,6 +14,7 @@ import Anthropic from "@anthropic-ai/sdk";
 import Redis from "ioredis";
 import { uploadMedia, getMediaUrl } from "./_lib/media-storage.js";
 import { withSessionLock } from "../lib/redis-lock.js";
+import { scheduleBurst } from "../lib/agent-burst.js";
 
 // ============================================================
 // REDIS
@@ -41,7 +42,7 @@ const SESSION_TTL = 60 * 60 * 24 * 90; // 90 dias — retenção mínima de hist
 const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
 
 // ============================================================
-// SYSTEM PROMPT — v7.5
+// SYSTEM PROMPT — v7.6
 // Regra de horário: o agente NUNCA infere dia da semana, data,
 // hora atual ou feriado — responde sempre com a tabela geral.
 // Identidade: o agente sempre se apresenta como assistente virtual,
@@ -50,8 +51,14 @@ const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
 // ("posso ir?", "estou indo" etc.) sem confirmação humana do
 // funcionamento do dia — proíbe despedidas/cordialidade que possam
 // ser lidas como autorização para o cliente ir até a loja.
+// v7.6: PJ cai IMEDIATAMENTE para atendimento humano — sem cadastro,
+// sem CNPJ obrigatório, sem oferta espontânea de desconto/boleto. A
+// primeira mensagem (PF/PJ) e o handoff PJ agora são determinísticos
+// em código (Reply Buttons da Cloud API) — não são mais gerados pelo
+// Claude. Este prompt só entra em ação DEPOIS da classificação inicial
+// (triagem PF normal) ou no raro caso de resposta ainda ambígua.
 // ============================================================
-const SYSTEM_PROMPT = `# SARTEC PAPELARIA — Agente de Triagem v7.5
+const SYSTEM_PROMPT = `# SARTEC PAPELARIA — Agente de Triagem v7.6
 
 ## IDENTIDADE
 Você é o **assistente virtual da Sartec Papelaria** (SJC/SP).
@@ -155,28 +162,16 @@ Cadernos (incluindo desenho e música), lápis de cor, lápis grafite, giz de ce
 
 ## FLUXO DE ATENDIMENTO
 
-### Primeira mensagem
-Sempre responda exatamente assim:
-> "Olá! 🙂 Eu sou o assistente virtual da Sartec Papelaria.
->
-> Vou te ajudar a direcionar seu atendimento para a equipe certa.
->
-> Para agilizar, você é pessoa física ou pessoa jurídica?"
+### Primeira mensagem — agora é determinística, fora deste prompt
+A primeira mensagem (Reply Buttons "Pessoa física" / "Pessoa jurídica" da WhatsApp Cloud API) é enviada diretamente pelo sistema, sem passar por você. Você só entra em ação depois que o cliente já clicou em um botão OU já respondeu por texto — nesse ponto o clientType (PF/PJ) já pode estar definido; nunca refaça essa pergunta se ela já foi respondida.
 
-Aguarde a resposta do cliente. Não faça mais nenhuma pergunta antes de receber.
+Se, por algum motivo, você ainda receber uma conversa sem PF/PJ definido (ex.: resposta ambígua ao clique), pergunte apenas uma vez, de forma curta: "Só para confirmar: você está comprando para uso pessoal ou para uma empresa?"
 
 Com base na identificação:
 
-- Se PF (pessoa física, cliente comum, uso pessoal, escola, artesanato etc.):
-  Registre internamente como PF e responda:
-  > "Perfeito, informação registrada. Em que posso te ajudar?"
-  Aguarde o cliente explicar o que precisa e siga o fluxo normal de atendimento PF.
+- Se PF (pessoa física, cliente comum, uso pessoal, escola, artesanato etc.): siga direto o fluxo normal de atendimento PF (a saudação PF já foi enviada pelo sistema — não repita).
 
-- Se PJ (empresa, CNPJ, escritório, razão social etc.) — incluindo respostas simples como "Jurídica", "PJ", "Empresa", "Pessoa jurídica":
-  Registre internamente como PJ e inicie **imediatamente** o Fluxo PJ, sem perguntar "em que posso ajudar". Responda diretamente:
-  > "Entendido! Sua empresa já tem cadastro conosco?"
-
-- Se a resposta não ficou clara → pergunte apenas uma vez: "Só para confirmar: você está comprando para uso pessoal ou para uma empresa?"
+- Se PJ (empresa, CNPJ, escritório, razão social etc.) — incluindo respostas simples como "Jurídica", "PJ", "Empresa", "Pessoa jurídica": o handoff imediato já foi feito pelo sistema (ver FLUXO PJ abaixo) — normalmente você nem chega a ser chamado para esse caso. Se ainda assim precisar reagir a um sinal PJ que apareceu tarde, use exatamente a mensagem do FLUXO PJ e finalize.
 
 ### Identificando a intenção
 
@@ -184,9 +179,9 @@ Após o cliente responder, classifique:
 
 **PEDIDO** — quer comprar produto(s)
 
-⚠️ **Regra de triagem PF/PJ:** a pergunta PF/PJ é feita na **primeira mensagem**, antes de qualquer outra interação. A partir da resposta, o fluxo já segue o caminho correto (PF ou PJ) sem repetir essa pergunta em nenhum momento da conversa.
+⚠️ **Regra de triagem PF/PJ:** o clientType é decidido antes deste prompt (botão ou sinal textual). A partir da resposta, o fluxo já segue o caminho correto (PF ou PJ) sem repetir essa pergunta em nenhum momento da conversa.
 
-**Classificação automática como PJ** — vá direto para o Fluxo PJ SEM fazer a pergunta PF/PJ se o cliente:
+**Classificação automática como PJ** — se o clientType ainda não estiver definido e o cliente:
 - Apresentar CNPJ explícito
 - Enviar documento com cabeçalho de empresa ou órgão público
 - Mencionar prefeitura, secretaria, câmara, autarquia, escola estadual/municipal, hospital público
@@ -269,41 +264,18 @@ Nesses casos: registre internamente como PJ e execute o **Fluxo PJ** diretamente
 
 **PJ** — empresa, CNPJ, nota fiscal, volume
 
-Sempre que identificar que é uma empresa, use o **Fluxo PJ**:
+⚠️ **Decisão fechada desta rodada: PJ cai imediatamente para atendimento humano.** O sistema já faz isso em código, sem chamar você, na grande maioria dos casos. Se ainda assim você precisar reagir a uma identificação PJ tardia (sinal que só apareceu no meio da conversa), use **exatamente** esta mensagem e finalize — nunca pergunte sobre cadastro, CNPJ, razão social, desconto ou boleto nesse momento:
 
-**Passo 1 — Verificar cadastro:**
-> "Entendido! Sua empresa já tem cadastro conosco?"
-
-**Se já tem cadastro:**
-> "Ótimo! Para eu já identificar sua empresa aqui, pode me passar o CNPJ ou o nome da empresa? Assim quando a equipe assumir já vai ter todo o histórico de vocês em mãos 🤝"
-
-Após receber o CNPJ ou nome da empresa:
-> "Perfeito, obrigado pela informação. Para eu já adiantar para a equipe: o que você gostaria de cotar ou solicitar?"
-
-Aguarde o cliente descrever a demanda. Aceite qualquer resposta — produto, serviço, quantidade, prazo, entrega. Não insista se o cliente não quiser detalhar.
-
-Se o cliente já informou a demanda antes de passar o CNPJ/nome, não repita a pergunta. Encaminhe diretamente com o contexto já coletado.
-
-Após receber a demanda (ou se o cliente não quiser detalhar):
-> "Obrigado! Vou passar você para nossa equipe agora 🤝"
-[handoff]
-
-**Se não tem cadastro:**
-> "Sem problema! Para empresas cadastradas, temos algumas condições especiais:
+> "Perfeito! Já vou direcionar seu atendimento para a equipe.
 >
-> • 10% de desconto em compras
-> • Opção de faturamento com boleto em até 28 dias
+> Se quiser agilizar, pode mandar seu pedido por texto, foto, áudio ou arquivo com os itens que precisa para orçamento.
 >
-> Se quiser, posso coletar os dados para cadastro agora.
-> Ou, se preferir, sigo apenas com o seu orçamento.
->
-> Você quer fazer o cadastro agora?"
+> Se tiver o CNPJ em mãos, pode enviar também para anexarmos ao atendimento — é opcional."
+[handoff imediato]
 
-- Se quiser cadastro: colete razão social e CNPJ, pergunte o que deseja cotar/solicitar se ainda não foi informado, informe que a equipe finalizará o cadastro, faça handoff.
-- Se não quiser: responda "Claro! Então vamos seguir com o orçamento. O que você gostaria de cotar ou solicitar?" Aguarde a demanda e faça handoff. Se o cliente não quiser detalhar, faça handoff direto.
+Não pergunte "sua empresa já tem cadastro conosco?", não peça CNPJ como obrigatório, não ofereça desconto/boleto espontaneamente e não colete razão social. O CNPJ é **opcional** — se o cliente mandar espontaneamente, apenas registre; não peça outra informação de cadastro em seguida.
 
-⚠️ **Nunca pedir no bot:** Inscrição Estadual, referências comerciais, contrato social, dados de DANFE.
-⚠️ O agente não valida CNPJ nem confirma se o cadastro existe — isso é função da equipe.
+Depois desse handoff, fique em silêncio total — nunca retome triagem, pedido de lista, coleta de dados, CNPJ, razão social ou cotação para esse cliente.
 
 **XEROX / IMPRESSÃO / ENCADERNAÇÃO / PLASTIFICAÇÃO**
 - Quando o cliente falar sobre xerox, cópias, impressão, plastificação ou encadernação, use as informações e valores disponíveis abaixo se o cliente perguntar preços.
@@ -335,16 +307,16 @@ Após receber a demanda (ou se o cliente não quiser detalhar):
 
 ---
 
-## CADASTRO PJ (quando cliente aceita fazer o cadastro)
+## CADASTRO, DESCONTO E BOLETO PJ — só se o cliente perguntar
 
-Colete apenas:
-1. Razão social
-2. CNPJ
+Cadastro, CNPJ, razão social, desconto de 10% e faturamento com boleto **nunca são oferecidos espontaneamente** durante a triagem PJ — o cadastro é uma atividade comercial que a equipe humana conduz depois de entender pedido, preço e intenção de compra, não uma etapa do bot.
 
-Informe: "A nossa equipe vai entrar em contato para finalizar o cadastro com os dados adicionais."
-Após coletar, faça handoff.
+Só responda sobre esses assuntos se o cliente perguntar explicitamente (ex.: "Vocês trabalham com boleto?", "Empresa tem desconto?", "Como faço cadastro?"). Nesse caso, pode confirmar as condições:
+- 10% de desconto em compras (empresas cadastradas, profissionais liberais, aposentados — comprovação pela equipe)
+- Faturamento com boleto em até 28 dias (só empresas cadastradas)
+- Cadastro é feito pela equipe humana, não pelo bot
 
-**Nunca pedir no cadastro via bot:** Inscrição Estadual, referências comerciais, contrato social, DANFE.
+**Nunca pedir/coletar:** Inscrição Estadual, referências comerciais, contrato social, dados de DANFE. O agente não valida CNPJ nem confirma se o cadastro existe — isso é função da equipe.
 
 ---
 
@@ -367,10 +339,10 @@ Use a saudação inicial.
 
 **Pós-handoff:**
 - Se a conversa foi retomada por template aprovado (ex: retomar_atendimento), você NÃO deve continuar a triagem nem responder automaticamente.
-- Dentro de até 5 minutos após o encaminhamento, pode responder dúvidas operacionais simples: horário, endereço, pagamento, entrega, retirada. Responda de forma breve e direta.
-- Fora desse período, não responda dúvidas operacionais — encaminhe para a equipe.
-- Não retome triagem, pedido de lista, coleta de dados, CNPJ, razão social ou cotação após o handoff.
-- Qualquer outra mensagem (primeira vez): "Nossa equipe já está ciente e vai te atender em breve 🤝".
+- **PJ: silêncio total, sem exceção.** Nenhuma dúvida operacional é respondida depois do handoff PJ — nem endereço, nem horário, nem pagamento. O sistema já garante isso em código; se você ainda assim for chamado pós-handoff PJ, não responda nada além do necessário e nunca reabra a triagem.
+- **PF:** dentro de até 5 minutos após o encaminhamento, pode responder dúvidas operacionais simples: horário, endereço, pagamento, entrega, retirada. Responda de forma breve e direta. Fora desse período, não responda dúvidas operacionais — encaminhe para a equipe.
+- Não retome triagem, pedido de lista, coleta de dados, CNPJ, razão social ou cotação após o handoff (PF ou PJ).
+- Qualquer outra mensagem (primeira vez, só PF): "Nossa equipe já está ciente e vai te atender em breve 🤝".
 - Mensagens seguintes: silêncio total.
 
 ---
@@ -388,8 +360,11 @@ Use a saudação inicial.
 - "Você" sempre. Nunca "senhor/senhora" ou abreviações (vc, tb, pgto)
 - Cordial, direto, humano
 - Máximo 2 mensagens por resposta — uma é o ideal
+- **Mensagens curtas do cliente merecem respostas proporcionais.** Um "Oi" ou um cumprimento sozinho não deve gerar uma resposta longa — principalmente se o cliente pode estar no meio de mandar mais texto/fotos/áudio em sequência. Responda curto e objetivo, sem antecipar todo o roteiro de uma vez.
+- **Nunca repita a saudação inicial** ("Olá! Eu sou o assistente virtual...") depois da primeira vez na conversa.
 - **Varie as confirmações.** Não repita "Perfeito" ou "Anotado" em sequência na mesma conversa. Use alternativas naturais como: "Certo.", "Recebi.", "Combinado.", "Entendido.", "Obrigado pela confirmação.", "Ok, registrei." Use com naturalidade e sem exagerar — uma confirmação curta por turno é suficiente.
 - Para listas longas, prefira formatação estruturada a texto corrido. Um item por linha é mais fácil de conferir.
+- Linguagem curta e operacional — evite parágrafos longos quando uma frase resolve.
 
 ---
 
@@ -398,7 +373,7 @@ Use a saudação inicial.
 Se no início da conversa aparecer uma anotação como **[CONTATO CONHECIDO — tipo anterior: PF]** ou **[CONTATO CONHECIDO — tipo anterior: PJ]**, use como pista inicial:
 
 - Tipo **PF**: se a mensagem não trouxer sinais de empresa, CNPJ, cotação formal ou faturamento, **não faça a pergunta inicial de PF/PJ** — pergunte diretamente em que pode ajudar.
-- Tipo **PJ**: **não faça a pergunta inicial de PF/PJ** — inicie o Fluxo PJ diretamente.
+- Tipo **PJ**: normalmente o sistema já faz o handoff imediato antes de você ser chamado. Se ainda assim precisar agir, **não faça a pergunta inicial de PF/PJ** — use a mensagem do FLUXO PJ diretamente.
 - Se a mensagem atual trouxer sinais contrários ao histórico (ex: contato era PF mas menciona CNPJ, empresa, cotação formal, nota fiscal ou faturamento), reclassifique conforme os sinais presentes.
 - Se houver ambiguidade real, pergunte uma vez de forma leve: "Só para eu te direcionar melhor: esse pedido é para você ou para uma empresa?"
 
@@ -726,6 +701,46 @@ function detectPJSignals(text) {
 }
 
 /**
+ * Detecta sinais claros de auto-identificação como PF no texto do usuário.
+ * Deliberadamente conservador (evita falso positivo tipo "educação física") —
+ * casos ambíguos continuam caindo no fallback via Claude, como antes.
+ */
+function detectPFSignals(text) {
+  if (!text) return false;
+  const trimmed = text.trim().toLowerCase();
+  if (/^pf[\s!.,]*$/.test(trimmed)) return "pf-curto";
+  const phrases = [
+    "pessoa física", "pessoa fisica",
+    "sou pessoa física", "sou pessoa fisica",
+    "sou pf", "uso pessoal", "para uso pessoal",
+    "cliente comum", "pra mim mesmo", "para mim mesmo", "pra mim mesma", "para mim mesma",
+  ];
+  for (const p of phrases) if (trimmed.includes(p)) return p;
+  return false;
+}
+
+/**
+ * Deteta pedido inequívoco de atendimento humano — usado para pular a
+ * agregação/debounce do burst PF mesmo pré-handoff (seção 15 da rodada
+ * PF/PJ + burst): o cliente não deve esperar 60s quando pede explicitamente
+ * para falar com alguém.
+ */
+function detectExplicitHumanRequest(text) {
+  if (!text) return false;
+  const lower = text.toLowerCase();
+  const phrases = [
+    "falar com atendente", "falar com uma pessoa", "falar com alguem", "falar com alguém",
+    "quero um atendente", "quero atendente", "atendimento humano", "pessoa real",
+    "falar com humano", "falar com um humano", "quero falar com gente",
+    "chama o atendente", "chamar atendente", "transferir para atendente",
+    "falar com vendedor", "falar com alguem de verdade", "falar com alguém de verdade",
+    "quero falar com uma pessoa de verdade",
+  ];
+  if (phrases.some((p) => lower.includes(p))) return true;
+  return /\batendente\b/.test(lower) || /\bhumano\b/.test(lower);
+}
+
+/**
  * Gera título sintético do card no momento do handoff.
  * Estratégia: pega a mensagem mais substantiva do cliente,
  * remove saudações/locuções introdutórias e resume o pedido.
@@ -832,6 +847,7 @@ function addMessage(session, role, content, meta = {}) {
   // markTemplateSent() já usa para o evento de template enviado.
   if (meta.messageType)             item.messageType              = meta.messageType;
   if (meta.templateType)            item.templateType             = meta.templateType;
+  if (meta.buttonId)                item.buttonId                 = meta.buttonId;
   if (meta.mediaType)               item.mediaType               = meta.mediaType;
   if (meta.mediaMimeType)           item.mediaMimeType           = meta.mediaMimeType;
   // R2: salvar storage key em vez de base64 — guarda tamanho mas nunca o binário
@@ -886,6 +902,148 @@ function outgoingReply(text, historyRef) {
 
 function outgoingReplyText(reply) {
   return typeof reply === "string" ? reply : reply?.text;
+}
+
+// ============================================================
+// PF/PJ — FLUXO INICIAL DETERMINÍSTICO (sem Claude)
+// Rodada: PJ cai rápido para humano; PF recebe 1 mensagem curta e segue
+// para a triagem normal (agora com agregação de burst — ver mais abaixo).
+// ============================================================
+
+const PJ_HANDOFF_MSG =
+  "Perfeito! Já vou direcionar seu atendimento para a equipe.\n\n" +
+  "Se quiser agilizar, pode mandar seu pedido por texto, foto, áudio ou arquivo com os itens que precisa para orçamento.\n\n" +
+  "Se tiver o CNPJ em mãos, pode enviar também para anexarmos ao atendimento — é opcional.";
+
+const PJ_LUNCH_HANDOFF_MSG =
+  "Perfeito, registrei as informações. Vou passar para nossa equipe responsável por empresas. " +
+  "No momento esse setor está em horário de almoço, mas sua solicitação será respondida assim que o setor retornar.";
+
+const PF_GREETING_MSG =
+  "Perfeito! Me conte o que você precisa. Pode mandar texto, fotos, áudio ou arquivo — vou reunir as informações para te ajudar.";
+
+/**
+ * PJ identificado (botão ou sinal textual/contato conhecido) → mensagem curta
+ * única + handoff IMEDIATO e silêncio total depois (shouldRespond() força
+ * silêncio para PJ pós-handoff, sem a janela de 5min de dúvida operacional
+ * que existe para PF). Nunca chama Claude — elimina o onboarding antigo
+ * (cadastro, CNPJ obrigatório, razão social, desconto/boleto espontâneos).
+ */
+async function handlePjInstantHandoff(session, phone) {
+  let msg = PJ_HANDOFF_MSG;
+  try {
+    const _lunch = await getPjLunchMode();
+    if (_lunch.enabled) msg = PJ_LUNCH_HANDOFF_MSG;
+  } catch { /* falha silenciosa — usa mensagem padrão */ }
+
+  session.clientType = "pj";
+  if (!session.demandType) session.demandType = "cotacao_pj";
+  const replyRef = addMessage(session, "assistant", msg);
+  session.handoffDone          = true;
+  session.postHandoffReplySent = true; // silêncio total — nem a janela operacional de 5min se aplica a PJ
+  session.status                = "aguardando_humano";
+  if (!session.pipelineStatus) session.pipelineStatus = "novo";
+  session.handoffAt = new Date().toISOString();
+  if (!session.cardTitle) session.cardTitle = generateCardTitle(session);
+
+  await saveSession(phone, session);
+  console.log(`[PJ instant] 🏢 handoff imediato +${phone} lunch=${msg === PJ_LUNCH_HANDOFF_MSG}`);
+  return outgoingReply(msg, replyRef);
+}
+
+/**
+ * PF identificado (botão ou sinal textual) → 1 mensagem curta determinística;
+ * a triagem PF normal (Claude) continua depois, agora respeitando a
+ * agregação de burst para as próximas mensagens.
+ */
+async function handlePfGreeting(session, phone) {
+  session.clientType = "pf";
+  const replyRef = addMessage(session, "assistant", PF_GREETING_MSG);
+  await saveSession(phone, session);
+  return outgoingReply(PF_GREETING_MSG, replyRef);
+}
+
+// Corpo da mensagem interativa PF/PJ (seção 3) — determinístico, nunca gerado por Claude.
+const PF_PJ_BUTTONS_TEXT =
+  "Olá! 🙂 Eu sou o assistente virtual da Sartec Papelaria.\n\n" +
+  "Para direcionar seu atendimento, escolha uma opção:";
+
+// Sentinela: distingue "já tratado, nada mais a enviar" (retorno null legítimo,
+// ex.: botões já enviados diretamente) de "não é um caso PF/PJ inicial — segue
+// o fluxo normal do chamador".
+const DEFER_TO_NORMAL_FLOW = Symbol("defer-to-normal-flow");
+
+/**
+ * Ponto único de classificação PF/PJ inicial — usado tanto pelo fluxo de
+ * texto/imagem/PDF (chatWithAgent) quanto pelo de áudio (handleIncomingMessage).
+ * Nunca chama Claude. Ordem de decisão:
+ *   1. Sinal PJ inequívoco no texto atual → handoff PJ imediato.
+ *   2. Sinal PF inequívoco no texto atual → saudação PF imediata.
+ *   3. Contato conhecido (sartec:contact:*) com tipo já registrado → herda
+ *      silenciosamente e segue o mesmo caminho de 1/2 (não pergunta de novo).
+ *   4. Ainda ambíguo e botões nunca enviados nesta sessão → envia os Reply
+ *      Buttons PF/PJ (mensagem interativa da Cloud API) e para por aqui.
+ *   5. Ambíguo mas botões já enviados → DEFER_TO_NORMAL_FLOW (Claude
+ *      reformula a pergunta uma única vez, como já fazia antes desta rodada).
+ *
+ * `contentForHistory` é o valor já pronto para addMessage() (string ou blocos
+ * multipart de mídia) — quem chama decide o formato (texto simples, imagem,
+ * PDF ou o placeholder "[áudio]").
+ */
+async function classifyPfPjAndRespond(session, phone, textToCheck, contentForHistory, meta) {
+  if (session.clientType || session.handoffDone) return DEFER_TO_NORMAL_FLOW;
+
+  let resolvedType = null;
+  if (detectPJSignals(textToCheck)) {
+    resolvedType = "pj";
+  } else if (detectPFSignals(textToCheck)) {
+    resolvedType = "pf";
+  } else {
+    try {
+      const _rawContact = await getRedis().get(`sartec:contact:${phone}`);
+      const _contact = _rawContact ? JSON.parse(_rawContact) : null;
+      if (_contact?.clientType === "pj" || _contact?.clientType === "pf") {
+        resolvedType = _contact.clientType;
+        console.log(`[Agente] 👤 clientType herdado do contato: ${resolvedType} +${phone}`);
+      }
+    } catch { /* falha silenciosa — não bloqueia o atendimento */ }
+  }
+
+  if (resolvedType === "pj") {
+    addMessage(session, "user", contentForHistory, meta);
+    return handlePjInstantHandoff(session, phone);
+  }
+  if (resolvedType === "pf") {
+    addMessage(session, "user", contentForHistory, meta);
+    return handlePfGreeting(session, phone);
+  }
+
+  if (!session.pfPjPromptSent) {
+    addMessage(session, "user", contentForHistory, meta);
+    session.pfPjPromptSent = true;
+    const greetRef = addMessage(session, "assistant", PF_PJ_BUTTONS_TEXT, { messageType: "interactive_buttons" });
+    await saveSession(phone, session);
+    // NÃO enviar aqui: esta função roda por baixo do lock de sessão do chamador
+    // (chatWithAgent/áudio) — chamar sendInteractivePfPjButtons() agora tentaria
+    // readquirir o MESMO lock (para vincular o metaMessageId) e travaria por até
+    // 3s até estourar timeout. Devolve um marcador para o chamador enviar
+    // DEPOIS que o lock já foi liberado (mesma convenção usada por
+    // dispatchAgentReply nos pontos de entrada do webhook).
+    return { interactiveButtons: true, historyRef: greetRef };
+  }
+
+  return DEFER_TO_NORMAL_FLOW;
+}
+
+/**
+ * PJ nunca aguarda burst (handoff é instantâneo, tratado antes deste ponto).
+ * PF/ambíguo pré-handoff aguarda o turno terminar (quiet period/hard cap).
+ * Pós-handoff nunca precisa agendar — o agente já está em silêncio.
+ */
+function shouldDeferForBurst(session) {
+  if (session.handoffDone) return false;
+  if (session.clientType === "pj") return false;
+  return true;
 }
 
 function hasMedia(msg) {
@@ -999,6 +1157,12 @@ function getMessages(session) {
 
 function shouldRespond(session, text) {
   if (!session.handoffDone) return true;
+
+  // PJ pós-handoff fica em silêncio total — o agente sai da frente completamente,
+  // sem exceção para dúvida operacional (decisão fechada desta rodada).
+  if (session.clientType === "pj") {
+    return session.postHandoffReplySent ? false : "post_handoff_default";
+  }
 
   // Dúvidas operacionais simples permitidas somente dentro de até 5 min após handoff
   const HANDOFF_SIMPLE_WINDOW_MS = 5 * 60 * 1000;
@@ -1768,15 +1932,18 @@ async function chatWithAgent(phone, userText, mediaPayload = null, name = "", me
   if (name) session.clientName = name;
   session.clientPhone = phone;
 
-  // Detecta sinais PJ imediatamente, antes de chamar Claude
+  // ── PF/PJ — classificação inicial determinística (sem Claude) ────────────
   const textToCheck = userText || "";
-  const _pjEarlySignal = detectPJSignals(textToCheck);
-  if (!session.clientType && _pjEarlySignal) {
-    session.clientType  = "pj";
-    session.demandType  = "cotacao_pj";
-    if (!session.pipelineStatus) session.pipelineStatus = "novo";
-    console.log(`[PJ detect] +${phone} motivo=${_pjEarlySignal}`);
-  }
+  const _classifyContent = mediaPayload
+    ? [
+        { type: mediaPayload.mimeType === "application/pdf" ? "document" : "image",
+          source: { type: "base64", media_type: mediaPayload.mimeType, data: mediaPayload.base64 } },
+        { type: "text", text: userText || "O cliente enviou este arquivo." },
+      ]
+    : (textToCheck || "[mensagem]");
+  const _classifyResult = await classifyPfPjAndRespond(session, phone, textToCheck, _classifyContent, meta);
+  if (_classifyResult !== DEFER_TO_NORMAL_FLOW) return _classifyResult;
+  // ──────────────────────────────────────────────────────────────────────────
 
   const decision = shouldRespond(session, textToCheck);
 
@@ -1838,7 +2005,7 @@ async function chatWithAgent(phone, userText, mediaPayload = null, name = "", me
     if (_fragGreetRE.test(textToCheck.trim())) {
       const lastAsst = session.history.slice().reverse()
         .find(m => m.role === "assistant" && typeof m.content === "string");
-      if (lastAsst?.content?.toLowerCase().includes("pessoa física ou pessoa jurídica")) {
+      if (lastAsst?.content?.toLowerCase().includes("pessoa física ou pessoa jurídica") || lastAsst?.messageType === "interactive_buttons") {
         const lc = textToCheck.toLowerCase();
         const ack = lc.includes("noite") ? "Boa noite! 😊" :
                     lc.includes("tarde") ? "Boa tarde! 😊" :
@@ -1858,6 +2025,40 @@ async function chatWithAgent(phone, userText, mediaPayload = null, name = "", me
   // Persist user message immediately so it survives even if the AI call fails below.
   await saveSession(phone, session);
 
+  // ── Burst/debounce — turno PF pré-handoff aguarda o cliente terminar ─────
+  // PJ nunca chega aqui (handoff já foi feito instantaneamente acima). Pedido
+  // explícito de humano pula a espera mesmo pré-handoff (seção 15).
+  if (shouldDeferForBurst(session) && !detectExplicitHumanRequest(textToCheck)) {
+    await scheduleBurst(getRedis(), phone);
+    console.log(`[Burst] ⏳ agregando turno +${phone}`);
+    return null;
+  }
+  // ──────────────────────────────────────────────────────────────────────────
+
+  return runAgentCompletion(phone, session, { textToCheck, mediaPayload, resolvedMode: _resolvedMode });
+  });
+}
+
+/**
+ * Gera e envia (via retorno para o chamador) a resposta consolidada do
+ * agente para o estado ATUAL da sessão — reaproveitado tanto pelas chamadas
+ * imediatas (dúvida operacional PF dentro da janela de 5min pós-handoff)
+ * quanto pelo fechamento de um burst (ver lib/agent-burst.js e
+ * api/agent-burst-sweep.js), onde várias mensagens já foram persistidas em
+ * session.history e só falta UMA rodada de Claude para responder a todas.
+ *
+ * textToCheck/mediaPayload são opcionais — quando ausentes (fechamento de
+ * burst), a heurística de lista escolar usa apenas o texto da última
+ * mensagem do cliente (sem reprocessar imagem/PDF via IA nesta chamada).
+ */
+async function runAgentCompletion(phone, session, { textToCheck = null, mediaPayload = null, resolvedMode = null } = {}) {
+  const _lastUserMsg = textToCheck === null
+    ? [...session.history].reverse().find((m) => m.role === "user")
+    : null;
+  const _effectiveText = textToCheck !== null
+    ? textToCheck
+    : (_lastUserMsg && typeof _lastUserMsg.content === "string" ? _lastUserMsg.content : "");
+
   // ── Contexto de contato conhecido + Modo Almoço PJ ───────────────────────
   let _contactNote = null;
   try {
@@ -1869,7 +2070,7 @@ async function chatWithAgent(phone, userText, mediaPayload = null, name = "", me
     }
     const _noteParts = [];
     if (_contact?.clientType) _noteParts.push(`tipo anterior: ${_contact.clientType.toUpperCase()}`);
-    if (_resolvedMode === "new_cycle") _noteParts.push(
+    if (resolvedMode === "new_cycle") _noteParts.push(
       "este contato possui histórico anterior, mas a mensagem mais recente inicia uma nova demanda" +
       " — use o histórico apenas como contexto leve e priorize a solicitação atual"
     );
@@ -1914,10 +2115,10 @@ async function chatWithAgent(phone, userText, mediaPayload = null, name = "", me
 
   // ── Lista escolar: extração estruturada (texto livre ou mídia) ───────────
   // Não bloqueia nem altera a resposta ao cliente — é só persistência interna.
-  if (looksLikeSchoolListContext(textToCheck, mediaPayload, session)) {
+  if (looksLikeSchoolListContext(_effectiveText, mediaPayload, session)) {
     try {
       const incoming = await extractSchoolListData({
-        userText:           textToCheck,
+        userText:           _effectiveText,
         mediaPayload,
         previousSchoolList: session.schoolList || null,
       });
@@ -1931,7 +2132,7 @@ async function chatWithAgent(phone, userText, mediaPayload = null, name = "", me
         notes:      "Lista recebida, mas extração estruturada falhou. Revisar arquivo original.",
         confidence: "low",
         source:     mediaPayload ? (mediaPayload.mimeType === "application/pdf" ? "pdf" : "image") : "text",
-        rawText:    (textToCheck || "").substring(0, 800) || null,
+        rawText:    (_effectiveText || "").substring(0, 800) || null,
         updatedAt:  new Date().toISOString(),
       };
       session.schoolList = mergeSchoolListData(session.schoolList || null, fallback);
@@ -1947,7 +2148,6 @@ async function chatWithAgent(phone, userText, mediaPayload = null, name = "", me
   );
 
   return outgoingReply(reply, replyRef);
-  });
 }
 
 // ============================================================
@@ -2577,11 +2777,10 @@ async function handleIncomingMessage(req, res) {
               if (name) session.clientName = name;
               session.clientPhone = from;
 
-              // Detecta sinais PJ na transcrição
-              if (!session.clientType && _audioTranscription && detectPJSignals(_audioTranscription)) {
-                session.clientType = "pj";
-                session.demandType = "cotacao_pj";
-                console.log(`[Audio] 🏢 PJ detectado na transcrição +${from}`);
+              // Classificação inicial PF/PJ determinística (mesma lógica do texto/imagem)
+              if (!session.clientType && _audioTranscription) {
+                const _audioClassify = await classifyPfPjAndRespond(session, from, _audioTranscription, "[áudio]", _audioMeta);
+                if (_audioClassify !== DEFER_TO_NORMAL_FLOW) return _audioClassify;
               }
 
               // Fallback quando transcrição falhou (não aplica quando foi intencionalmente pulada)
@@ -2624,27 +2823,20 @@ async function handleIncomingMessage(req, res) {
                 return null;
               }
 
-              // Salva mensagem com transcrição e chama Claude com texto puro
+              // Salva a mensagem com transcrição — a resposta em si pode ser adiada (burst)
               addMessage(session, "user", "[áudio]", _audioMeta);
-
-              console.log(`[Audio] 🤖 +${from} | ${getMessages(session).length} msgs`);
-              const _aiRes = await anthropic.messages.create({
-                model:      "claude-haiku-4-5-20251001",
-                max_tokens: 500,
-                system:     SYSTEM_PROMPT,
-                messages:   getMessages(session),
-              });
-              const reply = sanitizeAgentReply(
-                _aiRes.content[0]?.type === "text" ? _aiRes.content[0].text : ""
-              );
-
-              const replyRef = addMessage(session, "assistant", reply);
               await saveSession(from, session);
-              console.log(`[Audio] ✅ "${reply.substring(0, 80)}..." | ${_aiRes.usage?.input_tokens}in/${_aiRes.usage?.output_tokens}out`);
-              return outgoingReply(reply, replyRef);
+
+              if (shouldDeferForBurst(session) && !detectExplicitHumanRequest(_audioTranscription)) {
+                await scheduleBurst(getRedis(), from);
+                console.log(`[Burst] ⏳ agregando turno (áudio) +${from}`);
+                return null;
+              }
+
+              return runAgentCompletion(from, session, { textToCheck: _audioTranscription });
             });
 
-            if (audioReply) await sendTextMessage(from, audioReply);
+            if (audioReply) await dispatchAgentReply(from, audioReply);
             continue;
           }
 
@@ -2663,7 +2855,7 @@ async function handleIncomingMessage(req, res) {
                 media.storageFailed = true;
               }
               const reply = await chatWithAgent(from, caption, media, name, msgMeta);
-              if (reply) await sendTextMessage(from, reply);
+              if (reply) await dispatchAgentReply(from, reply);
             } catch (err) {
               console.error("[Imagem] ❌", err.message);
               await sendTextMessage(from, "Recebi sua imagem 📎 Vou passar para a equipe dar uma olhada 🤝");
@@ -2689,7 +2881,7 @@ async function handleIncomingMessage(req, res) {
                 media.storageFailed = true;
               }
               const reply = await chatWithAgent(from, "O cliente enviou um PDF.", media, name, pdfMeta);
-              if (reply) await sendTextMessage(from, reply);
+              if (reply) await dispatchAgentReply(from, reply);
             } catch (err) {
               console.error("[PDF] ❌", err.message);
               await sendTextMessage(from, "Recebi seu PDF 📎 Vou passar para a equipe dar uma olhada 🤝");
@@ -2787,23 +2979,32 @@ async function handleIncomingMessage(req, res) {
                 if (_docStorageKey)    _docMsgExtra.mediaStorageKey     = _docStorageKey;
                 if (_docStorageFailed) _docMsgExtra.mediaStorageFailed  = true;
                 addMessage(_docSession, "user", "[documento]", _docMsgExtra);
+
+                // Reduz respostas automáticas por mídia (seção 5/16 da rodada PF/PJ +
+                // burst): documento pré-handoff entra no burst (resposta única
+                // consolidada depois); pós-handoff (PJ ou PF) fica em silêncio total —
+                // nunca mais envia a mensagem-padrão "Recebi seu arquivo" por mídia isolada.
+                if (shouldDeferForBurst(_docSession)) {
+                  await scheduleBurst(getRedis(), from);
+                  console.log(`[Burst] ⏳ agregando turno (documento) +${from}`);
+                }
+
                 await saveSession(from, _docSession);
                 if (_docStorageKey) {
                   console.log(`[Doc] salvo no histórico com mediaStorageKey`);
                 } else {
                   console.log(`[Doc] salvo no histórico sem arquivo (download/R2 falhou)`);
                 }
-                if (_docSession._stopFlow) {
-                  // Limpa a flag temporária e sinaliza para o handler não enviar mensagem
-                  delete _docSession._stopFlow;
-                  throw new Error("STOP_FLOW");
-                }
+                delete _docSession._stopFlow;
+                throw new Error("STOP_FLOW");
               });
             } catch (_e) {
               if (_e.message === "STOP_FLOW") continue;
               console.error("[Doc/window] ❌", _e.message);
+              // Fallback de erro real (ex.: lock/Redis) — mantém o aviso genérico
+              // apenas quando algo deu errado de verdade, nunca no caminho normal.
+              await sendTextMessage(from, "Recebi seu arquivo 📎 Vou passar para a equipe dar uma olhada 🤝");
             }
-            await sendTextMessage(from, "Recebi seu arquivo 📎 Vou passar para a equipe dar uma olhada 🤝");
             continue;
           }
 
@@ -2887,7 +3088,64 @@ async function handleIncomingMessage(req, res) {
               console.error("[Button] ❌", err.message);
             }
 
-            if (buttonReply) await sendTextMessage(from, buttonReply);
+            if (buttonReply) await dispatchAgentReply(from, buttonReply);
+            continue;
+          }
+
+          // ── REPLY BUTTON PF/PJ — mensagem interativa da Cloud API ─────
+          // Não confundir com o "button" acima (Quick Reply de TEMPLATE).
+          // Aqui: message.type === "interactive", message.interactive.type
+          // === "button_reply", com .button_reply.{id,title}. O ID é a fonte
+          // de verdade (client_type_pf / client_type_pj) — nunca o texto visível.
+          if (type === "interactive" && message.interactive?.type === "button_reply") {
+            const btnId    = message.interactive.button_reply?.id ?? "";
+            const btnTitle = message.interactive.button_reply?.title ?? "";
+            const msgId    = message.id;
+            console.log(`[InteractiveButton] +${from} id="${btnId}" title="${btnTitle}"`);
+
+            const interactiveMeta = { ...msgMeta, messageType: "interactive_button", buttonId: btnId };
+            let reply = null;
+
+            try {
+              let handled = false;
+              let alreadyProcessed = false;
+
+              await withSessionLock(getRedis(), from, async () => {
+                const session = await loadSession(from);
+
+                alreadyProcessed = Boolean(msgId) && Array.isArray(session.history) &&
+                  session.history.some((m) => m.metaMessageId === msgId);
+                if (alreadyProcessed) {
+                  console.log(`[InteractiveButton] ⏭ redelivery ignorada — metaMessageId=${msgId} já registrado +${from}`);
+                  return;
+                }
+
+                if (btnId !== "client_type_pf" && btnId !== "client_type_pj") return; // cai no fallback abaixo
+
+                const _now = new Date();
+                session.lastUserMessageAt = _now.toISOString();
+                session.windowExpiresAt   = new Date(_now.getTime() + 24 * 60 * 60 * 1000).toISOString();
+                if (name) session.clientName = name;
+                session.clientPhone = from;
+
+                addMessage(session, "user", btnTitle || (btnId === "client_type_pj" ? "Pessoa jurídica" : "Pessoa física"), interactiveMeta);
+
+                reply = btnId === "client_type_pj"
+                  ? await handlePjInstantHandoff(session, from)
+                  : await handlePfGreeting(session, from);
+                handled = true;
+              });
+
+              // ID desconhecido (não deveria ocorrer — só enviamos os dois acima) ou
+              // redelivery: cai no mesmo caminho de qualquer mensagem normal do cliente.
+              if (!handled && !alreadyProcessed) {
+                reply = await chatWithAgent(from, btnTitle || "Continuar", null, name, interactiveMeta);
+              }
+            } catch (err) {
+              console.error("[InteractiveButton] ❌", err.message);
+            }
+
+            if (reply) await sendTextMessage(from, reply);
             continue;
           }
 
@@ -2924,7 +3182,7 @@ async function handleIncomingMessage(req, res) {
               continue;
             }
 
-            await sendTextMessage(from, reply);
+            await dispatchAgentReply(from, reply);
             continue;
           }
 
@@ -2979,7 +3237,15 @@ async function handleIncomingMessage(req, res) {
 // ENVIO
 // ============================================================
 
-async function sendTextMessage(to, text) {
+/**
+ * Envio genérico à Cloud API — `messageFields` traz apenas os campos
+ * específicos do tipo (ex.: `{ type: "text", text: {...} }` ou
+ * `{ type: "interactive", interactive: {...} }`); messaging_product/
+ * recipient_type/to são sempre os mesmos. `historyRef` (opcional) vincula o
+ * metaMessageId retornado pela Meta à entrada correspondente do histórico,
+ * exatamente como sendTextMessage já fazia.
+ */
+async function sendWhatsAppMessage(to, messageFields, historyRef) {
   const PHONE_NUMBER_ID = process.env.WHATSAPP_PHONE_NUMBER_ID;
   const ACCESS_TOKEN    = process.env.WHATSAPP_ACCESS_TOKEN;
 
@@ -2988,7 +3254,6 @@ async function sendTextMessage(to, text) {
     return;
   }
 
-  const body = outgoingReplyText(text);
   const res = await fetch(
     `https://graph.facebook.com/v19.0/${PHONE_NUMBER_ID}/messages`,
     {
@@ -3001,8 +3266,7 @@ async function sendTextMessage(to, text) {
         messaging_product: "whatsapp",
         recipient_type:    "individual",
         to,
-        type: "text",
-        text: { preview_url: false, body },
+        ...messageFields,
       }),
     }
   );
@@ -3010,33 +3274,93 @@ async function sendTextMessage(to, text) {
   const data = await res.json();
   if (!res.ok) {
     console.error(`[Send] ❌ Meta erro ${data?.error?.code}: ${data?.error?.message}`);
-  } else {
-    const metaMessageId = data?.messages?.[0]?.id;
-    console.log(`[Send] ✅ ID: ${metaMessageId}`);
-    if (metaMessageId && text?.historyRef) {
-      try {
-        await withSessionLock(getRedis(), to, async () => {
-          const session = await loadSession(to);
-          const { historyIndex, createdAt } = text.historyRef;
-          const savedMessage = session.history?.[historyIndex];
-          if (
-            !savedMessage
-            || savedMessage.role !== "assistant"
-            || savedMessage.createdAt !== createdAt
-          ) {
-            console.warn(`[Send] ⚠️ Resposta salva mudou antes do vínculo Meta +${to}`);
-            return;
-          }
-          if (savedMessage.metaMessageId && savedMessage.metaMessageId !== metaMessageId) {
-            console.warn(`[Send] ⚠️ Resposta já possui outro ID Meta +${to}`);
-            return;
-          }
-          savedMessage.metaMessageId = metaMessageId;
-          await saveSession(to, session);
-        });
-      } catch (error) {
-        console.error(`[Send] ❌ Falha ao persistir ID Meta +${to}: ${error.message}`);
-      }
+    return;
+  }
+
+  const metaMessageId = data?.messages?.[0]?.id;
+  console.log(`[Send] ✅ ID: ${metaMessageId}`);
+  if (metaMessageId && historyRef) {
+    try {
+      await withSessionLock(getRedis(), to, async () => {
+        const session = await loadSession(to);
+        const { historyIndex, createdAt } = historyRef;
+        const savedMessage = session.history?.[historyIndex];
+        if (
+          !savedMessage
+          || savedMessage.role !== "assistant"
+          || savedMessage.createdAt !== createdAt
+        ) {
+          console.warn(`[Send] ⚠️ Resposta salva mudou antes do vínculo Meta +${to}`);
+          return;
+        }
+        if (savedMessage.metaMessageId && savedMessage.metaMessageId !== metaMessageId) {
+          console.warn(`[Send] ⚠️ Resposta já possui outro ID Meta +${to}`);
+          return;
+        }
+        savedMessage.metaMessageId = metaMessageId;
+        await saveSession(to, session);
+      });
+    } catch (error) {
+      console.error(`[Send] ❌ Falha ao persistir ID Meta +${to}: ${error.message}`);
     }
   }
 }
+
+async function sendTextMessage(to, text) {
+  const body = outgoingReplyText(text);
+  return sendWhatsAppMessage(
+    to,
+    { type: "text", text: { preview_url: false, body } },
+    typeof text === "object" ? text?.historyRef : null
+  );
+}
+
+/**
+ * Ponto único de envio para o resultado de chatWithAgent()/classifyPfPjAndRespond()
+ * — a maioria dos casos é texto simples (outgoingReply), mas a classificação
+ * PF/PJ inicial pode retornar `{ interactiveButtons: true, historyRef }`
+ * quando ainda não sabe se o cliente é PF ou PJ. Sempre chamado FORA do lock
+ * de sessão (depois que chatWithAgent/withSessionLock já retornou).
+ */
+async function dispatchAgentReply(to, reply) {
+  if (!reply) return;
+  if (reply.interactiveButtons) {
+    await sendInteractivePfPjButtons(to, reply.historyRef);
+    return;
+  }
+  await sendTextMessage(to, reply);
+}
+
+/**
+ * Mensagem interativa PF/PJ (Reply Buttons da Cloud API) — não é template,
+ * é mensagem interativa dentro da janela aberta pelo cliente. Payload
+ * confirmado na documentação oficial da Meta (seção 3/24 do pedido):
+ * type "interactive" → interactive.type "button" → action.buttons[].reply.{id,title}.
+ */
+async function sendInteractivePfPjButtons(to, historyRef) {
+  return sendWhatsAppMessage(
+    to,
+    {
+      type: "interactive",
+      interactive: {
+        type: "button",
+        body: { text: PF_PJ_BUTTONS_TEXT },
+        action: {
+          buttons: [
+            { type: "reply", reply: { id: "client_type_pf", title: "Pessoa física" } },
+            { type: "reply", reply: { id: "client_type_pj", title: "Pessoa jurídica" } },
+          ],
+        },
+      },
+    },
+    historyRef
+  );
+}
+
+// ============================================================
+// EXPORTS NOMEADOS — usados por api/agent-burst-sweep.js (Vercel Cron)
+// para fechar o turno agregado sem duplicar loadSession/saveSession/
+// runAgentCompletion/sendTextMessage aqui. O default export (handler do
+// webhook) continua inalterado para a Meta/Vercel.
+// ============================================================
+export { getRedis, loadSession, saveSession, runAgentCompletion, sendTextMessage };

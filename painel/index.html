@@ -2014,6 +2014,11 @@
     .bubble-reply-btn:hover { background:#e8edf9; color:var(--brand-navy); }
     .bubble-wrap.left:hover .bubble-reply-btn { display:block; }
 
+    /* ── Botão Copiar texto — preserva quebras de linha via Clipboard API ── */
+    .bubble-copy-btn { display:none; font-size:.62rem; font-weight:600; background:none; border:1px solid var(--border); border-radius:5px; padding:2px 7px; color:var(--text-secondary); cursor:pointer; margin-top:3px; transition:background .12s,color .12s; align-self:flex-start; }
+    .bubble-copy-btn:hover { background:#e8edf9; color:var(--brand-navy); }
+    .bubble-wrap:hover .bubble-copy-btn { display:block; }
+
     /* ── Barra de resposta acima do composer ─────────────────── */
     .reply-bar { display:flex; align-items:center; gap:8px; padding:6px 12px; margin:0 0 2px; background:#eff2fb; border-left:3px solid var(--brand-navy); border-radius:6px; font-size:.78rem; color:var(--text-secondary); flex-shrink:0; }
     .reply-bar-label { color:var(--brand-navy); font-size:.7rem; font-weight:700; flex-shrink:0; white-space:nowrap; }
@@ -4319,6 +4324,7 @@
       .btn-send { height:42px;min-width:60px; }
       .composer-row textarea { min-height:42px; }
       .bubble-reply-btn { display:block; }
+      .bubble-copy-btn { display:block; }
       /* Previne zoom automático do iOS em campos com font-size < 16px */
       .composer-row textarea,
       .caption-input,
@@ -9726,6 +9732,20 @@ function appendBubble(container, msg, optimistic = false, history = null, histor
     wrap.appendChild(replyBtn);
   }
 
+  // Botão Copiar texto — usa o conteúdo RAW da mensagem via Clipboard API,
+  // preservando \n independente de como a seleção visual copiaria a bolha.
+  if (!optimistic && typeof content === "string" && content.trim()) {
+    const copyBtn = document.createElement("button");
+    copyBtn.className   = "bubble-copy-btn";
+    copyBtn.textContent  = "Copiar texto";
+    copyBtn.title        = "Copiar o texto original desta mensagem, preservando quebras de linha";
+    copyBtn.onclick = (e) => {
+      e.stopPropagation();
+      copyBubbleText(content);
+    };
+    wrap.appendChild(copyBtn);
+  }
+
   // Marca a bolha com o ID da mensagem para permitir atualização cirúrgica de status
   // BUG4 FIX: also set data-msg-id so quote click-to-scroll can find the target element
   if (msg.metaMessageId) {
@@ -9807,6 +9827,33 @@ function appendBubble(container, msg, optimistic = false, history = null, histor
   }
 
   container.appendChild(wrap);
+}
+
+// Copia o texto RAW (com \n preservados) para a área de transferência,
+// contornando qualquer inconsistência da cópia por seleção visual entre
+// navegadores/apps de destino (ex.: colar em planilha). Não transforma o
+// texto em lista estruturada — é o conteúdo original, tal como recebido.
+function copyBubbleText(text) {
+  if (navigator.clipboard && navigator.clipboard.writeText) {
+    navigator.clipboard.writeText(text)
+      .then(() => showToast("Texto copiado", "t-ok"))
+      .catch(() => showToast("Não foi possível copiar o texto", "t-err"));
+    return;
+  }
+  try {
+    const ta = document.createElement("textarea");
+    ta.value = text;
+    ta.style.position = "fixed";
+    ta.style.opacity = "0";
+    document.body.appendChild(ta);
+    ta.focus();
+    ta.select();
+    const ok = document.execCommand("copy");
+    document.body.removeChild(ta);
+    showToast(ok ? "Texto copiado" : "Não foi possível copiar o texto", ok ? "t-ok" : "t-err");
+  } catch {
+    showToast("Não foi possível copiar o texto", "t-err");
+  }
 }
 
 function setReplyTarget(prefix, msg) {
