@@ -10246,10 +10246,17 @@ function handleCameraClick(prefix) {
 // no caso do Ogg, o byte de canais do pacote OpusHead (RFC 7845) — em vez de
 // apenas renomear o mimeType escolhido antes de gravar para o que a Meta
 // aceita. Se a validação falhar, a gravação é recusada com mensagem clara.
+// Correção 2 (mesmo erro 131053, caminho MP4 do Chrome/Edge real): pedir o
+// container genérico "audio/mp4" não garante um codec compatível — o
+// Chrome pode aceitar isTypeSupported("audio/mp4") e ainda assim não
+// produzir AAC-LC. Por isso a variante explícita "audio/mp4;codecs=mp4a.40.2"
+// (AAC-LC) vem PRIMEIRO na lista; "audio/mp4" genérico só é fallback. Em
+// qualquer caso, o codec real é conferido de verdade em inspectRecordedAudio()
+// (mp4a no sample entry) — nunca se confia apenas no MIME pedido.
 const AUDIO_MIME_CANDIDATES = [
-  { mime: "audio/mp4",                 sendMime: "audio/mp4", voice: false },
-  { mime: "audio/mp4;codecs=mp4a.40.2", sendMime: "audio/mp4", voice: false },
-  { mime: "audio/ogg;codecs=opus",     sendMime: "audio/ogg", voice: true  },
+  { mime: "audio/mp4;codecs=mp4a.40.2", sendMime: "audio/mp4", voice: false, ext: "m4a" },
+  { mime: "audio/mp4",                  sendMime: "audio/mp4", voice: false, ext: "m4a" },
+  { mime: "audio/ogg;codecs=opus",      sendMime: "audio/ogg", voice: true,  ext: "ogg" },
 ];
 const MIC_MAX_RECORDING_SEC = 10 * 60; // limite de segurança — evita gravação esquecida ligada
 
@@ -10322,13 +10329,27 @@ async function handleMicClick(prefix) {
     return;
   }
 
+  // Diagnóstico controlado (nunca base64/conteúdo do áudio) — o navegador
+  // pode não obedecer exatamente ao mimeType pedido no construtor.
+  console.log(`[mic] requestedMime=${picked.mime} recorder.mimeType=${recorder.mimeType || "—"}`);
+
   const chunks = [];
-  recorder.ondataavailable = (e) => { if (e.data && e.data.size > 0) chunks.push(e.data); };
+  let chunkType = null;
+  recorder.ondataavailable = (e) => {
+    if (e.data && e.data.size > 0) {
+      chunks.push(e.data);
+      if (!chunkType) chunkType = e.data.type || null;
+    }
+  };
 
   const state = {
     recorder, stream, chunks,
     sendMime: picked.sendMime,
+    ext: picked.ext,
     voice: !!picked.voice,
+    requestedMime: picked.mime,
+    actualMime: recorder.mimeType || null,
+    getChunkType: () => chunkType,
     startedAt: Date.now(),
     timerInterval: null,
   };
@@ -10387,17 +10408,65 @@ function cancelMicRecording(prefix) {
   hideMicRecordingBar(prefix);
 }
 
+// Caminhada mínima de boxes ISO-BMFF (MP4) — não é um parser completo, só o
+// suficiente para descer moov > trak > mdia > minf > stbl > stsd e ler o 4CC
+// do primeiro sample entry. Mesma lógica existe no backend (duplicada de
+// propósito — ver lib/audio-validation.js — este projeto não tem bundler
+// ligando painel/index.html a api/*.js).
+function _walkMp4Boxes(bytes, start, end, visit) {
+  let offset = start;
+  while (offset + 8 <= end) {
+    const size = ((bytes[offset] << 24) | (bytes[offset + 1] << 16) | (bytes[offset + 2] << 8) | bytes[offset + 3]) >>> 0;
+    const type = String.fromCharCode(bytes[offset + 4], bytes[offset + 5], bytes[offset + 6], bytes[offset + 7]);
+    let boxSize = size;
+    let headerSize = 8;
+    if (size === 1) {
+      if (offset + 16 > end) break;
+      const hi = ((bytes[offset + 8] << 24) | (bytes[offset + 9] << 16) | (bytes[offset + 10] << 8) | bytes[offset + 11]) >>> 0;
+      const lo = ((bytes[offset + 12] << 24) | (bytes[offset + 13] << 16) | (bytes[offset + 14] << 8) | bytes[offset + 15]) >>> 0;
+      boxSize = hi * 4294967296 + lo;
+      headerSize = 16;
+    } else if (size === 0) {
+      boxSize = end - offset;
+    }
+    if (boxSize < headerSize || offset + boxSize > end) break; // malformado/truncado — para com segurança
+    visit(type, offset + headerSize, offset + boxSize);
+    offset += boxSize;
+  }
+}
+const _MP4_CONTAINER_BOXES = new Set(["moov", "trak", "mdia", "minf", "stbl", "mvex", "edts", "udta"]);
+function detectMp4AacCodec(bytes) {
+  let found = false;
+  function recurse(start, end) {
+    _walkMp4Boxes(bytes, start, end, (type, childStart, childEnd) => {
+      if (found) return;
+      if (type === "stsd") {
+        const entryStart = childStart + 8; // fullbox header(4) + entry_count(4)
+        if (entryStart + 8 <= childEnd) {
+          const fmt = String.fromCharCode(bytes[entryStart + 4], bytes[entryStart + 5], bytes[entryStart + 6], bytes[entryStart + 7]);
+          if (fmt === "mp4a") found = true;
+        }
+      } else if (_MP4_CONTAINER_BOXES.has(type)) {
+        recurse(childStart, childEnd);
+      }
+    });
+  }
+  recurse(0, bytes.length);
+  return found;
+}
+
 // Lê os bytes reais do que o MediaRecorder produziu e confirma que o
-// container bate com o que vamos declarar à Meta — nunca confia apenas no
-// mimeType escolhido antes de gravar (isTypeSupported() indica capacidade,
-// não garante o que sai de fato). Ver AUDIO_MIME_CANDIDATES/pickSupportedAudioMime.
+// container E O CODEC batem com o que vamos declarar à Meta — nunca confia
+// apenas no mimeType escolhido antes de gravar (isTypeSupported() indica
+// capacidade, não garante o que sai de fato). Ver AUDIO_MIME_CANDIDATES/pickSupportedAudioMime.
 //
 // container: "ogg" → confere assinatura "OggS" e, dentro do pacote OpusHead
 // (RFC 7845 — 8 bytes de magic "OpusHead" + 1 byte versão + 1 byte canais),
 // que o áudio é realmente mono (exigência documentada da Cloud API só para
 // audio/ogg: "OPUS codecs only; base audio/ogg not supported; mono input only").
-// container: "mp4" → confere a assinatura "ftyp" (ISO BMFF); a Cloud API não
-// documenta restrição de canais para audio/mp4.
+// container: "mp4" → confere a assinatura "ftyp" (ISO BMFF) E que existe um
+// sample entry "mp4a" (AAC) em algum stsd — container MP4 sozinho não basta;
+// sem AAC comprovado, a gravação é recusada (não mascaramos o MIME).
 function inspectRecordedAudio(bytes, container) {
   if (container === "ogg") {
     if (bytes.length < 28 || bytes[0] !== 0x4F || bytes[1] !== 0x67 || bytes[2] !== 0x67 || bytes[3] !== 0x53) {
@@ -10417,6 +10486,7 @@ function inspectRecordedAudio(bytes, container) {
     if (bytes.length < 8 || String.fromCharCode(...bytes.slice(4, 8)) !== "ftyp") {
       return { ok: false, reason: "not-mp4" };
     }
+    if (!detectMp4AacCodec(bytes)) return { ok: false, reason: "no-aac" };
     return { ok: true };
   }
   return { ok: false, reason: "unknown-container" };
@@ -10437,19 +10507,25 @@ function stopMicRecording(prefix) {
     try {
       const bytes = new Uint8Array(await blob.arrayBuffer());
       const container = state.sendMime === "audio/ogg" ? "ogg" : "mp4";
+      // Diagnóstico controlado (nunca base64/conteúdo do áudio) — permite
+      // confirmar em produção se o navegador obedeceu ao MIME pedido.
+      console.log(
+        `[mic] diag requestedMime=${state.requestedMime} recorder.mimeType=${state.actualMime || "—"} ` +
+        `chunkType=${state.getChunkType?.() || "—"} finalSize=${blob.size}`
+      );
       const check = inspectRecordedAudio(bytes, container);
       if (!check.ok) {
         console.error(`[mic] validação falhou: container=${container} motivo=${check.reason} canais=${check.channels ?? "—"}`);
-        showToast(
-          check.reason === "not-mono"
-            ? "Seu microfone gravou em estéreo, que o WhatsApp não aceita. Tente novamente ou use outro navegador/dispositivo."
-            : "Não conseguimos validar o áudio gravado. Tente novamente.",
-          "t-err"
-        );
+        const message = check.reason === "not-mono"
+          ? "Seu microfone gravou em estéreo, que o WhatsApp não aceita. Tente novamente ou use outro navegador/dispositivo."
+          : check.reason === "no-aac"
+            ? "Este navegador não gerou um áudio compatível com o WhatsApp."
+            : "Não conseguimos validar o áudio gravado. Tente novamente.";
+        showToast(message, "t-err");
         return;
       }
       const base64 = await blobToBase64(blob);
-      pendingAudio[prefix] = { base64, mimeType: state.sendMime, durationSec };
+      pendingAudio[prefix] = { base64, mimeType: state.sendMime, filename: `audio.${state.ext || (container === "ogg" ? "ogg" : "m4a")}`, durationSec };
       showAudioPreview(prefix);
     } catch {
       showToast("Não consegui processar o áudio gravado. Tente novamente.", "t-err");
@@ -10524,7 +10600,7 @@ async function sendAudioMessage(prefix) {
 
   try {
     const payload = {
-      to: phone, type: "audio", mediaBase64: audio.base64, mimeType: audio.mimeType,
+      to: phone, type: "audio", mediaBase64: audio.base64, mimeType: audio.mimeType, filename: audio.filename,
       attendantId:   att?.id   || null,
       attendantName: att?.name || null,
     };
@@ -10538,7 +10614,9 @@ async function sendAudioMessage(prefix) {
       console.error("[sendAudio] ❌", err.detail || err.error);
       removeLastOptimistic(container);
       showAudioPreview(prefix); // pendingAudio segue intacto — permite reenviar
-      showToast("Não consegui enviar o áudio. Tente novamente.", "t-err");
+      // Erro 422 (validação de bytes no backend — lib/audio-validation.js) traz
+      // uma mensagem específica; qualquer outra falha usa o texto genérico.
+      showToast(res.status === 422 && err.error ? err.error : "Não consegui enviar o áudio. Tente novamente.", "t-err");
     } else {
       pendingAudio[prefix] = null;
       prefix === "modal" ? await refreshModal() : await refreshConvsChat(phone);

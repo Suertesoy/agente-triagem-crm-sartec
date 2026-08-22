@@ -4,15 +4,19 @@
 //   Texto:    { to, message, type: "text" }
 //   Imagem:   { to, type: "image",    mediaBase64, mimeType, caption? }
 //   Documento:{ to, type: "document", mediaBase64, mimeType, filename, caption? }
-//   Áudio:    { to, type: "audio",    mediaBase64, mimeType }
+//   Áudio:    { to, type: "audio",    mediaBase64, mimeType, filename? }
 //             mimeType deve ser "audio/mp4" ou "audio/ogg" (sem parâmetros
 //             de codec) — a Meta Cloud API aceita esses dois nativamente.
 //             "audio/ogg" é enviado como nota de voz nativa (voice: true).
+//             Os bytes são validados de verdade antes do upload (container +
+//             codec real — ver lib/audio-validation.js); filename é opcional,
+//             senão é inferido do mimeType (ex.: audio/mp4 → audio.m4a).
 // ============================================================
 
 import Redis from "ioredis";
 import { uploadMedia } from "./_lib/media-storage.js";
 import { withSessionLock } from "../lib/redis-lock.js";
+import { inspectAudioBytes, inferAudioFilename } from "../lib/audio-validation.js";
 
 let redisClient = null;
 
@@ -418,16 +422,36 @@ async function sendDocument(req, res, body, PHONE_NUMBER_ID, ACCESS_TOKEN) {
 // (sem parâmetros de codec) — "audio/mp4" ou "audio/ogg".
 const VOICE_CAPABLE_MIME_TYPES = new Set(["audio/ogg"]);
 
+// Mensagens amigáveis por motivo de rejeição (inspectAudioBytes) — nunca
+// aceitar só porque o request diz mimeType: audio/mp4 (ver lib/audio-validation.js).
+const AUDIO_REJECT_MESSAGES = {
+  "no-aac": "Este navegador não gerou um áudio compatível com o WhatsApp.",
+  "not-mono": "O áudio gravado está em estéreo, que o WhatsApp não aceita para audio/ogg.",
+};
+const AUDIO_REJECT_DEFAULT_MESSAGE = "O áudio enviado não pôde ser validado como um arquivo compatível com o WhatsApp.";
+
 async function sendAudio(req, res, body, PHONE_NUMBER_ID, ACCESS_TOKEN) {
-  const { to, mediaBase64, mimeType, replyToMessageId } = body;
+  const { to, mediaBase64, mimeType, replyToMessageId, filename } = body;
 
   if (!mediaBase64 || !mimeType) {
     return res.status(400).json({ error: "Campos mediaBase64 e mimeType são obrigatórios para type audio" });
   }
 
-  // 1. Upload para a Meta
+  // 1. Valida os bytes reais ANTES de subir para a Meta — nunca confia apenas
+  // no mimeType declarado pelo request (ver lib/audio-validation.js).
   const binaryData = Buffer.from(mediaBase64, "base64");
+  const audioCheck = inspectAudioBytes(binaryData, mimeType);
+  if (!audioCheck.ok) {
+    console.error(`[send/audio] ❌ validação falhou mime=${mimeType} motivo=${audioCheck.reason} size=${binaryData.length}`);
+    return res.status(422).json({
+      error: AUDIO_REJECT_MESSAGES[audioCheck.reason] || AUDIO_REJECT_DEFAULT_MESSAGE,
+      detail: audioCheck.reason,
+    });
+  }
+
+  // 2. Upload para a Meta
   console.log(`[send/audio] upload start mime=${mimeType} size=${binaryData.length}`);
+  const uploadFilename = filename || inferAudioFilename(mimeType);
 
   const uploadResult = await callMetaWithRetry(
     `https://graph.facebook.com/v19.0/${PHONE_NUMBER_ID}/media`,
@@ -435,7 +459,7 @@ async function sendAudio(req, res, body, PHONE_NUMBER_ID, ACCESS_TOKEN) {
       const form = new FormData();
       form.append("messaging_product", "whatsapp");
       form.append("type", mimeType);
-      form.append("file", new Blob([binaryData], { type: mimeType }), "audio");
+      form.append("file", new Blob([binaryData], { type: mimeType }), uploadFilename);
       return { method: "POST", headers: { Authorization: `Bearer ${ACCESS_TOKEN}` }, body: form };
     },
     "send/audio-upload"
@@ -450,7 +474,7 @@ async function sendAudio(req, res, body, PHONE_NUMBER_ID, ACCESS_TOKEN) {
   const mediaId = uploadResult.data.id;
   console.log(`[send/audio] upload ok media_id=${mediaId} attempts=${uploadResult.attempts}`);
 
-  // 2. Envia o áudio via media_id — voice:true só para audio/ogg (nota de voz nativa)
+  // 3. Envia o áudio via media_id — voice:true só para audio/ogg (nota de voz nativa)
   const audioPayload = { id: mediaId };
   if (VOICE_CAPABLE_MIME_TYPES.has(mimeType)) audioPayload.voice = true;
 
@@ -487,7 +511,7 @@ async function sendAudio(req, res, body, PHONE_NUMBER_ID, ACCESS_TOKEN) {
   const metaMessageId = metaResult.data?.messages?.[0]?.id || null;
   console.log(`[send/audio] send ok metaMessageId=${metaMessageId}${replyToMessageId ? " (reply)" : ""} attempts=${metaResult.attempts}`);
 
-  // 3. Upload para R2 (best-effort; falha não cancela envio já realizado)
+  // 4. Upload para R2 (best-effort; falha não cancela envio já realizado)
   let r2AudioResult = null;
   try {
     r2AudioResult = await uploadMedia(binaryData, mimeType, to, metaMessageId || `audio_${Date.now()}`);
@@ -495,7 +519,7 @@ async function sendAudio(req, res, body, PHONE_NUMBER_ID, ACCESS_TOKEN) {
     console.warn(`[send/audio] ⚠️ R2 upload falhou: ${String(r2Err.message || "").substring(0, 80)}`);
   }
 
-  // 4. Salva no histórico — sem base64 para não estourar Redis
+  // 5. Salva no histórico — sem base64 para não estourar Redis
   const audioEntry = {
     role:             "assistant",
     content:          "",
