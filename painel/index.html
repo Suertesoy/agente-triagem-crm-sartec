@@ -1234,10 +1234,17 @@
     .contact-avatar.pj { background:var(--pj-color); }
     .contact-info { flex:1; min-width:0; }
     .contact-name-row { display:flex; align-items:center; gap:4px; margin-bottom:2px; }
-    .contact-name { font-size:.84rem; font-weight:600; color:var(--text-primary); white-space:nowrap; overflow:hidden; text-overflow:ellipsis; flex:1; min-width:0; }
+    .contact-name { font-size:1rem; font-weight:600; color:var(--text-primary); white-space:nowrap; overflow:hidden; text-overflow:ellipsis; flex:1; min-width:0; }
     .contact-time { font-size:.65rem; color:var(--text-muted); flex-shrink:0; }
-    .contact-phone { font-size:.82rem; color:var(--text-primary); margin-bottom:3px; font-variant-numeric:tabular-nums; }
+    .contact-phone { font-size:.94rem; color:var(--text-primary); margin-bottom:3px; font-variant-numeric:tabular-nums; }
     .contact-phone-row, .copy-value-row { display:flex; align-items:center; gap:5px; min-width:0; }
+    /* ── Nome + telefone do cabeçalho do chat (modal e aba Conversas) — lado a
+       lado no desktop, empilhados no mobile ── */
+    .chat-hdr-identity { display:flex; align-items:baseline; gap:16px; flex-wrap:wrap; }
+    .chat-hdr-identity .copy-value-row { margin-top:0 !important; }
+    @media (max-width: 768px) {
+      .chat-hdr-identity { flex-direction:column; align-items:flex-start; gap:0; }
+    }
     .copy-icon-btn {
       width:25px; height:25px; padding:0; border:0; border-radius:6px;
       display:inline-flex; align-items:center; justify-content:center; flex-shrink:0;
@@ -1617,7 +1624,7 @@
     }
     .modal-header .info { flex: 1; min-width: 0; }
     .modal-header h2 {
-      font-size: 1rem;
+      font-size: 1.25rem;
       font-weight: 700;
       white-space: nowrap;
       overflow: hidden;
@@ -5432,13 +5439,12 @@
     <div class="modal-header">
       <button class="modal-hdr-btn" onclick="closeModal()">✕</button>
       <div class="info">
-        <div class="copy-value-row">
+        <div class="chat-hdr-identity">
           <h2 id="modal-chat-name">—</h2>
-          <button class="copy-icon-btn on-dark" id="modal-copy-name" type="button" title="Copiar nome" aria-label="Copiar nome"></button>
-        </div>
-        <div class="copy-value-row" style="margin-top:2px;">
-          <span id="modal-chat-phone" style="font-size:.82rem;font-variant-numeric:tabular-nums;opacity:.92;"></span>
-          <button class="copy-icon-btn on-dark" id="modal-copy-phone" type="button" title="Copiar telefone" aria-label="Copiar telefone"></button>
+          <div class="copy-value-row">
+            <span id="modal-chat-phone" style="font-size:1.05rem;font-variant-numeric:tabular-nums;opacity:.92;"></span>
+            <button class="copy-icon-btn on-dark" id="modal-copy-phone" type="button" title="Copiar telefone" aria-label="Copiar telefone"></button>
+          </div>
         </div>
         <div class="info-sub">
           <span id="modal-chat-badge"></span>
@@ -8527,7 +8533,6 @@ function renderModal(data) {
   document.getElementById("modal-chat-name").textContent =
     data.clientName || data.phone || "—";
   document.getElementById("modal-chat-phone").textContent = formatPhoneDisplay(data.phone);
-  configureCopyButton(document.getElementById("modal-copy-name"), data.clientName || data.phone || "—", "Nome");
   configureCopyButton(document.getElementById("modal-copy-phone"), data.phone, "Telefone");
 
   document.getElementById("modal-chat-badge").innerHTML =
@@ -8840,13 +8845,12 @@ async function openConvsChat(phone, redisKey, isArchive) {
     <div style="background:var(--brand-navy);color:#fff;padding:12px 16px;display:flex;align-items:center;gap:10px;flex-shrink:0">
       <button class="mob-back-btn" onclick="closeMobChat()">&#8592; Voltar</button>
       <div style="flex:1;min-width:0">
-        <div class="copy-value-row">
-          <div id="convs-chat-name" style="font-size:.96rem;font-weight:700;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">Carregando...</div>
-          <button class="copy-icon-btn on-dark" id="convs-copy-name" type="button" title="Copiar nome" aria-label="Copiar nome"></button>
-        </div>
-        <div class="copy-value-row" style="margin-top:2px;">
-          <span id="convs-chat-phone" style="font-size:.82rem;font-variant-numeric:tabular-nums;opacity:.92;"></span>
-          <button class="copy-icon-btn on-dark" id="convs-copy-phone" type="button" title="Copiar telefone" aria-label="Copiar telefone"></button>
+        <div class="chat-hdr-identity">
+          <div id="convs-chat-name" style="font-size:1.25rem;font-weight:700;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">Carregando...</div>
+          <div class="copy-value-row">
+            <span id="convs-chat-phone" style="font-size:1.05rem;font-variant-numeric:tabular-nums;opacity:.92;"></span>
+            <button class="copy-icon-btn on-dark" id="convs-copy-phone" type="button" title="Copiar telefone" aria-label="Copiar telefone"></button>
+          </div>
         </div>
         <div id="convs-chat-sub" style="font-size:.7rem;opacity:.75;display:flex;gap:8px;margin-top:2px"></div>
       </div>
@@ -8958,7 +8962,6 @@ function renderConvsChat(data) {
   nameEl.textContent = data.clientName || data.phone || "—";
   const phoneEl = document.getElementById("convs-chat-phone");
   if (phoneEl) phoneEl.textContent = formatPhoneDisplay(data.phone);
-  configureCopyButton(document.getElementById("convs-copy-name"), data.clientName || data.phone || "—", "Nome");
   configureCopyButton(document.getElementById("convs-copy-phone"), data.phone, "Telefone");
   if (subEl) {
     subEl.innerHTML = `
@@ -10231,6 +10234,18 @@ function handleCameraClick(prefix) {
 // contêiner webm (padrão do MediaRecorder no Chrome/Edge sem essas opções),
 // por isso, se nenhum dos dois formatos acima estiver disponível, a gravação
 // é recusada com uma mensagem clara em vez de tentar enviar algo incompatível.
+//
+// Correção do erro real da Meta "131053 Media upload error": a documentação
+// oficial da Cloud API exige, textualmente, "mono input only" para audio/ogg.
+// getUserMedia() pedia áudio sem constraint de canal — vários navegadores
+// capturam 2 canais por padrão (processamento de eco costuma duplicar o
+// mesmo conteúdo mono em 2 canais), e o MediaRecorder simplesmente codificava
+// esse Opus estéreo, que a Meta rejeita. A correção pede channelCount
+// explicitamente (getUserMedia abaixo) e, mais importante, PASSA A VALIDAR OS
+// BYTES REAIS gravados (inspectRecordedAudio) — assinatura do container e,
+// no caso do Ogg, o byte de canais do pacote OpusHead (RFC 7845) — em vez de
+// apenas renomear o mimeType escolhido antes de gravar para o que a Meta
+// aceita. Se a validação falhar, a gravação é recusada com mensagem clara.
 const AUDIO_MIME_CANDIDATES = [
   { mime: "audio/mp4",                 sendMime: "audio/mp4", voice: false },
   { mime: "audio/mp4;codecs=mp4a.40.2", sendMime: "audio/mp4", voice: false },
@@ -10288,7 +10303,11 @@ async function handleMicClick(prefix) {
 
   let stream;
   try {
-    stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+    // channelCount:1 — a Cloud API exige "mono input only" para audio/ogg
+    // (documentação oficial da Meta). Sem esta constraint, muitos navegadores
+    // capturam 2 canais (ainda que com conteúdo duplicado por causa do
+    // processamento de eco padrão), o que a Meta rejeita com 131053.
+    stream = await navigator.mediaDevices.getUserMedia({ audio: { channelCount: { ideal: 1 } } });
   } catch (err) {
     showToast(humanizeMicError(err), "t-err");
     return;
@@ -10368,6 +10387,41 @@ function cancelMicRecording(prefix) {
   hideMicRecordingBar(prefix);
 }
 
+// Lê os bytes reais do que o MediaRecorder produziu e confirma que o
+// container bate com o que vamos declarar à Meta — nunca confia apenas no
+// mimeType escolhido antes de gravar (isTypeSupported() indica capacidade,
+// não garante o que sai de fato). Ver AUDIO_MIME_CANDIDATES/pickSupportedAudioMime.
+//
+// container: "ogg" → confere assinatura "OggS" e, dentro do pacote OpusHead
+// (RFC 7845 — 8 bytes de magic "OpusHead" + 1 byte versão + 1 byte canais),
+// que o áudio é realmente mono (exigência documentada da Cloud API só para
+// audio/ogg: "OPUS codecs only; base audio/ogg not supported; mono input only").
+// container: "mp4" → confere a assinatura "ftyp" (ISO BMFF); a Cloud API não
+// documenta restrição de canais para audio/mp4.
+function inspectRecordedAudio(bytes, container) {
+  if (container === "ogg") {
+    if (bytes.length < 28 || bytes[0] !== 0x4F || bytes[1] !== 0x67 || bytes[2] !== 0x67 || bytes[3] !== 0x53) {
+      return { ok: false, reason: "not-ogg" };
+    }
+    const pageSegments = bytes[26];
+    const packetStart  = 27 + pageSegments;
+    const channelsAt   = packetStart + 9; // 8 bytes "OpusHead" + 1 byte versão
+    if (bytes.length < channelsAt + 1) return { ok: false, reason: "truncated" };
+    const magic = String.fromCharCode(...bytes.slice(packetStart, packetStart + 8));
+    if (magic !== "OpusHead") return { ok: false, reason: "not-opus" };
+    const channels = bytes[channelsAt];
+    if (channels !== 1) return { ok: false, reason: "not-mono", channels };
+    return { ok: true };
+  }
+  if (container === "mp4") {
+    if (bytes.length < 8 || String.fromCharCode(...bytes.slice(4, 8)) !== "ftyp") {
+      return { ok: false, reason: "not-mp4" };
+    }
+    return { ok: true };
+  }
+  return { ok: false, reason: "unknown-container" };
+}
+
 function stopMicRecording(prefix) {
   const state = _micState[prefix];
   if (!state || state.recorder.state === "inactive") return;
@@ -10381,6 +10435,19 @@ function stopMicRecording(prefix) {
       return;
     }
     try {
+      const bytes = new Uint8Array(await blob.arrayBuffer());
+      const container = state.sendMime === "audio/ogg" ? "ogg" : "mp4";
+      const check = inspectRecordedAudio(bytes, container);
+      if (!check.ok) {
+        console.error(`[mic] validação falhou: container=${container} motivo=${check.reason} canais=${check.channels ?? "—"}`);
+        showToast(
+          check.reason === "not-mono"
+            ? "Seu microfone gravou em estéreo, que o WhatsApp não aceita. Tente novamente ou use outro navegador/dispositivo."
+            : "Não conseguimos validar o áudio gravado. Tente novamente.",
+          "t-err"
+        );
+        return;
+      }
       const base64 = await blobToBase64(blob);
       pendingAudio[prefix] = { base64, mimeType: state.sendMime, durationSec };
       showAudioPreview(prefix);
@@ -12887,7 +12954,6 @@ function buildContactItem(c) {
     <div class="contact-info">
       <div class="contact-name-row">
         <span class="contact-name">${esc(name)}</span>
-        ${copyButtonHTML(name, "Nome")}
       </div>
       ${phoneStr ? `<div class="contact-phone-row"><span class="contact-phone">${esc(phoneStr)}</span>${copyButtonHTML(c.phone, "Telefone")}</div>` : ''}
     </div>
@@ -13041,12 +13107,10 @@ async function saveContactEdit(phone, prefix = 'cd') {
     if (openConvsPhone === phone) {
       const el = document.getElementById("convs-chat-name");
       if (el) el.textContent = clientName || phone;
-      configureCopyButton(document.getElementById("convs-copy-name"), clientName || phone, "Nome");
     }
     if (openModalPhone === phone) {
       const el = document.getElementById("modal-chat-name");
       if (el) el.textContent = clientName || phone;
-      configureCopyButton(document.getElementById("modal-copy-name"), clientName || phone, "Nome");
       if (demandType !== undefined) {
         const elBadge = document.getElementById("modal-chat-badge");
         if (elBadge) elBadge.innerHTML = `<span class="demand-tag ${demandClass(demandType)}">${demandLabel(demandType)}</span>`;
