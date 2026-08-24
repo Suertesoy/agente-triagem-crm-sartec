@@ -18,6 +18,16 @@
       "destination": "/api/$1"
     }
   ],
+  "functions": {
+    "api/send.js": {
+      "includeFiles": "node_modules/ffmpeg-static/**",
+      "maxDuration": 20
+    },
+    "api/audio-remux-diagnostic.js": {
+      "includeFiles": "node_modules/ffmpeg-static/**",
+      "maxDuration": 20
+    }
+  },
   "crons": [
     {
       "path": "/api/agent-burst-sweep",
