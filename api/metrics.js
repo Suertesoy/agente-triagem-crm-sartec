@@ -190,7 +190,7 @@ export default async function handler(req, res) {
     do {
       const [nextCursor, found] = await redis.scan(cursor, "MATCH", "sartec:*", "COUNT", 250);
       cursor = nextCursor;
-      allKeys.push(...found.filter(k => !k.includes(":contact:") && !k.includes(":metrics:") && k !== "sartec:pipelineOrder"));
+      allKeys.push(...found.filter(k => !k.includes(":contact:") && !k.includes(":metrics:") && !k.includes(":feedback:") && k !== "sartec:pipelineOrder"));
     } while (cursor !== "0");
 
     const now = Date.now();

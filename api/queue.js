@@ -187,6 +187,7 @@ export default async function handler(req, res) {
       allKeys.push(...found.filter((k) =>
         !k.includes(":archive:") &&
         !k.includes(":contact:") &&
+        !k.includes(":feedback:") &&
         k !== "sartec:pipelineOrder"
       ));
     } while (cursor !== "0");

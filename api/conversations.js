@@ -68,6 +68,7 @@ export default async function handler(req, res) {
         !k.includes(":contact:")      &&
         !k.includes(":settings:")     &&
         !k.includes(":pending_status:") &&
+        !k.includes(":feedback:")     &&
         k !== "sartec:pipelineOrder"
       ));
     } while (cursor !== "0");

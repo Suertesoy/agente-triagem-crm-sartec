@@ -5,6 +5,7 @@ const store = new Map();
 const expiresAt = new Map();
 const sets = new Map();
 const lists = new Map();
+const zsets = new Map();
 let clockOffsetMs = 0;
 
 function now() {
@@ -142,8 +143,38 @@ export default class FakeRedis {
 
   async scan(_cursor, _matchKw, pattern, _countKw, _count) {
     const re = globToRegExp(pattern);
-    const found = [...store.keys()].filter((k) => re.test(k));
+    // SCAN varre todo o keyspace (não só chaves string) — sorted sets também
+    // precisam aparecer aqui para que os filtros de sartec:* em produção
+    // (queue.js/conversations.js/metrics.js) sejam exercitados de verdade.
+    const found = [...store.keys(), ...zsets.keys()].filter((k) => re.test(k));
     return ["0", found];
+  }
+
+  // ── Sorted set (subconjunto usado pela fila sartec:feedback:due) ──────────
+  async zadd(key, score, member) {
+    if (!zsets.has(key)) zsets.set(key, new Map());
+    const isNew = !zsets.get(key).has(member);
+    zsets.get(key).set(member, Number(score));
+    return isNew ? 1 : 0;
+  }
+
+  async zscore(key, member) {
+    const score = zsets.get(key)?.get(member);
+    return score === undefined ? null : String(score);
+  }
+
+  async zcard(key) {
+    return zsets.get(key)?.size ?? 0;
+  }
+
+  async zrange(key, start, stop) {
+    const members = zsets.get(key);
+    if (!members) return [];
+    const sorted = [...members.entries()].sort((a, b) => a[1] - b[1]).map(([member]) => member);
+    const len = sorted.length;
+    const s = start < 0 ? Math.max(len + start, 0) : start;
+    const e = Math.min(stop < 0 ? len + stop : stop, len - 1);
+    return s > e || len === 0 ? [] : sorted.slice(s, e + 1);
   }
 
   pipeline() {
@@ -214,6 +245,7 @@ export default class FakeRedis {
     expiresAt.clear();
     sets.clear();
     lists.clear();
+    zsets.clear();
     clockOffsetMs = 0;
   }
 

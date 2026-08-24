@@ -24,17 +24,21 @@ register(pathToFileURL(path.join(HERE, "hooks.js")).href, import.meta.url);
 const REPO_ROOT          = path.resolve(HERE, "..", "..");
 const WEBHOOK_URL        = pathToFileURL(path.join(REPO_ROOT, "api", "webhook.js")).href;
 const QUEUE_URL          = pathToFileURL(path.join(REPO_ROOT, "api", "queue.js")).href;
+const RESOLVE_URL        = pathToFileURL(path.join(REPO_ROOT, "api", "resolve.js")).href;
 const SEND_URL           = pathToFileURL(path.join(REPO_ROOT, "api", "send.js")).href;
 const SEND_TEMPLATE_URL  = pathToFileURL(path.join(REPO_ROOT, "api", "send-template.js")).href;
 const METRICS_URL        = pathToFileURL(path.join(REPO_ROOT, "api", "metrics.js")).href;
+const CONVERSATIONS_URL  = pathToFileURL(path.join(REPO_ROOT, "api", "conversations.js")).href;
 const FORWARD_MEDIA_URL  = pathToFileURL(path.join(REPO_ROOT, "api", "forward-media.js")).href;
 const BURST_SWEEP_URL    = pathToFileURL(path.join(REPO_ROOT, "api", "agent-burst-sweep.js")).href;
 
 export const { default: handler }             = await import(WEBHOOK_URL);
 export const { default: queueHandler }        = await import(QUEUE_URL);
+export const { default: resolveHandler }      = await import(RESOLVE_URL);
 export const { default: sendHandler }         = await import(SEND_URL);
 export const { default: sendTemplateHandler } = await import(SEND_TEMPLATE_URL);
 export const { default: metricsHandler }      = await import(METRICS_URL);
+export const { default: conversationsHandler } = await import(CONVERSATIONS_URL);
 export const { default: forwardMediaHandler } = await import(FORWARD_MEDIA_URL);
 export const { default: burstSweepHandler }   = await import(BURST_SWEEP_URL);
 export const FakeRedis                 = (await import(pathToFileURL(path.join(HERE, "fake-ioredis.js")).href)).default;
@@ -278,6 +282,22 @@ export async function callQueue() {
   const req = { method: "GET" };
   const res = fakeRes();
   await queueHandler(req, res);
+  return res._body;
+}
+
+// Chama o handler real de api/resolve.js.
+export async function callResolve(phone) {
+  const req = { method: "POST", body: { phone } };
+  const res = fakeRes();
+  await resolveHandler(req, res);
+  return res._body;
+}
+
+// Chama o handler real de api/conversations.js.
+export async function callConversations(query = {}) {
+  const req = { method: "GET", query };
+  const res = fakeRes();
+  await conversationsHandler(req, res);
   return res._body;
 }
 
