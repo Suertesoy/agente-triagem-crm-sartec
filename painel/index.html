@@ -687,14 +687,15 @@
     .card.pri-alta       { background: #fff4f4; border-color: rgba(220,38,38,.44); }
     .card.urgent         { background: #fff4f4; border-color: rgba(220,38,38,.30); }
     .card.forgotten      { background: #fff4f4; border-color: rgba(220,38,38,.30); }
-    .card.pri-media      { background: #fefde8; border-color: rgba(202,138,4,.50); }
+    .card.pri-media,
+    .card.card-template-waiting { background: #fefde8; border-color: rgba(202,138,4,.50); }
     .card.warn-10        { background: #fefde8; border-color: rgba(202,138,4,.28); }
     .card.triagem_incompleta { border-color: rgba(245,158,11,.40); }
     .card.template-failed {
       border-color: rgba(220, 38, 38, 0.44) !important;
       border-left: 5px solid var(--brand-red) !important;
     }
-    .card.template-failed:not(.pri-alta):not(.card-critica):not(.urgent):not(.forgotten):not(.pri-media):not(.warn-10):not(.card-finalizado) {
+    .card.template-failed:not(.pri-alta):not(.card-critica):not(.urgent):not(.forgotten):not(.pri-media):not(.warn-10):not(.card-finalizado):not(.card-template-waiting) {
       background: #fff5f5;
     }
 
@@ -3742,7 +3743,8 @@
       display: none;
     }
     .card.pri-alta .card-zone-mid        { background: rgba(255,255,255,.68); }
-    .card.pri-media .card-zone-mid       { background: rgba(255,255,255,.68); }
+    .card.pri-media .card-zone-mid,
+    .card.card-template-waiting .card-zone-mid { background: rgba(255,255,255,.68); }
     .card.card-finalizado .card-zone-mid { background: rgba(255,255,255,.58); }
     .card-zone-footer {
       display: flex;
@@ -3882,7 +3884,8 @@
     .card-status-dot:hover { box-shadow: 0 2px 10px rgba(0,0,0,.22); transform: scale(1.10); }
     .card.resolvido .card-status-dot { cursor: default; }
     .card.pri-alta .card-status-dot           { background: #f87171; border-color: #dc2626; box-shadow: 0 1px 6px rgba(220,38,38,.30); }
-    .card.pri-media .card-status-dot          { background: #fbbf24; border-color: #d97706; box-shadow: 0 1px 6px rgba(217,119,6,.28); }
+    .card.pri-media .card-status-dot,
+    .card.card-template-waiting .card-status-dot { background: #fbbf24; border-color: #d97706; box-shadow: 0 1px 6px rgba(217,119,6,.28); }
     .card.card-finalizado .card-status-dot    { background: #4ade80; border-color: #16a34a; box-shadow: 0 1px 6px rgba(22,163,74,.28); }
     .card.resolvido .card-status-dot          { background: #9ca3af; border-color: #6b7280; box-shadow: none; }
 
@@ -7650,23 +7653,28 @@ function buildCard(c, col, cols) {
   // Verde: resolvido ou pipeline em estado terminal
   const isFinalizando    = ["confirmado", "finalizado", "entregue"].includes(c.pipelineStatus);
   const hasManualPriority = !!c.priorityManual;
+  // Aguardando resposta de template — sinalização visual automática (não é prioridade), vence priorityManual mas perde para verde/falha
+  const isTemplateWaiting = !isResolved && c.conversationWindowStatus === "waiting_template_reply" && c.lastTemplateDeliveryStatus !== "failed";
 
   let cls = "card";
 
   if (isResolved) {
     // Resolvido sempre verde com opacidade — não pode ser overridado
     cls += " resolvido";
+  } else if (isFinalizando) {
+    // Etapas finais do pipeline sempre verdes — vence prioridade manual e amarelo de template
+    cls += " card-finalizado";
+  } else if (isTemplateWaiting) {
+    // Amarelo automático — independe de priorityManual; some quando a janela reabre ou o template falha
+    cls += " card-template-waiting";
   } else if (hasManualPriority) {
     // priorityManual manda — ignora coluna, timing, automático
     if      (c.priorityManual === "concluindo") cls += " card-finalizado";
     else if (c.priorityManual === "alta")       cls += " pri-alta";
     else if (c.priorityManual === "media")      cls += " pri-media";
     // "baixa" → sem classe = card branco
-  } else {
-    // Sem priorityManual: card neutro/branco — cor vem só de prioridade manual
-    if (isFinalizando) cls += " card-finalizado";
-    // warn-10/urgent/forgotten removidos — sem coloração automática por tempo de espera
   }
+  // warn-10/urgent/forgotten removidos — sem coloração automática por tempo de espera
 
   if (isIncomplete) cls += " triagem_incompleta";
   const isWindowClosed = !isResolved && (c.conversationWindowStatus !== "open" || c.windowRemainingMs <= 0);
