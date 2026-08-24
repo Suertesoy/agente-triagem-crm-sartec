@@ -22,10 +22,6 @@
     "api/send.js": {
       "includeFiles": "node_modules/ffmpeg-static/**",
       "maxDuration": 20
-    },
-    "api/audio-remux-diagnostic.js": {
-      "includeFiles": "node_modules/ffmpeg-static/**",
-      "maxDuration": 20
     }
   },
   "crons": [
