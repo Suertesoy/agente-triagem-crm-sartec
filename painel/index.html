@@ -2,16 +2,17 @@
 <html lang="pt-BR">
 <head>
   <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
   <title>Sartec Papelaria — Painel</title>
-  <!-- PWA desabilitado temporariamente
   <link rel="manifest" href="/painel/manifest.json">
   <meta name="theme-color" content="#1a2a5e">
   <meta name="mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
   <meta name="apple-mobile-web-app-title" content="Sartec CRM">
-  -->
+  <link rel="apple-touch-icon" href="/painel/assets/icons/apple-touch-icon.png">
+  <link rel="icon" type="image/png" sizes="32x32" href="/painel/assets/icons/favicon-32.png">
+  <link rel="icon" type="image/png" sizes="16x16" href="/painel/assets/icons/favicon-16.png">
   <style>
     /* ══════════════════════════════════════════════════
        RESET + VARIÁVEIS
@@ -4351,12 +4352,13 @@
       /* FAB Nova conversa — visível apenas no mobile */
       .mob-new-fab { display:flex; }
       /* ── APP SHELL MOBILE: layout fixo, rolagem interna ─── */
-      :root { --mob-header-h: 52px; --mob-nav-h: 56px; }
+      /* iOS notch/status bar (topo) e barra de gesto (base) — 0px em telas sem safe-area */
+      :root { --mob-header-h: calc(52px + env(safe-area-inset-top, 0px)); --mob-nav-h: calc(56px + env(safe-area-inset-bottom, 0px)); }
       /* Tela travada — sem scroll da página */
       html { overflow: hidden; height: 100%; }
       body { width: 100%; max-width: 100vw; height: 100dvh; overflow: hidden; position: relative; }
-      /* Header: fixo no topo */
-      .top-header { position: fixed; top: 0; left: 0; right: 0; height: var(--mob-header-h); z-index: 500; overflow: hidden; box-sizing: border-box; }
+      /* Header: fixo no topo, conteúdo empurrado abaixo do notch */
+      .top-header { position: fixed; top: 0; left: 0; right: 0; height: var(--mob-header-h); padding-top: env(safe-area-inset-top, 0px); z-index: 500; overflow: hidden; box-sizing: border-box; }
       .header-nav-row { width: 100%; overflow: hidden; box-sizing: border-box; }
       .waiting-counter { min-width: 0; max-width: 240px; overflow: hidden; flex-shrink: 1; }
       #waiting-count { display: block; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
@@ -4385,8 +4387,8 @@
       .composer { flex-shrink: 0; max-width: 100%; box-sizing: border-box; }
       .composer-row { max-width: 100%; box-sizing: border-box; }
       .composer-row textarea { min-width: 0; }
-      /* Bottom nav: fixo embaixo */
-      .mob-nav { position: fixed; bottom: 0; left: 0; right: 0; height: var(--mob-nav-h); z-index: 500; width: 100%; max-width: 100vw; box-sizing: border-box; }
+      /* Bottom nav: fixo embaixo, botões empurrados acima da barra de gesto do iPhone */
+      .mob-nav { position: fixed; bottom: 0; left: 0; right: 0; height: var(--mob-nav-h); padding-bottom: env(safe-area-inset-bottom, 0px); z-index: 500; width: 100%; max-width: 100vw; box-sizing: border-box; }
       /* FAB: acima da nav */
       .mob-new-fab { display: flex; bottom: calc(var(--mob-nav-h) + 12px); }
       /* Oculta FAB de nova conversa quando uma conversa está aberta no mobile */
@@ -5037,6 +5039,16 @@
   </style>
 </head>
 <body>
+<script>
+  // Registro do Service Worker — independente do gate de autenticação abaixo,
+  // roda em qualquer estado de login. Ver painel/sw.js: app shell + assets
+  // estáticos apenas, /api/* nunca passa por cache.
+  if ("serviceWorker" in navigator) {
+    window.addEventListener("load", () => {
+      navigator.serviceWorker.register("/painel/sw.js", { scope: "/painel/" }).catch(() => {});
+    });
+  }
+</script>
 
 <!-- ══════ HEADER ══════ -->
 <header class="top-header">

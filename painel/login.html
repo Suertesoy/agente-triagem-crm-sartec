@@ -2,8 +2,17 @@
 <html lang="pt-BR">
 <head>
   <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
   <title>Sartec — Acesso ao Painel</title>
+  <link rel="manifest" href="/painel/manifest.json">
+  <meta name="theme-color" content="#1a2a5e">
+  <meta name="mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="apple-mobile-web-app-title" content="Sartec CRM">
+  <link rel="apple-touch-icon" href="/painel/assets/icons/apple-touch-icon.png">
+  <link rel="icon" type="image/png" sizes="32x32" href="/painel/assets/icons/favicon-32.png">
+  <link rel="icon" type="image/png" sizes="16x16" href="/painel/assets/icons/favicon-16.png">
   <style>
     *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 
@@ -212,6 +221,13 @@
   </style>
 </head>
 <body>
+<script>
+  if ("serviceWorker" in navigator) {
+    window.addEventListener("load", () => {
+      navigator.serviceWorker.register("/painel/sw.js", { scope: "/painel/" }).catch(() => {});
+    });
+  }
+</script>
 
 <div class="login-card" id="card">
   <div class="logo">
