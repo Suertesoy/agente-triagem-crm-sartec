@@ -1,5 +1,8 @@
 import { beforeEach, describe, before, after, test } from "node:test";
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
+import path from "node:path";
+import { fileURLToPath } from "node:url";
 
 import {
   FakeRedis,
@@ -8,9 +11,27 @@ import {
   forceSetSession,
   getSession,
 } from "./helpers/harness.js";
-import { buildMinimalMp4, buildOggOpusPage } from "./helpers/audio-fixtures.js";
+import { buildBrokenFragmentedMp4, buildMinimalMp4, buildOggOpusPage } from "./helpers/audio-fixtures.js";
+import { inspectMp4Structure } from "../lib/mp4-inspection.js";
 
-beforeEach(() => FakeRedis._reset());
+before(() => {
+  process.env.R2_DISABLED = "false";
+  process.env.R2_ENDPOINT = "https://fake-r2.example.com";
+  process.env.R2_ACCESS_KEY_ID = "fake-key-id";
+  process.env.R2_SECRET_ACCESS_KEY = "fake-secret";
+  process.env.R2_BUCKET = "fake-bucket";
+});
+after(() => {
+  process.env.R2_DISABLED = "true";
+  delete process.env.R2_ENDPOINT;
+  delete process.env.R2_ACCESS_KEY_ID;
+  delete process.env.R2_SECRET_ACCESS_KEY;
+  delete process.env.R2_BUCKET;
+});
+beforeEach(() => {
+  FakeRedis._reset();
+  FakeS3Client._reset();
+});
 
 function baseSession(overrides = {}) {
   return { history: [], status: "aguardando_humano", clientType: "pf", ...overrides };
@@ -21,8 +42,13 @@ function baseSession(overrides = {}) {
 // "x"/"audio binario" não bastam mais para os testes que esperam sucesso.
 const VALID_MP4_AAC_B64 = Buffer.from(buildMinimalMp4({ codec: "mp4a" })).toString("base64");
 const VALID_OGG_MONO_B64 = Buffer.from(buildOggOpusPage(1)).toString("base64");
+const HERE = path.dirname(fileURLToPath(import.meta.url));
+const FRAGMENTED_MP4 = Buffer.from(
+  readFileSync(path.join(HERE, "fixtures", "synthetic-fmp4-aac.base64"), "utf8").replaceAll(/\s/g, ""),
+  "base64",
+);
 
-test("envia áudio audio/mp4 (AAC real) — upload, envio, histórico persistido sem legenda/voice", async () => {
+test("envia MP4/AAC convencional somente por R2 + audio.link", async () => {
   const phone = "5512900000301";
   await forceSetSession(phone, (s) => Object.assign(s, baseSession()));
 
@@ -37,12 +63,13 @@ test("envia áudio audio/mp4 (AAC real) — upload, envio, histórico persistido
   assert.equal(res._body.success, true);
   assert.equal(res._body.historyPersisted, true);
 
-  assert.equal(calls.length, 2);
-  assert.ok(calls[0].url.endsWith("/media"), "1ª chamada deve ser o upload de mídia");
-  assert.ok(calls[1].url.includes("/messages"), "2ª chamada deve ser o envio da mensagem");
-  const sentPayload = JSON.parse(calls[1].opts.body);
+  assert.equal(calls.length, 1);
+  assert.equal(calls.find((call) => call.url.endsWith("/media")), undefined);
+  assert.ok(calls[0].url.includes("/messages"));
+  const sentPayload = JSON.parse(calls[0].opts.body);
   assert.equal(sentPayload.type, "audio");
-  assert.equal(sentPayload.audio.id, "media_upload_1");
+  assert.ok(sentPayload.audio.link);
+  assert.equal(sentPayload.audio.id, undefined);
   assert.equal(sentPayload.audio.voice, undefined, "mp4 não deve marcar voice:true");
   assert.equal(sentPayload.audio.caption, undefined, "Meta não aceita legenda em áudio");
 
@@ -57,40 +84,37 @@ test("envia áudio audio/mp4 (AAC real) — upload, envio, histórico persistido
   assert.equal(entry.attendantName, "Lucas");
   assert.equal(entry.deliveryStatus, "sent");
   assert.ok(entry.metaMessageId);
-  // R2_DISABLED=true no harness — best-effort deve cair no fallback sem derrubar o envio já confirmado.
-  assert.equal(entry.mediaStorageFailed, true);
-  assert.equal(entry.mediaStorageKey, undefined);
+  assert.equal(entry.mediaStorageProvider, "cloudflare-r2");
+  assert.ok(entry.mediaStorageKey);
+  assert.ok(FakeS3Client._getObject(entry.mediaStorageKey));
 });
 
-test("filename multipart do upload MP4 termina em .m4a (nunca 'audio' genérico)", async () => {
+test("objeto R2 de MP4 termina em .m4a", async () => {
   const phone = "5512900000308";
   await forceSetSession(phone, (s) => Object.assign(s, baseSession()));
 
-  const { calls } = await callSend({
+  await callSend({
     to: phone, type: "audio",
     mediaBase64: VALID_MP4_AAC_B64,
     mimeType: "audio/mp4",
   });
 
-  const uploadCall = calls.find((c) => String(c.url).endsWith("/media"));
-  const fileEntry = uploadCall.opts.body.get("file");
-  assert.ok(fileEntry, "campo file deve existir no FormData de upload");
-  assert.equal(fileEntry.name, "audio.m4a");
+  const session = await getSession(phone);
+  assert.match(session.history[0].mediaStorageKey, /\.m4a$/);
 });
 
-test("filename multipart do upload OGG termina em .ogg", async () => {
+test("objeto R2 de OGG termina em .ogg", async () => {
   const phone = "5512900000309";
   await forceSetSession(phone, (s) => Object.assign(s, baseSession()));
 
-  const { calls } = await callSend({
+  await callSend({
     to: phone, type: "audio",
     mediaBase64: VALID_OGG_MONO_B64,
     mimeType: "audio/ogg",
   });
 
-  const uploadCall = calls.find((c) => String(c.url).endsWith("/media"));
-  const fileEntry = uploadCall.opts.body.get("file");
-  assert.equal(fileEntry.name, "audio.ogg");
+  const session = await getSession(phone);
+  assert.match(session.history[0].mediaStorageKey, /\.ogg$/);
 });
 
 test("MP4 com ftyp mas sem sample entry mp4a (AAC) é rejeitado com 422 antes de chamar a Meta", async () => {
@@ -139,7 +163,7 @@ test("OGG mono continua válido (regra da rodada anterior preservada)", async ()
   });
 
   assert.equal(res._status, 200);
-  const sentPayload = JSON.parse(calls[1].opts.body);
+  const sentPayload = JSON.parse(calls[0].opts.body);
   assert.equal(sentPayload.audio.voice, true);
 });
 
@@ -170,7 +194,7 @@ test("replyToMessageId é repassado como context.message_id", async () => {
     replyToMessageId: "wamid_original_123",
   });
 
-  const sentPayload = JSON.parse(calls[1].opts.body);
+  const sentPayload = JSON.parse(calls[0].opts.body);
   assert.equal(sentPayload.context.message_id, "wamid_original_123");
 
   const session = await getSession(phone);
@@ -187,31 +211,30 @@ test("mediaBase64/mimeType ausentes retornam 400 sem chamar a Meta", async () =>
   assert.equal(calls.length, 0);
 });
 
-test("upload de áudio rejeitado pela Meta não persiste histórico", async () => {
+test("falha do R2 aborta sem fallback multipart e sem histórico", async () => {
   const phone = "5512900000305";
   await forceSetSession(phone, (s) => Object.assign(s, baseSession()));
 
-  const originalFetch = globalThis.fetch;
-  globalThis.fetch = async (url, opts) => {
-    if (String(url).endsWith("/media")) {
-      return { ok: false, status: 400, json: async () => ({ error: { code: 100, message: "Parâmetro inválido" } }) };
-    }
-    return originalFetch(url, opts);
+  const originalSend = FakeS3Client.prototype.send;
+  FakeS3Client.prototype.send = async function (command) {
+    if (command?.constructor?.name === "PutObjectCommand") throw new Error("simulated R2 outage");
+    return originalSend.call(this, command);
   };
 
   try {
-    const { res } = await callSend({
+    const { res, calls } = await callSend({
       to: phone, type: "audio",
       mediaBase64: VALID_MP4_AAC_B64,
       mimeType: "audio/mp4",
     });
-    assert.equal(res._status, 502);
-    assert.match(res._body.error, /upload/i);
+    assert.equal(res._status, 503);
+    assert.equal(res._body.detail, "audio-storage-unavailable");
+    assert.equal(calls.length, 0);
 
     const session = await getSession(phone);
     assert.equal(session.history.length, 0);
   } finally {
-    globalThis.fetch = originalFetch;
+    FakeS3Client.prototype.send = originalSend;
   }
 });
 
@@ -221,7 +244,6 @@ test("envio de áudio rejeitado pela Meta (após upload OK) não persiste histó
 
   const originalFetch = globalThis.fetch;
   globalThis.fetch = async (url, opts) => {
-    if (String(url).endsWith("/media")) return originalFetch(url, opts);
     if (String(url).includes("/messages")) {
       return { ok: false, status: 400, json: async () => ({ error: { code: 131047, message: "Janela de 24h fechada" } }) };
     }
@@ -259,30 +281,7 @@ test("enviar mensagem = assumir atendimento (activeAttendant atualizado)", async
   assert.equal(session.handoffDone, true);
 });
 
-// ============================================================
-// TESTE A/B — envio de áudio via link do R2 (audio.link em vez de audio.id)
-// R2 fica desabilitado por padrão no harness (R2_DISABLED=true) para que os
-// testes acima (media_id legado) continuem sem depender de S3/R2 real. Este
-// bloco liga R2 (com credenciais falsas — @aws-sdk/client-s3 e
-// @aws-sdk/s3-request-presigner são fakes em memória, ver tests/helpers/
-// fake-s3.js) só enquanto exercita o caminho novo, e desliga ao final.
-// ============================================================
-describe("envio de áudio via link do R2 (caminho novo desta rodada)", () => {
-  before(() => {
-    process.env.R2_DISABLED = "false";
-    process.env.R2_ENDPOINT = "https://fake-r2.example.com";
-    process.env.R2_ACCESS_KEY_ID = "fake-key-id";
-    process.env.R2_SECRET_ACCESS_KEY = "fake-secret";
-    process.env.R2_BUCKET = "fake-bucket";
-  });
-  after(() => {
-    process.env.R2_DISABLED = "true";
-    delete process.env.R2_ENDPOINT;
-    delete process.env.R2_ACCESS_KEY_ID;
-    delete process.env.R2_SECRET_ACCESS_KEY;
-    delete process.env.R2_BUCKET;
-  });
-  beforeEach(() => FakeS3Client._reset());
+describe("envio de áudio somente por R2 + audio.link", () => {
 
   test("áudio é salvo no R2 ANTES do envio (mesma storage key usada na Meta e no histórico)", async () => {
     const phone = "5512900000320";
@@ -308,6 +307,47 @@ describe("envio de áudio via link do R2 (caminho novo desta rodada)", () => {
     assert.ok(entry.mediaStorageKey);
     assert.ok(FakeS3Client._getObject(entry.mediaStorageKey), "objeto deve existir no R2 com a mesma storage key salva no histórico");
     assert.equal(FakeS3Client._getPutCount(), 1, "upload para o R2 deve acontecer exatamente 1 vez (antes da Meta, não duplicado depois)");
+  });
+
+  test("fMP4 real sintético é remuxado e somente o MP4 convencional final chega ao R2", async () => {
+    const phone = "5512900000327";
+    await forceSetSession(phone, (s) => Object.assign(s, baseSession()));
+
+    const { res, calls } = await callSend({
+      to: phone,
+      type: "audio",
+      mediaBase64: FRAGMENTED_MP4.toString("base64"),
+      mimeType: "audio/mp4",
+    });
+
+    assert.equal(res._status, 200);
+    assert.equal(calls.find((call) => String(call.url).endsWith("/media")), undefined);
+    const session = await getSession(phone);
+    const stored = FakeS3Client._getObject(session.history[0].mediaStorageKey).body;
+    assert.notDeepEqual(stored, FRAGMENTED_MP4, "R2 não pode receber o fMP4 original");
+    const structure = inspectMp4Structure(stored);
+    assert.equal(structure.hasMp4a, true);
+    assert.equal(structure.hasMoof, false);
+    assert.equal(structure.hasMvex, false);
+    assert.equal(structure.hasTraf, false);
+  });
+
+  test("falha do remux nunca envia nem salva o fMP4 original", async () => {
+    const phone = "5512900000328";
+    await forceSetSession(phone, (s) => Object.assign(s, baseSession()));
+
+    const { res, calls } = await callSend({
+      to: phone,
+      type: "audio",
+      mediaBase64: Buffer.from(buildBrokenFragmentedMp4()).toString("base64"),
+      mimeType: "audio/mp4",
+    });
+
+    assert.equal(res._status, 502);
+    assert.match(res._body.detail, /^AUDIO_REMUX_/);
+    assert.equal(FakeS3Client._getPutCount(), 0);
+    assert.equal(calls.length, 0);
+    assert.equal((await getSession(phone)).history.length, 0);
   });
 
   test("headMediaObject confirma o Content-Type salvo antes de gerar o link — recusa se não bater", async () => {
@@ -355,6 +395,9 @@ describe("envio de áudio via link do R2 (caminho novo desta rodada)", () => {
     const sentPayload = JSON.parse(calls.find((c) => String(c.url).includes("/messages")).opts.body);
     assert.equal(sentPayload.audio.voice, true);
     assert.ok(sentPayload.audio.link);
+    const session = await getSession(phone);
+    const stored = FakeS3Client._getObject(session.history[0].mediaStorageKey).body;
+    assert.deepEqual(stored, Buffer.from(buildOggOpusPage(1)), "OGG deve permanecer byte a byte intacto");
   });
 
   test("replyToMessageId continua preservado como context.message_id no caminho por link", async () => {
@@ -403,7 +446,7 @@ describe("envio de áudio via link do R2 (caminho novo desta rodada)", () => {
     }
   });
 
-  test("R2 indisponível (upload falha) cai automaticamente para o caminho legado media_id", async () => {
+  test("R2 indisponível aborta e nunca chama o multipart /media", async () => {
     const phone = "5512900000326";
     await forceSetSession(phone, (s) => Object.assign(s, baseSession()));
 
@@ -420,8 +463,10 @@ describe("envio de áudio via link do R2 (caminho novo desta rodada)", () => {
         mediaBase64: VALID_MP4_AAC_B64,
         mimeType: "audio/mp4",
       });
-      assert.equal(res._status, 200);
-      assert.ok(calls.find((c) => String(c.url).endsWith("/media")), "sem R2, deve cair para o upload multipart /media legado");
+      assert.equal(res._status, 503);
+      assert.equal(res._body.detail, "audio-storage-unavailable");
+      assert.equal(calls.length, 0);
+      assert.equal((await getSession(phone)).history.length, 0);
     } finally {
       FakeS3Client.prototype.send = originalSend;
     }

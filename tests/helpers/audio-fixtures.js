@@ -45,6 +45,16 @@ export function buildMinimalMp4({ codec = "mp4a" } = {}) {
   return concatBytes([ftyp, moov]);
 }
 
+// Estrutura intencionalmente incompleta para testar falha segura do remux:
+// o parser reconhece fMP4/AAC por moof/traf + stsd/mp4a, mas não há amostras
+// nem mdat para o FFmpeg transformar. Nunca deve chegar ao R2/Meta.
+export function buildBrokenFragmentedMp4() {
+  return concatBytes([
+    buildMinimalMp4({ codec: "mp4a" }),
+    mkBox("moof", mkBox("traf")),
+  ]);
+}
+
 /** Primeira página Ogg com um pacote OpusHead (RFC 7845) indicando `channels`. */
 export function buildOggOpusPage(channels) {
   const opusHead = new Uint8Array(19);
