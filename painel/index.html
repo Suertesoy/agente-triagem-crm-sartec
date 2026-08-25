@@ -2,7 +2,7 @@
 <html lang="pt-BR">
 <head>
   <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover, interactive-widget=resizes-content" />
   <title>Sartec Papelaria — Painel</title>
   <link rel="manifest" href="/painel/manifest.json">
   <meta name="theme-color" content="#1a2a5e">
@@ -58,6 +58,15 @@
       padding: 0;
     }
 
+    /* Rede de segurança de acessibilidade: contorno visível ao navegar por teclado
+       (:focus-visible não dispara em clique de mouse/toque, então não polui a UI
+       normal). Regras mais específicas already existentes (ex: .copy-icon-btn,
+       .media-menu-trigger) continuam vencendo por especificidade. */
+    button:focus-visible, [role="button"]:focus-visible, select:focus-visible, a:focus-visible {
+      outline: 2px solid var(--brand-navy, #1a2a5e);
+      outline-offset: 2px;
+    }
+
     /* ══════════════════════════════════════════════════
        HEADER
     ══════════════════════════════════════════════════ */
@@ -95,6 +104,24 @@
       background: rgba(255,255,255,.10);
       border-radius: 8px;
       padding: 4px 11px;
+      min-width: 0;
+    }
+    /* Cada "chip" do contador trunca de forma independente — evita que o texto
+       combinado (ativos + fechadas) estoure a largura e corte sem reticências. */
+    .wc-stat {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      min-width: 0;
+      overflow: hidden;
+      white-space: nowrap;
+      text-overflow: ellipsis;
+    }
+    .wc-stat-closed {
+      padding-left: 8px;
+      border-left: 1px solid rgba(255,255,255,.2);
+      color: #fca5a5;
+      flex-shrink: 1;
     }
     .waiting-dot {
       width: 8px; height: 8px;
@@ -106,6 +133,15 @@
     @keyframes pulse-dot {
       0%,100% { transform: scale(1);   opacity: 1; }
       50%     { transform: scale(1.4); opacity: .7; }
+    }
+    @media (prefers-reduced-motion: reduce) {
+      .waiting-dot,
+      .card-unread-badge,
+      .card-new-msg-flash,
+      .card.card-reopening,
+      .mic-rec-dot {
+        animation: none;
+      }
     }
 
     .refresh-info {
@@ -652,24 +688,16 @@
     @keyframes card-new-flash { 0%,100% { transform:translateX(0); } 20% { transform:translateX(-5px); } 40% { transform:translateX(5px); } 60% { transform:translateX(-3px); } 80% { transform:translateX(3px); } }
     .card-new-msg-flash { animation:card-new-flash 0.45s ease-out; box-shadow:0 0 0 2px rgba(59,130,246,.35),0 4px 16px rgba(15,23,42,.1) !important; }
 
-    /* ── Cards resolvidos — arquivados com temperatura preservada ── */
+    /* ── Cards resolvidos — secundários, mas sem parecer desabilitados/ilegíveis ──
+       Uma única camada de dessaturação (tingimento de fundo). Sem opacity global no
+       card inteiro e sem overlay ::after por cima do conteúdo — as duas camadas extras
+       derrubavam demais o contraste do texto (telefone, categoria, timer, data). */
     .card.resolvido {
-      opacity: .82;
       background: #f3f4f6;
       border-color: rgba(107,114,128,.22);
       cursor: pointer;
     }
     .card.resolvido:hover { transform: none; box-shadow: 0 1px 3px rgba(15,23,42,.05), 0 2px 8px rgba(15,23,42,.06); }
-    /* Overlay cinza sobre o conteúdo — card-cta-row fica acima via z-index */
-    .card.resolvido::after {
-      content: "";
-      position: absolute;
-      inset: 0;
-      background: rgba(243,244,246,.52);
-      border-radius: inherit;
-      pointer-events: none;
-      z-index: 1;
-    }
     /* Temperatura preservada em versão desaturada */
     .card.resolvido.pri-alta,
     .card.resolvido.card-critica,
@@ -2663,6 +2691,10 @@
     .sep-tbl input[type=text]:focus { border-color: #2d3a8c; background: #fff; }
 
     .composer-row { display: flex; gap: 7px; align-items: flex-end; }
+    /* No desktop, .composer-tools/.composer-main não têm efeito visual (display:contents
+       repassa os filhos direto pro flex de .composer-row); no mobile (ver media query)
+       eles viram duas linhas — ferramentas em cima, textarea+Enviar embaixo. */
+    .composer-tools, .composer-main { display: contents; }
 
     .btn-attach {
       background: none;
@@ -4303,8 +4335,8 @@
       .mob-introduce-row { display:block; padding:6px 12px; flex-shrink:0; }
       .stats-strip, .tab-bar { display:none; }
       .view.active { display:flex;flex-direction:column; }
-      #view-pf.active, #view-pj.active { height:calc(100dvh - 52px - 56px);overflow:hidden; }
-      #view-convs.active { height:calc(100dvh - 52px - 56px);display:block;overflow:hidden; }
+      #view-pf.active, #view-pj.active { height:calc(100dvh - var(--mob-header-h, 52px) - var(--mob-nav-h, 56px));overflow:hidden; }
+      #view-convs.active { height:calc(100dvh - var(--mob-header-h, 52px) - var(--mob-nav-h, 56px));display:block;overflow:hidden; }
       .pipeline-wrap { padding:8px 8px 16px; }
       .pipeline-wrap.mob-hidden { display:none; }
       .mob-only { display:flex;flex-direction:column;flex:1;overflow:hidden; }
@@ -4316,10 +4348,10 @@
       .mob-back-btn { display:flex;align-items:center;gap:5px;background:rgba(255,255,255,.15);border:none;color:#fff;padding:5px 10px;border-radius:7px;font-size:.78rem;font-weight:600;cursor:pointer;flex-shrink:0;white-space:nowrap; }
       .mob-back-btn:active { background:rgba(255,255,255,.28); }
       .modal-overlay { padding:0;align-items:stretch; }
-      .modal-box { width:100%;height:100dvh;height:100vh;max-width:100%;max-height:100%;border-radius:0; }
+      .modal-box { width:100%;height:100vh;height:100dvh;max-width:100%;max-height:100%;border-radius:0; }
       .card { padding:13px 15px 11px; }
       #ob-wrap { display:none !important; }
-      .mob-nav { display:flex;position:fixed;bottom:0;left:0;right:0;z-index:400;background:var(--brand-navy);border-top:1px solid rgba(255,255,255,.12);height:56px;align-items:stretch; }
+      .mob-nav { display:flex;position:fixed;bottom:0;left:0;right:0;background:var(--brand-navy);border-top:1px solid rgba(255,255,255,.12);height:56px;align-items:stretch; }
       .mob-nav-btn { flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:3px;background:none;border:none;color:rgba(255,255,255,.55);cursor:pointer;font-size:.6rem;font-weight:600;padding:0;transition:color .15s,background .15s;-webkit-tap-highlight-color:transparent; }
       .mob-nav-icon { font-size:1.1rem;line-height:1; }
       .mob-nav-btn.active { color:#fff;background:rgba(255,255,255,.09); }
@@ -4349,8 +4381,11 @@
       .ncm-contact-grid { grid-template-columns:1fr; }
       .ncm-footer { flex-wrap:wrap; }
       .ncm-footer button { flex:1 1 100%; }
-      /* FAB Nova conversa — visível apenas no mobile */
-      .mob-new-fab { display:flex; }
+      /* FAB Nova conversa — visível apenas no Kanban mobile (PF/PJ). Em Conversas já
+         existe o botão "Nova conversa" na sidebar; em Contatos não há ação equivalente.
+         Ver data-mobile-view setado por switchTab()/setConvsMode(). */
+      .mob-new-fab { display:none; }
+      body[data-mobile-view="kanban"] .mob-new-fab { display:flex; }
       /* ── APP SHELL MOBILE: layout fixo, rolagem interna ─── */
       /* iOS notch/status bar (topo) e barra de gesto (base) — 0px em telas sem safe-area */
       :root { --mob-header-h: calc(52px + env(safe-area-inset-top, 0px)); --mob-nav-h: calc(56px + env(safe-area-inset-bottom, 0px)); }
@@ -4360,8 +4395,10 @@
       /* Header: fixo no topo, conteúdo empurrado abaixo do notch */
       .top-header { position: fixed; top: 0; left: 0; right: 0; height: var(--mob-header-h); padding-top: env(safe-area-inset-top, 0px); z-index: 500; overflow: hidden; box-sizing: border-box; }
       .header-nav-row { width: 100%; overflow: hidden; box-sizing: border-box; }
-      .waiting-counter { min-width: 0; max-width: 240px; overflow: hidden; flex-shrink: 1; }
-      #waiting-count { display: block; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
+      /* Sem max-width fixo: o contador ocupa o espaço disponível entre a borda
+         esquerda e .header-right (que já é compacto no mobile); cada .wc-stat
+         trunca de forma independente, então nunca corta "12 atendimentos a..." */
+      .waiting-counter { min-width: 0; flex: 1 1 auto; overflow: hidden; }
       /* Views: fixas entre header e nav, rolagem própria */
       .view.active { position: fixed; top: var(--mob-header-h); left: 0; right: 0; bottom: var(--mob-nav-h); width: 100%; max-width: 100vw; height: auto; overflow: hidden; box-sizing: border-box; }
       #view-convs.active { display: flex; flex-direction: column; }
@@ -4390,9 +4427,11 @@
       /* Bottom nav: fixo embaixo, botões empurrados acima da barra de gesto do iPhone */
       .mob-nav { position: fixed; bottom: 0; left: 0; right: 0; height: var(--mob-nav-h); padding-bottom: env(safe-area-inset-bottom, 0px); z-index: 500; width: 100%; max-width: 100vw; box-sizing: border-box; }
       /* FAB: acima da nav */
-      .mob-new-fab { display: flex; bottom: calc(var(--mob-nav-h) + 12px); }
-      /* Oculta FAB de nova conversa quando uma conversa está aberta no mobile */
+      .mob-new-fab { bottom: calc(var(--mob-nav-h) + 12px); }
+      /* Oculta FAB de nova conversa quando uma conversa está aberta no mobile
+         (Conversas) ou em modo-foco de chat (Conversas ou Kanban). */
       #view-convs.mob-chat-open ~ #mob-new-fab { display: none !important; }
+      body.mob-chat-focus .mob-new-fab { display: none !important; }
       /* Modal de atendente: acima da bottom nav */
       #attendant-picker-modal { z-index: 600; align-items: center; }
       #attendant-picker-modal .attendant-picker-box { max-height: calc(100dvh - var(--mob-header-h) - var(--mob-nav-h) - 32px); overflow-y: auto; }
@@ -4415,11 +4454,59 @@
          Sem isso, mob-nav (z-index:500, após modal no DOM) pinta sobre o composer. */
       body.modal-open .mob-nav { display:none !important; }
 
+      /* ── Modo de foco do chat mobile ──────────────────────────────────────────────
+         body.mob-chat-focus é adicionado tanto por openChat() (chat via Kanban) quanto
+         por openConvsChat() (chat via aba Conversas), e removido por closeModal() /
+         closeMobChat(). Header global e bottom nav saem do caminho — o chat vira a
+         tela inteira entre as safe areas, com um único comportamento independente
+         de onde a conversa foi aberta. */
+      body.mob-chat-focus .top-header { display: none; }
+      body.mob-chat-focus .mob-nav { display: none !important; }
+      body.mob-chat-focus #view-convs.active {
+        top: 0;
+        height: 100vh;
+        height: 100dvh;
+        /* Reforço opcional: só entra em jogo se o listener global de visualViewport
+           (ver bootstrap no JS) tiver definido --vv-height; caso contrário cai no
+           100dvh acima. 100dvh continua sendo o valor autoritativo. */
+        height: var(--vv-height, 100dvh);
+      }
+      body.mob-chat-focus .convs-chat-hdr {
+        padding-top: env(safe-area-inset-top, 0px);
+      }
+
       /* ── Modal header: compacto no mobile ── */
-      .modal-header { padding:8px 10px; }
+      /* O modal cobre a tela inteira (inset:0) por cima do header global, então
+         o próprio header do modal precisa respeitar a safe-area do notch/status bar. */
+      .modal-header { padding:8px 10px; padding-top:calc(8px + env(safe-area-inset-top, 0px)); flex-wrap:wrap; }
       .modal-header h2 { font-size:.9rem; }
       .modal-hdr-btn { padding:4px 8px; font-size:.72rem; }
       .btn-contact-modal { padding:4px 8px !important; font-size:.72rem !important; margin-right:4px !important; }
+      /* Header da conversa: linha 1 prioritária (voltar/fechar + nome com ellipsis +
+         Resolver sempre visível), linha 2 secundária (telefone + copiar + categoria +
+         Contato). .info e .chat-hdr-identity viram display:contents só no mobile para
+         que seus filhos (nome, telefone, categoria) participem diretamente do flex do
+         header e possam ser reordenados sem duplicar HTML nem afetar o desktop (essa
+         regra só existe dentro do @media max-width:768px). */
+      .modal-header .info,
+      .modal-header .chat-hdr-identity,
+      .convs-chat-hdr .info,
+      .convs-chat-hdr .chat-hdr-identity { display: contents; }
+      .modal-header #modal-chat-name,
+      .convs-chat-hdr #convs-chat-name { order: 1; flex: 1 1 auto; min-width: 0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+      .modal-header .btn-resolve-modal,
+      .convs-chat-hdr .btn-resolve-chat { order: 2; flex-shrink: 0; }
+      .modal-header .copy-value-row,
+      .convs-chat-hdr .copy-value-row { order: 3; flex-shrink: 0; max-width: 100%; }
+      .modal-header .info-sub,
+      .convs-chat-hdr #convs-chat-sub { order: 4; display:flex; align-items:center; gap:8px; flex-shrink:1; min-width:0; }
+      .modal-header .btn-contact-modal,
+      .convs-chat-hdr .btn-contact-chat { order: 5; flex-shrink: 0; margin-right:0 !important; }
+      .convs-chat-hdr .btn-contact-chat,
+      .convs-chat-hdr .btn-resolve-chat { padding:4px 8px !important; font-size:.72rem !important; }
+      .convs-chat-hdr { flex-wrap: wrap; }
+      .convs-chat-hdr > div:first-of-type { display: contents; }
+      #modal-chat-phone, #convs-chat-phone { display:inline-block; max-width: 46vw; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; vertical-align:bottom; }
 
       /* ── Barras de status/atendente: mais compactas no mobile ── */
       .window-status-bar { padding:4px 12px; font-size:.75rem; }
@@ -4429,7 +4516,7 @@
       #modal-summary-block { max-height:200px; overflow-y:auto; }
 
       /* ── Composer: padding seguro para barra home do iOS ── */
-      .modal-box .composer { padding-bottom:calc(8px + env(safe-area-inset-bottom, 0px)); }
+      .composer { padding-bottom:calc(8px + env(safe-area-inset-bottom, 0px)); }
 
       /* ── Cards Kanban mobile: respiro e sem corte ───────────────────────────────── */
       /* flex-shrink:0 é a correção principal: impede que o flexbox encolha os cards
@@ -4448,8 +4535,76 @@
       .mob-stage-select { flex:1; font-size:1rem; border:1px solid var(--border); border-radius:7px; padding:6px 8px; background:#fff; color:var(--text-primary); outline:none; font-family:inherit; }
       /* Categoria: chip proporcional, sem esticar */
       .card-cat-row .demand-select { flex:0 1 auto; max-width:160px; }
-      /* Priority dot menor no mobile */
+      /* Priority dot menor no mobile — hit area maior que o visual via padding/before invisível */
       .card-status-dot { width:18px; height:18px; top:10px; right:10px; }
+      .card-status-dot::before {
+        content: ""; position: absolute; inset: -11px;
+      }
+
+      /* ── Alvos de toque: ~40-44px de área tocável, ícone visual permanece pequeno ── */
+      .copy-icon-btn { width:40px; height:40px; }
+      .copy-icon-btn svg { width:15px; height:15px; }
+      .bubble-reply-btn, .bubble-copy-btn { padding:6px 10px; }
+      .btn-tutorial { width:40px; height:40px; }
+      .pftgl-btn { padding:8px 13px; }
+      /* .contact-reopen-btn já abre o contato via bubbling do clique na linha (buildContactItem
+         registra o listener no .contact-item inteiro); no mobile ele vira um indicador
+         compacto (chevron) em vez do botão-pílula de texto — mantém o <button> real (foco
+         de teclado/leitor de tela preservado) mas esconde o texto via font-size:0 e desenha
+         o chevron por ::after, então nada de navegação por teclado se perde. */
+      .contact-reopen-btn {
+        font-size: 0; padding: 0; width: 40px; height: 40px; min-width: 40px;
+        border: none; border-radius: 50%; display: flex; align-items: center; justify-content: center;
+        background: transparent;
+      }
+      .contact-reopen-btn::after { content: "›"; font-size: 1.4rem; font-weight: 700; color: var(--brand-navy); line-height: 1; }
+      .contact-item { padding: 8px 12px; }
+      .contact-avatar { width: 34px; height: 34px; font-size: .74rem; }
+
+      /* ── Composer: linha de ferramentas (anexo/câmera/mic/msgs-rápidas/emoji) separada
+         da linha principal (textarea + Enviar). .composer-tools/.composer-main são
+         display:contents por padrão (ver regra base, fora desta media query) — aqui
+         viram linhas próprias, então o textarea recebe quase toda a largura disponível
+         em vez de disputar espaço com 5 botões na mesma linha. */
+      .composer-row { flex-wrap: wrap; row-gap: 8px; }
+      .composer-tools { display:flex; gap:7px; width:100%; order:1; }
+      .composer-main { display:flex; gap:7px; width:100%; order:2; align-items:flex-end; }
+      .composer-main textarea { flex:1; }
+
+      /* ── Filtros de conversa: fileira de ordenação também fixa (irmã de .convs-filter) ── */
+      .conv-sort-tabs { flex-shrink:0; }
+
+      /* ── Ações de mensagem (Copiar texto/Responder): sempre visíveis no mobile
+         (sem hover), mas com peso visual reduzido — leem como metadado, não ruído. */
+      .bubble-reply-btn, .bubble-copy-btn { font-size:.58rem; opacity:.62; border-color:transparent; background:rgba(0,0,0,.035); }
+
+      /* ── Chips de estágio do Kanban: fade nas bordas quando há overflow horizontal ── */
+      .mob-stage-chips {
+        -webkit-mask-image: linear-gradient(to right, transparent 0, #000 14px, #000 calc(100% - 14px), transparent 100%);
+        mask-image: linear-gradient(to right, transparent 0, #000 14px, #000 calc(100% - 14px), transparent 100%);
+      }
+
+      /* ── Seletor de Etapa: alinhar visual ao select de categoria (chevron custom) ── */
+      .mob-stage-select {
+        appearance: none; -webkit-appearance: none;
+        background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 20 20' fill='none' stroke='%23667' stroke-width='2'%3E%3Cpath d='M5 7l5 5 5-5'/%3E%3C/svg%3E");
+        background-repeat: no-repeat; background-position: right 8px center; background-size: 14px;
+        padding-right: 28px;
+      }
+
+      /* ── Item inativo do bottom nav: contraste um pouco maior ── */
+      .mob-nav-btn { color: rgba(255,255,255,.68); }
+      .mob-nav-btn.active { color:#fff; }
+
+      /* ── Landscape com notch lateral (iPhone deitado): nenhum conteúdo/ação atrás
+         do cutout. Header e bottom nav já são full-width (left:0;right:0), então
+         empurramos o padding interno; o FAB, que é right:16px fixo, ganha a
+         safe-area somada ao respiro original. */
+      .header-nav-row { padding-left: calc(14px + env(safe-area-inset-left, 0px)); padding-right: calc(14px + env(safe-area-inset-right, 0px)); }
+      .mob-nav { padding-left: env(safe-area-inset-left, 0px); padding-right: env(safe-area-inset-right, 0px); }
+      .mob-new-fab { right: calc(16px + env(safe-area-inset-right, 0px)); }
+      .modal-header { padding-left: calc(10px + env(safe-area-inset-left, 0px)); padding-right: calc(10px + env(safe-area-inset-right, 0px)); }
+      .convs-chat-hdr { padding-left: calc(16px + env(safe-area-inset-left, 0px)); padding-right: calc(16px + env(safe-area-inset-right, 0px)); }
     }
 
     /* ══════════════════════════════════════════════════
@@ -5058,10 +5213,12 @@
   </div>
   <!-- Faixa navy: título + busca centralizados, contador à esquerda, ações à direita -->
   <div class="header-nav-row">
-    <div class="waiting-counter">
-      <div class="waiting-dot" id="waiting-dot" style="display:none"></div>
-      <span id="waiting-count">Carregando...</span>
-      <span id="closed-windows-count" style="display:none;margin-left:8px;padding-left:8px;border-left:1px solid rgba(255,255,255,.2);color:#fca5a5"></span>
+    <div class="waiting-counter" id="waiting-counter">
+      <span class="wc-stat wc-stat-active">
+        <span class="waiting-dot" id="waiting-dot" style="display:none"></span>
+        <span id="waiting-count">Carregando...</span>
+      </span>
+      <span id="closed-windows-count" class="wc-stat wc-stat-closed" style="display:none"></span>
     </div>
     <!-- Bloco central: título + busca (absoluto, não afeta o flex dos botões) -->
     <div class="header-center">
@@ -5139,10 +5296,10 @@
       <button class="convs-mode-btn" id="mode-btn-contacts" onclick="setConvsMode('contacts')">Contatos</button>
     </div>
     <div class="convs-search">
-      <input type="search" id="convs-search-input" placeholder="🔍  Buscar por nome ou número..." oninput="handleConvsSearch()">
+      <input type="search" id="convs-search-input" placeholder="Buscar por nome ou número..." oninput="handleConvsSearch()">
       <span class="convs-search-spinner" id="convs-search-spinner" aria-hidden="true"></span>
     </div>
-    <button class="convs-new-btn" onclick="openNewConvoModal()">✏️ Nova conversa</button>
+    <button class="convs-new-btn" onclick="openNewConvoModal()"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" width="15" height="15" style="vertical-align:-2px;margin-right:2px"><path d="M12 5v14M5 12h14"></path></svg> Nova conversa</button>
     <div class="convs-filter">
       <button class="filter-pill active-all" id="pill-all" onclick="setConvFilter('all')">
         Todas <span class="filter-pill-count" id="pill-count-all">0</span>
@@ -5452,7 +5609,7 @@
 <div class="modal-overlay hidden" id="chat-modal">
   <div class="modal-box">
     <div class="modal-header">
-      <button class="modal-hdr-btn" onclick="closeModal()">✕</button>
+      <button class="modal-hdr-btn" onclick="closeModal()" aria-label="Fechar conversa">✕</button>
       <div class="info">
         <div class="chat-hdr-identity">
           <h2 id="modal-chat-name">—</h2>
@@ -5529,7 +5686,7 @@
 
       <div class="composer">
         <div class="active-attendant-bar hidden" id="modal-aa-bar"></div>
-        <div class="mob-introduce-row"><button class="mob-introduce-btn" onclick="introduceAttendant('modal')">Me apresentar</button></div>
+        <div class="mob-introduce-row" id="modal-mob-introduce-row"><button class="mob-introduce-btn" onclick="introduceAttendant('modal')">Me apresentar</button></div>
         <!-- Lock da janela de 24h — aparece quando janela está fechada/aguardando -->
         <div class="composer-lock-bar" id="modal-composer-lock" style="display:none"></div>
         <div class="reply-bar" id="modal-reply-bar" style="display:none">
@@ -5556,17 +5713,21 @@
           <button type="button" class="btn-send-audio" onclick="sendAudioMessage('modal')">Enviar</button>
         </div>
         <div class="composer-row">
-          <button class="btn-attach" onclick="handleAttachClick('modal')" title="Imagem / PDF">📎</button>
-          <input type="file" id="modal-file-input" accept="image/jpeg,image/png,image/gif,image/webp,application/pdf" multiple style="display:none" onchange="handleImageSelect(event,'modal')">
-          <input type="file" id="modal-camera-input" accept="image/*" capture="environment" style="display:none" onchange="handleImageSelect(event,'modal')">
-          <button class="btn-camera" onclick="handleCameraClick('modal')" title="Câmera">📷</button>
-          <button class="btn-mic" id="modal-mic-btn" onclick="handleMicClick('modal')" title="Gravar áudio">🎤</button>
-          <button class="btn-emoji" id="modal-emoji-btn" onclick="toggleEmojiPicker('modal'); event.stopPropagation();" title="Emojis aprovados">🙂</button>
-          <button class="btn-quickmsg" id="modal-quickmsg-btn" onclick="openQuickMessages('modal'); event.stopPropagation();" aria-label="Mensagens rápidas" title="Mensagens rápidas"><span class="qm-btn-icon">💬</span><span class="qm-btn-label">Msgs rápidas</span></button>
-          <textarea id="modal-msg-input" placeholder="Digite sua mensagem..." rows="1"
-            onkeydown="handleEnter(event,'modal')" oninput="autoResize(this)" onpaste="handleComposerPaste(event,'modal')"></textarea>
-          <button class="btn-introduce" onclick="introduceAttendant('modal')" title="Me apresentar">Me apresentar</button>
-          <button class="btn-send" id="modal-send-btn" onclick="sendMessage('modal')">Enviar</button>
+          <div class="composer-tools">
+            <button class="btn-attach" onclick="handleAttachClick('modal')" title="Imagem / PDF" aria-label="Anexar imagem ou PDF">📎</button>
+            <input type="file" id="modal-file-input" accept="image/jpeg,image/png,image/gif,image/webp,application/pdf" multiple style="display:none" onchange="handleImageSelect(event,'modal')">
+            <input type="file" id="modal-camera-input" accept="image/*" capture="environment" style="display:none" onchange="handleImageSelect(event,'modal')">
+            <button class="btn-camera" onclick="handleCameraClick('modal')" title="Câmera" aria-label="Abrir câmera">📷</button>
+            <button class="btn-mic" id="modal-mic-btn" onclick="handleMicClick('modal')" title="Gravar áudio" aria-label="Gravar áudio">🎤</button>
+            <button class="btn-emoji" id="modal-emoji-btn" onclick="toggleEmojiPicker('modal'); event.stopPropagation();" title="Emojis aprovados" aria-label="Emojis aprovados">🙂</button>
+            <button class="btn-quickmsg" id="modal-quickmsg-btn" onclick="openQuickMessages('modal'); event.stopPropagation();" aria-label="Mensagens rápidas" title="Mensagens rápidas"><span class="qm-btn-icon">💬</span><span class="qm-btn-label">Msgs rápidas</span></button>
+          </div>
+          <div class="composer-main">
+            <textarea id="modal-msg-input" placeholder="Digite sua mensagem..." rows="1"
+              onkeydown="handleEnter(event,'modal')" oninput="autoResize(this)" onpaste="handleComposerPaste(event,'modal')"></textarea>
+            <button class="btn-introduce" onclick="introduceAttendant('modal')" title="Me apresentar">Me apresentar</button>
+            <button class="btn-send" id="modal-send-btn" onclick="sendMessage('modal')">Enviar</button>
+          </div>
         </div>
       </div>
     </div>
@@ -6496,6 +6657,14 @@ function switchTab(tab) {
   if (window.innerWidth <= 768) {
     const isKanban=(tab==="pf"||tab==="pj");
     document.querySelectorAll(".mob-nav-btn").forEach(b=>{const t=b.dataset.tab;b.classList.toggle("active",t===tab||(t==="kanban"&&isKanban));});
+  }
+  // FAB de nova conversa só faz sentido no Kanban (Conversas já tem seu próprio
+  // botão "Nova conversa"; Contatos não tem ação equivalente) — ver CSS mobile
+  // body[data-mobile-view="kanban"] .mob-new-fab.
+  if (tab === "pf" || tab === "pj") {
+    document.body.setAttribute("data-mobile-view", "kanban");
+  } else if (tab === "convs") {
+    document.body.setAttribute("data-mobile-view", typeof convsSectionMode !== "undefined" && convsSectionMode === "contacts" ? "contacts" : "convs");
   }
   updateHeader(allConvs);
 }
@@ -7776,8 +7945,8 @@ function buildCard(c, col, cols) {
           `<option value="${k}"${k===c.demandType?" selected":""}>${v}</option>`
         ).join("")}
       </select>
-      <button class="btn-cat-mgr" onclick="event.stopPropagation();openCatManager()" title="Gerenciar categorias">⚙️</button>
-      <button class="card-summary-toggle" onclick="event.stopPropagation();toggleCardSummary(event,'${esc(c.phone)}')" title="${_summaryExpanded.has(c.phone)?'Retrair resumo':'Expandir resumo'}">${_summaryExpanded.has(c.phone)?'▲':'▼'}</button>
+      <button class="btn-cat-mgr" onclick="event.stopPropagation();openCatManager()" title="Gerenciar categorias" aria-label="Gerenciar categorias">⚙️</button>
+      <button class="card-summary-toggle" onclick="event.stopPropagation();toggleCardSummary(event,'${esc(c.phone)}')" title="${_summaryExpanded.has(c.phone)?'Retrair resumo':'Expandir resumo'}" aria-label="${_summaryExpanded.has(c.phone)?'Retrair resumo':'Expandir resumo'}">${_summaryExpanded.has(c.phone)?'▲':'▼'}</button>
     </div>
 
     ${isTemplateFailed
@@ -8263,6 +8432,10 @@ async function openChat(phone) {
   document.body.style.overflow = "hidden";
   document.body.classList.add("modal-open");
   document.documentElement.classList.add("modal-open");
+  // Modo de foco do chat mobile: esconde header global + bottom nav enquanto o
+  // chat está aberto (mesmo mecanismo usado por openConvsChat, para que o
+  // comportamento seja idêntico independente de onde a conversa foi aberta).
+  if (window.innerWidth <= 768) document.body.classList.add("mob-chat-focus");
 
   _aaRegistered = false;  // decisão será tomada após carregar dados da conversa
   clearInterval(_aaIntervalId);
@@ -8672,6 +8845,7 @@ function closeModal() {
   document.body.style.overflow = "";
   document.body.classList.remove("modal-open");
   document.documentElement.classList.remove("modal-open");
+  document.body.classList.remove("mob-chat-focus");
   clearImage("modal");
   resetMicComposer("modal");
   loadQueue();
@@ -8851,7 +9025,12 @@ async function openConvsChat(phone, redisKey, isArchive) {
     el.classList.toggle("unread-item", el.dataset.convKey !== openConvsRedisKey && unreadConvs.includes(el.dataset.phone));
   });
 
-  if (window.innerWidth <= 768) document.getElementById("view-convs").classList.add("mob-chat-open");
+  if (window.innerWidth <= 768) {
+    document.getElementById("view-convs").classList.add("mob-chat-open");
+    // Mesmo modo de foco usado por openChat() (chat via Kanban) — comportamento
+    // idêntico independente de onde a conversa foi aberta.
+    document.body.classList.add("mob-chat-focus");
+  }
 
   // Monta área de chat se não existir
   const main = document.getElementById("convs-main");
@@ -8862,8 +9041,8 @@ async function openConvsChat(phone, redisKey, isArchive) {
   chatArea.style.cssText = "display:flex;flex-direction:column;height:100%;overflow:hidden";
 
   chatArea.innerHTML = `
-    <div style="background:var(--brand-navy);color:#fff;padding:12px 16px;display:flex;align-items:center;gap:10px;flex-shrink:0">
-      <button class="mob-back-btn" onclick="closeMobChat()">&#8592; Voltar</button>
+    <div class="convs-chat-hdr" style="background:var(--brand-navy);color:#fff;padding:12px 16px;display:flex;align-items:center;gap:10px;flex-shrink:0">
+      <button class="mob-back-btn" onclick="closeMobChat()" aria-label="Voltar"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" width="15" height="15"><path d="M15 18l-6-6 6-6"></path></svg> Voltar</button>
       <div style="flex:1;min-width:0">
         <div class="chat-hdr-identity">
           <div id="convs-chat-name" style="font-size:1.25rem;font-weight:700;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">Carregando...</div>
@@ -8874,14 +9053,14 @@ async function openConvsChat(phone, redisKey, isArchive) {
         </div>
         <div id="convs-chat-sub" style="font-size:.7rem;opacity:.75;display:flex;gap:8px;margin-top:2px"></div>
       </div>
-      <button onclick="showContactFromChat('${esc(phone)}')"
+      <button class="btn-contact-chat" onclick="showContactFromChat('${esc(phone)}')"
         style="background:rgba(255,255,255,.15);border:1px solid rgba(255,255,255,.2);color:#fff;padding:5px 12px;border-radius:7px;cursor:pointer;font-size:.75rem;font-weight:700;transition:background .15s">
         Contato
       </button>
-      ${!isArchive ? `<button onclick="resolveConversation('convs')"
+      ${!isArchive ? `<button class="btn-resolve-chat" onclick="resolveConversation('convs')"
         style="background:var(--brand-red);border:none;color:#fff;padding:5px 12px;border-radius:7px;cursor:pointer;font-size:.75rem;font-weight:700">
         Resolver
-      </button>` : `<span style="background:#555;color:#ccc;padding:5px 12px;border-radius:7px;font-size:.75rem;font-weight:700">📁 Arquivada</span>`}
+      </button>` : `<span class="btn-resolve-chat" style="background:#555;color:#ccc;padding:5px 12px;border-radius:7px;font-size:.75rem;font-weight:700;display:inline-block">📁 Arquivada</span>`}
     </div>
 
     <div id="convs-chat-body">
@@ -8893,7 +9072,7 @@ async function openConvsChat(phone, redisKey, isArchive) {
       <div class="messages" id="convs-messages" style="flex:1;overflow-y:auto;"></div>
       ${!isArchive ? `<div class="composer">
         <div class="active-attendant-bar hidden" id="convs-aa-bar"></div>
-        <div class="mob-introduce-row"><button class="mob-introduce-btn" onclick="introduceAttendant('convs')">Me apresentar</button></div>
+        <div class="mob-introduce-row" id="convs-mob-introduce-row"><button class="mob-introduce-btn" onclick="introduceAttendant('convs')">Me apresentar</button></div>
         <div class="img-preview-bar" id="convs-img-preview-bar">
           <img id="convs-img-thumb" src="" alt="preview">
           <input class="caption-input" id="convs-img-caption" placeholder="Legenda (opcional)">
@@ -8915,17 +9094,21 @@ async function openConvsChat(phone, redisKey, isArchive) {
           <button type="button" class="btn-send-audio" onclick="sendAudioMessage('convs')">Enviar</button>
         </div>
         <div class="composer-row">
-          <button class="btn-attach" onclick="handleAttachClick('convs')" title="Imagem / PDF">📎</button>
-          <input type="file" id="convs-file-input" accept="image/jpeg,image/png,image/gif,image/webp,application/pdf" multiple style="display:none" onchange="handleImageSelect(event,'convs')">
-          <input type="file" id="convs-camera-input" accept="image/*" capture="environment" style="display:none" onchange="handleImageSelect(event,'convs')">
-          <button class="btn-camera" onclick="handleCameraClick('convs')" title="Câmera">📷</button>
-          <button class="btn-mic" id="convs-mic-btn" onclick="handleMicClick('convs')" title="Gravar áudio">🎤</button>
-          <button class="btn-emoji" id="convs-emoji-btn" onclick="toggleEmojiPicker('convs'); event.stopPropagation();" title="Emojis aprovados">🙂</button>
-          <button class="btn-quickmsg" id="convs-quickmsg-btn" onclick="openQuickMessages('convs'); event.stopPropagation();" aria-label="Mensagens rápidas" title="Mensagens rápidas"><span class="qm-btn-icon">💬</span><span class="qm-btn-label">Msgs rápidas</span></button>
-          <textarea id="convs-msg-input" placeholder="Digite sua mensagem..." rows="1"
-            onkeydown="handleEnter(event,'convs')" oninput="autoResize(this)" onpaste="handleComposerPaste(event,'convs')"></textarea>
-          <button class="btn-introduce" onclick="introduceAttendant('convs')" title="Me apresentar">Me apresentar</button>
-          <button class="btn-send" id="convs-send-btn" onclick="sendMessage('convs')">Enviar</button>
+          <div class="composer-tools">
+            <button class="btn-attach" onclick="handleAttachClick('convs')" title="Imagem / PDF" aria-label="Anexar imagem ou PDF">📎</button>
+            <input type="file" id="convs-file-input" accept="image/jpeg,image/png,image/gif,image/webp,application/pdf" multiple style="display:none" onchange="handleImageSelect(event,'convs')">
+            <input type="file" id="convs-camera-input" accept="image/*" capture="environment" style="display:none" onchange="handleImageSelect(event,'convs')">
+            <button class="btn-camera" onclick="handleCameraClick('convs')" title="Câmera" aria-label="Abrir câmera">📷</button>
+            <button class="btn-mic" id="convs-mic-btn" onclick="handleMicClick('convs')" title="Gravar áudio" aria-label="Gravar áudio">🎤</button>
+            <button class="btn-emoji" id="convs-emoji-btn" onclick="toggleEmojiPicker('convs'); event.stopPropagation();" title="Emojis aprovados" aria-label="Emojis aprovados">🙂</button>
+            <button class="btn-quickmsg" id="convs-quickmsg-btn" onclick="openQuickMessages('convs'); event.stopPropagation();" aria-label="Mensagens rápidas" title="Mensagens rápidas"><span class="qm-btn-icon">💬</span><span class="qm-btn-label">Msgs rápidas</span></button>
+          </div>
+          <div class="composer-main">
+            <textarea id="convs-msg-input" placeholder="Digite sua mensagem..." rows="1"
+              onkeydown="handleEnter(event,'convs')" oninput="autoResize(this)" onpaste="handleComposerPaste(event,'convs')"></textarea>
+            <button class="btn-introduce" onclick="introduceAttendant('convs')" title="Me apresentar">Me apresentar</button>
+            <button class="btn-send" id="convs-send-btn" onclick="sendMessage('convs')">Enviar</button>
+          </div>
         </div>
       </div>` : `<div style="padding:10px 16px;text-align:center;font-size:.75rem;color:#888;background:#f5f5f5;border-top:1px solid #e5e5e5;flex-shrink:0">
         📁 Conversa arquivada — somente leitura
@@ -11642,6 +11825,35 @@ window.addEventListener("pageshow", (event) => {
   refreshAfterResume(event.persisted ? "pageshow-bfcache" : "pageshow");
 });
 
+// ── Teclado virtual (mobile): reforço opcional via visualViewport ──────────
+// 100dvh já é a base de todo o app-shell mobile e continua sendo o valor
+// autoritativo (ver CSS). Isto só complementa em combinações de browser onde o
+// dvh não acompanha perfeitamente a abertura do teclado on-screen. Registrado
+// UMA ÚNICA VEZ aqui no bootstrap — nunca dentro de openChat/openConvsChat —
+// para nunca acumular listeners a cada conversa aberta/fechada.
+(function initViewportKeyboardGuard() {
+  if (!window.visualViewport) return; // feature detection — sem isso, nada muda
+  let _vvRaf = null;
+  function applyVvHeight() {
+    _vvRaf = null;
+    document.documentElement.style.setProperty("--vv-height", window.visualViewport.height + "px");
+  }
+  function onVvResize() {
+    if (_vvRaf) return; // não acumula: só um rAF pendente por vez
+    _vvRaf = requestAnimationFrame(applyVvHeight);
+  }
+  window.visualViewport.addEventListener("resize", onVvResize);
+  window.addEventListener("orientationchange", () => setTimeout(applyVvHeight, 60));
+  // Reassenta a altura ao fechar o teclado (blur de campo de texto), delegado
+  // no document — um único listener, não um por conversa aberta.
+  document.addEventListener("focusout", (e) => {
+    if (e.target && (e.target.tagName === "TEXTAREA" || e.target.tagName === "INPUT")) {
+      setTimeout(applyVvHeight, 60);
+    }
+  });
+  applyVvHeight();
+})();
+
 window.addEventListener("online", () => refreshAfterResume("online"));
 
 // Cleanup ao fechar aba
@@ -12004,10 +12216,13 @@ function updateWindowUI(prefix, data) {
     }
 
     bar.classList.add("ws-open");
+    // Uma linha só: "Janela aberta" e "restam Xh Ymin" comunicavam praticamente o
+    // mesmo estado em duas regiões separadas. O horário exato de expiração continua
+    // disponível via title (tooltip), sem disputar o mesmo nível hierárquico.
+    bar.title = expiresStr ? `Janela aberta até ${expiresStr}` : "";
     bar.innerHTML = `
       <span class="ws-icon">🟢</span>
-      <span class="ws-label">Janela aberta${expiresStr ? ` até ${expiresStr}` : ""}</span>
-      <span class="ws-detail">— Restam ${hStr}${mStr} para responder livremente</span>
+      <span class="ws-label">Janela aberta · ${hStr}${mStr} restantes</span>
     `;
     unlockComposer(prefix);
 
@@ -12870,6 +13085,8 @@ function setConvsMode(mode) {
       if (openConvsPhone) { unlockConvTab(openConvsPhone); openConvsPhone = null; openConvsRedisKey = null; }
       document.querySelectorAll('.conv-item').forEach(el => el.classList.remove('active'));
     }
+    // Rede de segurança: nunca deixar o modo-foco do chat "preso" ao trocar de aba.
+    document.body.classList.remove('mob-chat-focus');
     const main = document.getElementById('convs-main');
     if (main) {
       main.innerHTML = '';
@@ -12877,6 +13094,9 @@ function setConvsMode(mode) {
   }
 
   convsSectionMode = mode;
+  if (currentTab === 'convs') {
+    document.body.setAttribute('data-mobile-view', mode === 'contacts' ? 'contacts' : 'convs');
+  }
   const btnConvs    = document.getElementById('mode-btn-convs');
   const btnContacts = document.getElementById('mode-btn-contacts');
   if (btnConvs)    btnConvs.classList.toggle('active', mode === 'convs');
@@ -12893,8 +13113,8 @@ function setConvsMode(mode) {
   if (searchInput) {
     searchInput.value = '';
     searchInput.placeholder = mode === 'convs'
-      ? '🔍  Buscar por nome ou número...'
-      : '🔍  Buscar contato por nome ou telefone...';
+      ? 'Buscar por nome ou número...'
+      : 'Buscar contato por nome ou telefone...';
   }
 
   if (mode === 'contacts') {
@@ -13099,7 +13319,7 @@ function openContactDetail(c) {
   main.innerHTML = `
     <div style="display:flex;flex-direction:column;height:100%;overflow:hidden;">
       <div style="background:var(--brand-navy);color:#fff;padding:10px 16px;display:flex;align-items:center;gap:10px;flex-shrink:0;">
-        <button class="mob-back-btn" onclick="closeMobChat()">&#8592; Voltar</button>
+        <button class="mob-back-btn" onclick="closeMobChat()" aria-label="Voltar"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" width="15" height="15"><path d="M15 18l-6-6 6-6"></path></svg> Voltar</button>
         <div style="flex:1;font-size:.82rem;font-weight:700;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${esc(name)}</div>
       </div>
       <div class="cd-wrap">
@@ -13502,6 +13722,9 @@ function selectMobStage(tabId, stage, btn) {
   document.querySelectorAll("#mob-chips-" + tabId + " .mob-chip").forEach(function(b){ b.classList.toggle("active", b === btn); });
   _mobActiveStage[tabId] = stage;
   renderMobStageCards(tabId, stage);
+  if (btn && btn.scrollIntoView) {
+    btn.scrollIntoView({ inline: "nearest", block: "nearest", behavior: "smooth" });
+  }
 }
 
 function renderMobStageCards(tabId, stage) {
@@ -13546,6 +13769,7 @@ function renderMobStageCards(tabId, stage) {
 function closeMobChat() {
   const prevPhone = openConvsPhone;
   document.getElementById("view-convs").classList.remove("mob-chat-open");
+  document.body.classList.remove("mob-chat-focus");
 
   stopConvsChatPoll();
   if (prevPhone) unlockConvTab(prevPhone);
@@ -13797,28 +14021,36 @@ function isActiveAttendantFresh(activeAttendantAt) {
 function renderActiveAttendantNotice(prefix, data) {
   const bar = document.getElementById(`${prefix}-aa-bar`);
   if (!bar) return;
-  
+  // Linha "Me apresentar" (mobile): só ocupa espaço enquanto ainda pode ser a próxima
+  // ação útil. Uma vez que o atendente atual já assumiu a conversa (aa-self), a barra
+  // de atendente já deixa isso claro — não precisa de uma segunda linha dizendo a
+  // mesma coisa. Ela volta a aparecer se a posse mudar (outro atendente, ou ninguém).
+  const introRow = document.getElementById(`${prefix}-mob-introduce-row`);
+  const setIntroRowVisible = (visible) => { if (introRow) introRow.style.display = visible ? "" : "none"; };
+
   if (data.isArchive) {
     bar.className = "active-attendant-bar hidden";
     bar.innerHTML = "";
+    setIntroRowVisible(false);
     return;
   }
-  
+
   const { activeAttendant, activeAttendantAt } = data;
   const current = getCurrentAttendant();
-  
+
   // Se o próprio atendente atual já tiver assumido:
   if (activeAttendant && isActiveAttendantFresh(activeAttendantAt) && current && activeAttendant.id === current.id) {
     bar.className = "active-attendant-bar aa-self";
     const phone = prefix === "modal" ? openModalPhone : openConvsPhone;
     bar.innerHTML = `<span>Você está atendendo esta conversa</span><button class="btn-release" onclick="event.stopPropagation();clearActiveAttendant('${esc(phone || "")}','${prefix}')">Liberar atendimento</button>`;
+    setIntroRowVisible(false);
     if (phone) {
       observerOnlyPhones.delete(phone); // garante que saiu do modo observador
       startActiveAttendantRenewal(phone);
     }
     return;
   }
-  
+
   // Se outro atendente tiver assumido:
   if (activeAttendant && isActiveAttendantFresh(activeAttendantAt)) {
     const phone = prefix === "modal" ? openModalPhone : openConvsPhone;
@@ -13827,13 +14059,15 @@ function renderActiveAttendantNotice(prefix, data) {
     _aaIntervalId = null;
     bar.className = "active-attendant-bar aa-other";
     bar.innerHTML = `<span>⚠ ${esc(activeAttendant.name)} está cuidando desta conversa</span><button class="btn-assume" onclick="event.stopPropagation();confirmAndAssumeAttendant('${esc(phone || "")}','${prefix}','${esc(activeAttendant.name)}')">Assumir mesmo assim</button>`;
+    setIntroRowVisible(true);
     return;
   }
-  
+
   // Quando ninguém assumiu:
   const phone = prefix === "modal" ? openModalPhone : openConvsPhone;
   bar.className = "active-attendant-bar aa-none";
   bar.innerHTML = `<span>Nenhum atendente assumiu esta conversa.</span><button class="btn-assume-none" onclick="event.stopPropagation();assumeAttendant('${esc(phone || "")}','${prefix}')">Assumir atendimento</button>`;
+  setIntroRowVisible(true);
 }
 
 function renderActiveAttendantLoading(prefix, text, btnText) {
@@ -15914,10 +16148,10 @@ function orgPrintList() { orgGenerateOrgFile(); }
 
 <!-- ══════ MOBILE BOTTOM NAVIGATION ══════ -->
 <nav class="mob-nav" id="mob-nav">
-  <button class="mob-nav-btn active" data-tab="convs" id="mob-btn-convs" onclick="switchTab('convs')"><span class="mob-nav-icon">💬</span><span>Conversas</span></button>
-  <button class="mob-nav-btn" data-tab="kanban" id="mob-btn-kanban" onclick="mobSwitchKanban()"><span class="mob-nav-icon">📋</span><span>Kanban</span></button>
+  <button class="mob-nav-btn active" data-tab="convs" id="mob-btn-convs" onclick="switchTab('convs')" aria-label="Conversas"><span class="mob-nav-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 11.5a8.38 8.38 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.38 8.38 0 0 1-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 8.38 8.38 0 0 1 3.8-.9h.5a8.48 8.48 0 0 1 8 8v.5z"></path></svg></span><span>Conversas</span></button>
+  <button class="mob-nav-btn" data-tab="kanban" id="mob-btn-kanban" onclick="mobSwitchKanban()" aria-label="Kanban"><span class="mob-nav-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="4" width="5" height="16" rx="1"></rect><rect x="9.5" y="4" width="5" height="10" rx="1"></rect><rect x="16" y="4" width="5" height="13" rx="1"></rect></svg></span><span>Kanban</span></button>
 </nav>
-<button class="mob-new-fab" id="mob-new-fab" onclick="openNewConvoModal()" title="Nova conversa">✏️</button>
+<button class="mob-new-fab" id="mob-new-fab" onclick="openNewConvoModal()" title="Nova conversa" aria-label="Nova conversa"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" width="22" height="22"><path d="M12 5v14M5 12h14"></path></svg></button>
 
 <!-- ══════ MOBILE QUICK HELP GUIDE ══════ -->
 <div id="mob-help-overlay" onclick="closeMobileHelp()"></div>
