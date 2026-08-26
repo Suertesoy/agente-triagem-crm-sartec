@@ -150,7 +150,8 @@
       .card-unread-badge,
       .card-new-msg-flash,
       .card.card-reopening,
-      .mic-rec-dot {
+      .mic-rec-dot,
+      .btn-mic.mic-btn-recording {
         animation: none;
       }
     }
@@ -1695,6 +1696,22 @@
     .btn-resolve-modal { background: var(--brand-red) !important; font-weight: 700; }
     .btn-resolve-modal:hover { background: var(--brand-red-dark) !important; }
 
+    /* ── Header do chat na aba Conversas: mesmo visual do .modal-header (navy,
+       mesmo padding), mas com classe própria em vez de estilo inline — o inline
+       antigo (padding:12px 16px direto no elemento) sempre vencia a regra de
+       safe-area no mobile (@media max-width:768px), por maior especificidade
+       de estilo inline sobre qualquer seletor de classe. Layout agora é 100%
+       responsabilidade do CSS. */
+    .convs-chat-hdr {
+      background: var(--brand-navy);
+      color: #fff;
+      padding: 12px 16px;
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      flex-shrink: 0;
+    }
+
     /* ── Barra de status da janela de 24h ── */
     .window-status-bar {
       display: flex;
@@ -2707,6 +2724,13 @@
        eles viram duas linhas — ferramentas em cima, textarea+Enviar embaixo. */
     .composer-tools, .composer-main { display: contents; }
 
+    /* ── Ícones estruturais da toolbar: SVG linear (geometria) + CSS (tamanho/
+       cor/fundo/estado) — nunca emoji nativo do SO (cor/desenho variam entre
+       iOS/Android/desktop e destoam do resto da interface). ── */
+    .composer-tools svg, .btn-mic svg, .mic-rec-hint-icon, .mic-rec-cancel svg {
+      display: block;
+    }
+
     .btn-attach {
       background: none;
       border: 1px solid var(--border);
@@ -2714,13 +2738,12 @@
       border-radius: 8px;
       width: 38px;
       height: 38px;
-      font-size: 1.1rem;
       cursor: pointer;
       display: flex;
       align-items: center;
       justify-content: center;
       flex-shrink: 0;
-      transition: border-color .15s, color .15s;
+      transition: border-color .15s, color .15s, background-color .15s;
     }
     .btn-attach:hover { border-color: var(--brand-navy); color: var(--brand-navy); }
 
@@ -2731,12 +2754,11 @@
       width: 36px; height: 36px;
       border-radius: 8px;
       cursor: pointer;
-      font-size: 1rem;
       display: none; /* somente mobile */
       align-items: center;
       justify-content: center;
       flex-shrink: 0;
-      transition: border-color .15s, color .15s;
+      transition: border-color .15s, color .15s, background-color .15s;
     }
     .btn-camera:hover { border-color: var(--brand-navy); color: var(--brand-navy); }
 
@@ -2746,7 +2768,11 @@
       border-color: var(--border) !important; color: var(--text-muted) !important;
     }
 
-    /* ── Microfone: gravação e envio de áudio ── */
+    /* ── Microfone: gravação e envio de áudio ──
+       Botão único (nunca duplicado): mesmo elemento serve ao clique tradicional
+       (mouse/teclado — ver onclick) e ao gesto de segurar/arrastar em touch (ver
+       onpointerdown/move/up/cancel). touch-action:none só aqui, nunca global —
+       o scroll vertical do histórico de mensagens continua livre. */
     .btn-mic {
       background: none;
       border: 1px solid var(--border);
@@ -2754,16 +2780,53 @@
       border-radius: 8px;
       width: 38px;
       height: 38px;
-      font-size: 1rem;
       cursor: pointer;
       display: flex; /* visível em desktop e mobile — diferente de .btn-camera */
       align-items: center;
       justify-content: center;
       flex-shrink: 0;
-      transition: border-color .15s, color .15s;
+      transition: border-color .15s, color .15s, background-color .15s, transform .1s;
+      touch-action: none;
+      -webkit-tap-highlight-color: transparent;
+      position: relative;
     }
     .btn-mic:hover { border-color: var(--brand-navy); color: var(--brand-navy); }
     .btn-mic:disabled { opacity: .35; cursor: not-allowed; }
+    /* Pressionado/gravando: feedback progressivo dirigido por --mic-drag (0→1,
+       atualizado a cada pointermove — só transform/opacity/background, nunca
+       propriedades que disparam layout). */
+    .btn-mic.mic-btn-armed {
+      border-color: var(--brand-red, #d33);
+      color: var(--brand-red, #d33);
+    }
+    .btn-mic.mic-btn-recording {
+      background-color: rgba(211, 51, 51, calc(.12 + var(--mic-drag, 0) * .35));
+      transform: scale(calc(1 - var(--mic-drag, 0) * .08));
+    }
+    @media (prefers-reduced-motion: no-preference) {
+      .btn-mic.mic-btn-recording { animation: mic-btn-pulse 1.4s ease-in-out infinite; }
+    }
+    @keyframes mic-btn-pulse {
+      0%, 100% { box-shadow: 0 0 0 0 rgba(211,51,51,.22); }
+      50%      { box-shadow: 0 0 0 7px rgba(211,51,51,0); }
+    }
+
+    /* ── Ação principal dinâmica: MIC quando o texto está vazio, ENVIAR quando
+       há conteúdo — nunca os dois ao mesmo tempo (display:none remove do fluxo
+       e da árvore de acessibilidade). Classe .has-text é alternada em
+       updateComposerSendState(), chamada de dentro de autoResize() — único
+       ponto por onde o valor do textarea muda (digitação, paste, emoji,
+       mensagem rápida, envio, limpeza). ── */
+    .composer-main .btn-send { display: none; }
+    .composer-row.has-text .composer-main .btn-mic { display: none; }
+    .composer-row.has-text .composer-main .btn-send { display: inline-block; }
+    /* Enquanto grava (independente de has-text, já que só se grava com o campo
+       vazio), o textarea e a toolbar dão lugar ao estado de gravação — o mic
+       permanece visível e ativo para continuar recebendo o gesto. */
+    .composer-row.mic-recording .composer-tools,
+    .composer-row.mic-recording .composer-main textarea,
+    .composer-row.mic-recording .composer-main .btn-introduce,
+    .composer-row.mic-recording .composer-main .btn-send { display: none; }
 
     .mic-recording-bar {
       display: flex;
@@ -2774,6 +2837,7 @@
       background: #fff5f5;
       border: 1px solid #fecaca;
       border-radius: 8px;
+      --mic-drag: 0; /* 0 = repouso, 1 = limiar de cancelamento atingido */
     }
     .mic-rec-dot {
       width: 9px; height: 9px; border-radius: 50%;
@@ -2793,18 +2857,36 @@
       color: #991b1b;
       flex-shrink: 0;
     }
+    /* Instrução "deslize para cancelar" — desloca-se levemente com o arrasto
+       (feedback contínuo, não binário) e encolhe com ellipsis em telas estreitas
+       em vez de forçar overflow na barra. */
+    .mic-rec-hint {
+      display: flex; align-items: center; gap: 5px;
+      flex: 1; min-width: 0;
+      font-size: .74rem; color: var(--text-secondary);
+      overflow: hidden; white-space: nowrap; text-overflow: ellipsis;
+      transform: translateX(calc(var(--mic-drag, 0) * -6px));
+    }
+    .mic-rec-hint-icon { flex-shrink: 0; opacity: .7; }
     .mic-rec-cancel, .mic-rec-stop {
-      margin-left: auto;
       border: none;
       border-radius: 7px;
-      padding: 6px 13px;
+      padding: 6px 12px;
       font-size: .78rem;
       font-weight: 700;
       cursor: pointer;
       flex-shrink: 0;
+      display: flex; align-items: center; gap: 5px;
     }
-    .mic-rec-cancel { background: none; color: var(--text-secondary); }
+    .mic-rec-cancel {
+      background: none;
+      color: var(--text-secondary);
+      /* Ícone de lixeira ganha destaque conforme --mic-drag avança — mesmo
+         princípio do mic: só opacity/transform, sem repaint caro. */
+    }
+    .mic-rec-cancel svg { opacity: calc(.65 + var(--mic-drag, 0) * .35); transform: scale(calc(1 + var(--mic-drag, 0) * .2)); }
     .mic-rec-cancel:hover { color: var(--brand-red, #d33); }
+    .mic-recording-bar.mic-cancel-armed .mic-rec-cancel { color: var(--brand-red, #d33); }
     .mic-rec-stop { background: var(--brand-navy); color: #fff; }
     .mic-rec-stop:hover { background: var(--brand-navy-mid); }
 
@@ -4369,14 +4451,25 @@
       /* Toast: acima da nav bar, largura segura */
       #toast-container { bottom:calc(56px + 12px);right:16px;max-width:calc(100vw - 32px); }
       .toast { max-width:calc(100vw - 32px); }
-      /* Composer: botões com área de toque mínima de 42px */
-      .btn-attach { width:42px;height:42px; }
-      .btn-camera { width:42px;height:42px; }
-      .btn-mic { width:42px;height:42px; }
-      .btn-quickmsg { width:42px;height:42px;padding:0;justify-content:center; }
+      /* Composer: botões com área de toque confortável para o polegar (44–48px) */
+      .btn-attach { height:46px; }
+      .btn-camera { height:46px; }
+      .btn-emoji { height:46px; }
+      .btn-quickmsg { height:46px;padding:0;justify-content:center; }
       .qm-btn-label { display:none; }
-      .btn-send { height:42px;min-width:60px; }
-      .composer-row textarea { min-height:42px; }
+      /* "Deslize para cancelar" é a instrução mais importante da barra de
+         gravação — em telas estreitas, o rótulo de texto do botão Cancelar
+         (ícone + aria-label já bastam) cede o espaço para a dica ficar legível
+         em vez de truncar. */
+      .mic-rec-cancel-label { display:none; }
+      .mic-rec-cancel { padding:6px 9px; }
+      /* Ação principal (mic/Enviar): maior que os ícones da toolbar — é o alvo
+         de toque mais usado da linha, precisa ser fácil de acertar com o polegar. */
+      .btn-mic { width:46px;height:46px;border-radius:50%; }
+      .btn-send { height:46px;min-width:64px; }
+      .composer-row textarea { min-height:46px; }
+      .composer-tools button:active { background:var(--bg-sidebar,#eef1f8); }
+      .btn-mic:active:not(.mic-btn-recording) { background:var(--bg-sidebar,#eef1f8); }
       .bubble-reply-btn { display:block; }
       .bubble-copy-btn { display:block; }
       /* Previne zoom automático do iOS em campos com font-size < 16px */
@@ -4491,7 +4584,10 @@
         height: var(--vv-height, 100dvh);
       }
       body.mob-chat-focus .convs-chat-hdr {
-        padding-top: env(safe-area-inset-top, 0px);
+        /* calc(12px + ...) preserva o respiro visual original (mesmo 12px do
+           padding base) e soma a safe-area por cima — nunca a substitui, senão
+           o header perde a respiração em telas sem notch/status-bar (inset 0). */
+        padding-top: calc(12px + env(safe-area-inset-top, 0px));
       }
 
       /* ── Modal header: compacto no mobile ── */
@@ -4580,15 +4676,35 @@
       .contact-item { padding: 8px 12px; }
       .contact-avatar { width: 34px; height: 34px; font-size: .74rem; }
 
-      /* ── Composer: linha de ferramentas (anexo/câmera/mic/msgs-rápidas/emoji) separada
-         da linha principal (textarea + Enviar). .composer-tools/.composer-main são
-         display:contents por padrão (ver regra base, fora desta media query) — aqui
-         viram linhas próprias, então o textarea recebe quase toda a largura disponível
-         em vez de disputar espaço com 5 botões na mesma linha. */
+      /* ── Composer: linha de ferramentas (anexo/câmera/emoji/msgs-rápidas) separada
+         da linha principal (textarea + mic/Enviar dinâmico). .composer-tools/
+         .composer-main são display:contents por padrão (ver regra base, fora
+         desta media query) — aqui viram linhas próprias. */
       .composer-row { flex-wrap: wrap; row-gap: 8px; }
-      .composer-tools { display:flex; gap:7px; width:100%; order:1; }
+      /* Anexo / Câmera / Emoji / Msgs rápidas dividem a largura toda em 4
+         colunas iguais — nada de 4 botões pequenos agrupados à esquerda com
+         metade da linha vazia. O microfone NÃO mora mais aqui (ver
+         .composer-main abaixo): virou a ação dinâmica ao lado do textarea. */
+      .composer-tools {
+        display: grid;
+        grid-template-columns: repeat(4, minmax(0, 1fr));
+        gap: 8px;
+        width: 100%;
+        order: 1;
+      }
+      .composer-tools .btn-attach,
+      .composer-tools .btn-camera,
+      .composer-tools .btn-emoji,
+      .composer-tools .btn-quickmsg {
+        width: 100%;
+        margin: 0;
+      }
       .composer-main { display:flex; gap:7px; width:100%; order:2; align-items:flex-end; }
       .composer-main textarea { flex:1; }
+      /* Durante a gravação, a barra de status ocupa visualmente o lugar do
+         textarea; o mic (único elemento restante da linha) fica alinhado à
+         direita, mesma posição de sempre — o dedo não precisa se mover. */
+      .composer-row.mic-recording .composer-main { justify-content: flex-end; }
 
       /* ── Filtros de conversa: fileira de ordenação também fixa (irmã de .convs-filter) ── */
       .conv-sort-tabs { flex-shrink:0; }
@@ -5720,10 +5836,11 @@
         </div>
         <div class="img-queue-bar" id="modal-img-queue-bar"></div>
         <div class="mic-recording-bar" id="modal-mic-recording-bar" style="display:none">
-          <span class="mic-rec-dot"></span>
+          <span class="mic-rec-dot" aria-hidden="true"></span>
           <span class="mic-rec-time" id="modal-mic-rec-time">00:00</span>
-          <button type="button" class="mic-rec-cancel" onclick="cancelMicRecording('modal')">Cancelar</button>
-          <button type="button" class="mic-rec-stop" onclick="stopMicRecording('modal')">Parar</button>
+          <span class="mic-rec-hint" id="modal-mic-rec-hint"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" width="16" height="16" class="mic-rec-hint-icon"><polyline points="11 17 6 12 11 7"></polyline><polyline points="18 17 13 12 18 7"></polyline></svg><span class="mic-rec-hint-text">Deslize para cancelar</span></span>
+          <button type="button" class="mic-rec-cancel" onclick="cancelMicRecording('modal')" aria-label="Cancelar gravação"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" width="15" height="15"><polyline points="3 6 5 6 21 6"></polyline><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path><line x1="10" y1="11" x2="10" y2="17"></line><line x1="14" y1="11" x2="14" y2="17"></line></svg><span class="mic-rec-cancel-label">Cancelar</span></button>
+          <button type="button" class="mic-rec-stop" onclick="stopMicRecording('modal')" aria-label="Finalizar gravação">Parar</button>
         </div>
         <div class="audio-preview-bar" id="modal-audio-preview-bar" style="display:none">
           <div class="audio-preview-player" id="modal-audio-preview-player"></div>
@@ -5733,18 +5850,21 @@
         </div>
         <div class="composer-row">
           <div class="composer-tools">
-            <button class="btn-attach" onclick="handleAttachClick('modal')" title="Imagem / PDF" aria-label="Anexar imagem ou PDF">📎</button>
+            <button class="btn-attach" onclick="handleAttachClick('modal')" title="Imagem / PDF" aria-label="Anexar imagem ou PDF"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" width="20" height="20"><path d="M21.44 11.05l-9.19 9.19a5 5 0 0 1-7.07-7.07l9.19-9.19a3.5 3.5 0 0 1 4.95 4.95l-9.19 9.19a1.5 1.5 0 0 1-2.12-2.12l8.49-8.48"></path></svg></button>
             <input type="file" id="modal-file-input" accept="image/jpeg,image/png,image/gif,image/webp,application/pdf" multiple style="display:none" onchange="handleImageSelect(event,'modal')">
             <input type="file" id="modal-camera-input" accept="image/*" capture="environment" style="display:none" onchange="handleImageSelect(event,'modal')">
-            <button class="btn-camera" onclick="handleCameraClick('modal')" title="Câmera" aria-label="Abrir câmera">📷</button>
-            <button class="btn-mic" id="modal-mic-btn" onclick="handleMicClick('modal')" title="Gravar áudio" aria-label="Gravar áudio">🎤</button>
-            <button class="btn-emoji" id="modal-emoji-btn" onclick="toggleEmojiPicker('modal'); event.stopPropagation();" title="Emojis aprovados" aria-label="Emojis aprovados">🙂</button>
-            <button class="btn-quickmsg" id="modal-quickmsg-btn" onclick="openQuickMessages('modal'); event.stopPropagation();" aria-label="Mensagens rápidas" title="Mensagens rápidas"><span class="qm-btn-icon">💬</span><span class="qm-btn-label">Msgs rápidas</span></button>
+            <button class="btn-camera" onclick="handleCameraClick('modal')" title="Câmera" aria-label="Abrir câmera"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" width="20" height="20"><path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"></path><circle cx="12" cy="13" r="4"></circle></svg></button>
+            <button class="btn-emoji" id="modal-emoji-btn" onclick="toggleEmojiPicker('modal'); event.stopPropagation();" title="Emojis aprovados" aria-label="Emojis aprovados"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" width="20" height="20"><circle cx="12" cy="12" r="10"></circle><path d="M8 14s1.5 2 4 2 4-2 4-2"></path><line x1="9" y1="9" x2="9.01" y2="9"></line><line x1="15" y1="9" x2="15.01" y2="9"></line></svg></button>
+            <button class="btn-quickmsg" id="modal-quickmsg-btn" onclick="openQuickMessages('modal'); event.stopPropagation();" aria-label="Mensagens rápidas" title="Mensagens rápidas"><span class="qm-btn-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" width="20" height="20"><path d="M21 11.5a8.38 8.38 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.38 8.38 0 0 1-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 8.38 8.38 0 0 1 3.8-.9h.5a8.48 8.48 0 0 1 8 8v.5z"></path></svg></span><span class="qm-btn-label">Msgs rápidas</span></button>
           </div>
           <div class="composer-main">
             <textarea id="modal-msg-input" placeholder="Digite sua mensagem..." rows="1"
               onkeydown="handleEnter(event,'modal')" oninput="autoResize(this)" onpaste="handleComposerPaste(event,'modal')"></textarea>
             <button class="btn-introduce" onclick="introduceAttendant('modal')" title="Me apresentar">Me apresentar</button>
+            <button class="btn-mic" id="modal-mic-btn" onclick="handleMicClick('modal')"
+              onpointerdown="onMicPointerDown(event,'modal')" onpointermove="onMicPointerMove(event,'modal')"
+              onpointerup="onMicPointerUp(event,'modal')" onpointercancel="onMicPointerCancel(event,'modal')"
+              title="Gravar áudio" aria-label="Gravar áudio"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" width="22" height="22"><path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"></path><path d="M19 10v2a7 7 0 0 1-14 0v-2"></path><line x1="12" y1="19" x2="12" y2="23"></line><line x1="8" y1="23" x2="16" y2="23"></line></svg></button>
             <button class="btn-send" id="modal-send-btn" onclick="sendMessage('modal')">Enviar</button>
           </div>
         </div>
@@ -9060,7 +9180,7 @@ async function openConvsChat(phone, redisKey, isArchive) {
   chatArea.style.cssText = "display:flex;flex-direction:column;height:100%;overflow:hidden";
 
   chatArea.innerHTML = `
-    <div class="convs-chat-hdr" style="background:var(--brand-navy);color:#fff;padding:12px 16px;display:flex;align-items:center;gap:10px;flex-shrink:0">
+    <div class="convs-chat-hdr">
       <button class="mob-back-btn" onclick="closeMobChat()" aria-label="Voltar"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" width="15" height="15"><path d="M15 18l-6-6 6-6"></path></svg> Voltar</button>
       <div style="flex:1;min-width:0">
         <div class="chat-hdr-identity">
@@ -9101,10 +9221,11 @@ async function openConvsChat(phone, redisKey, isArchive) {
         <div class="composer-lock-bar" id="convs-composer-lock" style="display:none"></div>
         <div class="reply-bar" id="convs-reply-bar" style="display:none"><span class="reply-bar-label">Respondendo:</span><span class="reply-bar-text" id="convs-reply-text"></span><button class="reply-bar-cancel" onclick="clearReplyTarget('convs')" title="Cancelar resposta">✕</button></div>
         <div class="mic-recording-bar" id="convs-mic-recording-bar" style="display:none">
-          <span class="mic-rec-dot"></span>
+          <span class="mic-rec-dot" aria-hidden="true"></span>
           <span class="mic-rec-time" id="convs-mic-rec-time">00:00</span>
-          <button type="button" class="mic-rec-cancel" onclick="cancelMicRecording('convs')">Cancelar</button>
-          <button type="button" class="mic-rec-stop" onclick="stopMicRecording('convs')">Parar</button>
+          <span class="mic-rec-hint" id="convs-mic-rec-hint"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" width="16" height="16" class="mic-rec-hint-icon"><polyline points="11 17 6 12 11 7"></polyline><polyline points="18 17 13 12 18 7"></polyline></svg><span class="mic-rec-hint-text">Deslize para cancelar</span></span>
+          <button type="button" class="mic-rec-cancel" onclick="cancelMicRecording('convs')" aria-label="Cancelar gravação"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" width="15" height="15"><polyline points="3 6 5 6 21 6"></polyline><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path><line x1="10" y1="11" x2="10" y2="17"></line><line x1="14" y1="11" x2="14" y2="17"></line></svg><span class="mic-rec-cancel-label">Cancelar</span></button>
+          <button type="button" class="mic-rec-stop" onclick="stopMicRecording('convs')" aria-label="Finalizar gravação">Parar</button>
         </div>
         <div class="audio-preview-bar" id="convs-audio-preview-bar" style="display:none">
           <div class="audio-preview-player" id="convs-audio-preview-player"></div>
@@ -9114,18 +9235,21 @@ async function openConvsChat(phone, redisKey, isArchive) {
         </div>
         <div class="composer-row">
           <div class="composer-tools">
-            <button class="btn-attach" onclick="handleAttachClick('convs')" title="Imagem / PDF" aria-label="Anexar imagem ou PDF">📎</button>
+            <button class="btn-attach" onclick="handleAttachClick('convs')" title="Imagem / PDF" aria-label="Anexar imagem ou PDF"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" width="20" height="20"><path d="M21.44 11.05l-9.19 9.19a5 5 0 0 1-7.07-7.07l9.19-9.19a3.5 3.5 0 0 1 4.95 4.95l-9.19 9.19a1.5 1.5 0 0 1-2.12-2.12l8.49-8.48"></path></svg></button>
             <input type="file" id="convs-file-input" accept="image/jpeg,image/png,image/gif,image/webp,application/pdf" multiple style="display:none" onchange="handleImageSelect(event,'convs')">
             <input type="file" id="convs-camera-input" accept="image/*" capture="environment" style="display:none" onchange="handleImageSelect(event,'convs')">
-            <button class="btn-camera" onclick="handleCameraClick('convs')" title="Câmera" aria-label="Abrir câmera">📷</button>
-            <button class="btn-mic" id="convs-mic-btn" onclick="handleMicClick('convs')" title="Gravar áudio" aria-label="Gravar áudio">🎤</button>
-            <button class="btn-emoji" id="convs-emoji-btn" onclick="toggleEmojiPicker('convs'); event.stopPropagation();" title="Emojis aprovados" aria-label="Emojis aprovados">🙂</button>
-            <button class="btn-quickmsg" id="convs-quickmsg-btn" onclick="openQuickMessages('convs'); event.stopPropagation();" aria-label="Mensagens rápidas" title="Mensagens rápidas"><span class="qm-btn-icon">💬</span><span class="qm-btn-label">Msgs rápidas</span></button>
+            <button class="btn-camera" onclick="handleCameraClick('convs')" title="Câmera" aria-label="Abrir câmera"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" width="20" height="20"><path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"></path><circle cx="12" cy="13" r="4"></circle></svg></button>
+            <button class="btn-emoji" id="convs-emoji-btn" onclick="toggleEmojiPicker('convs'); event.stopPropagation();" title="Emojis aprovados" aria-label="Emojis aprovados"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" width="20" height="20"><circle cx="12" cy="12" r="10"></circle><path d="M8 14s1.5 2 4 2 4-2 4-2"></path><line x1="9" y1="9" x2="9.01" y2="9"></line><line x1="15" y1="9" x2="15.01" y2="9"></line></svg></button>
+            <button class="btn-quickmsg" id="convs-quickmsg-btn" onclick="openQuickMessages('convs'); event.stopPropagation();" aria-label="Mensagens rápidas" title="Mensagens rápidas"><span class="qm-btn-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" width="20" height="20"><path d="M21 11.5a8.38 8.38 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.38 8.38 0 0 1-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 8.38 8.38 0 0 1 3.8-.9h.5a8.48 8.48 0 0 1 8 8v.5z"></path></svg></span><span class="qm-btn-label">Msgs rápidas</span></button>
           </div>
           <div class="composer-main">
             <textarea id="convs-msg-input" placeholder="Digite sua mensagem..." rows="1"
               onkeydown="handleEnter(event,'convs')" oninput="autoResize(this)" onpaste="handleComposerPaste(event,'convs')"></textarea>
             <button class="btn-introduce" onclick="introduceAttendant('convs')" title="Me apresentar">Me apresentar</button>
+            <button class="btn-mic" id="convs-mic-btn" onclick="handleMicClick('convs')"
+              onpointerdown="onMicPointerDown(event,'convs')" onpointermove="onMicPointerMove(event,'convs')"
+              onpointerup="onMicPointerUp(event,'convs')" onpointercancel="onMicPointerCancel(event,'convs')"
+              title="Gravar áudio" aria-label="Gravar áudio"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" width="22" height="22"><path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"></path><path d="M19 10v2a7 7 0 0 1-14 0v-2"></path><line x1="12" y1="19" x2="12" y2="23"></line><line x1="8" y1="23" x2="16" y2="23"></line></svg></button>
             <button class="btn-send" id="convs-send-btn" onclick="sendMessage('convs')">Enviar</button>
           </div>
         </div>
@@ -10600,11 +10724,17 @@ function showMicRecordingBar(prefix) {
   if (bar) bar.style.display = "flex";
   const timeEl = document.getElementById(`${prefix}-mic-rec-time`);
   if (timeEl) timeEl.textContent = "00:00";
+  // .mic-recording no composer-row esconde toolbar+textarea e deixa só o mic —
+  // o textarea "dá lugar" ao estado de gravação (ver CSS de .composer-row.mic-recording).
+  const row = document.getElementById(`${prefix}-msg-input`)?.closest(".composer-row");
+  if (row) row.classList.add("mic-recording");
 }
 
 function hideMicRecordingBar(prefix) {
   const bar = document.getElementById(`${prefix}-mic-recording-bar`);
   if (bar) bar.style.display = "none";
+  const row = document.getElementById(`${prefix}-msg-input`)?.closest(".composer-row");
+  if (row) row.classList.remove("mic-recording");
 }
 
 // Libera as tracks de áudio — sempre chamado ao sair da gravação (enviar, cancelar,
@@ -10628,6 +10758,149 @@ function cancelMicRecording(prefix) {
   } catch { /* recorder já pode estar parado */ }
   releaseMicStream(prefix);
   hideMicRecordingBar(prefix);
+  resetMicGestureVisual(prefix);
+}
+
+// ╔══════════════════════════════════════════════════════════════╗
+// ║  GESTO DE GRAVAÇÃO (segurar + arrastar para cancelar)          ║
+// ║  Camada de interação apenas — nunca cria um segundo             ║
+// ║  MediaRecorder nem duplica estado de gravação: início, parada    ║
+// ║  e cancelamento continuam passando por handleMicClick() /         ║
+// ║  stopMicRecording() / cancelMicRecording(), as mesmas funções      ║
+// ║  usadas pelo fluxo de clique tradicional.                          ║
+// ║                                                                     ║
+// ║  Só assume o controle para pointerType touch/pen — mouse continua   ║
+// ║  no clique único (onclick="handleMicClick") + botões Cancelar/Parar ║
+// ║  da barra de gravação, que também servem de fallback acessível:      ║
+// ║  ativação por teclado (Enter/Espaço) dispara "click" nativo, nunca    ║
+// ║  eventos de pointer — nenhum código extra é necessário para isso.     ║
+// ╚══════════════════════════════════════════════════════════════╝
+const _micGesture = { modal: null, convs: null }; // { pointerId, startX, startTime, dragPx, released, forceCancel } — gesto em andamento
+const MIC_GESTURE_MIN_HOLD_MS = 300; // abaixo disso, trata como toque acidental e descarta sem preview
+
+function micGestureAvailable(prefix) {
+  return !_isSending[prefix] && !_micState[prefix] && !pendingAudio[prefix] && !isComposerWindowClosed(prefix);
+}
+
+// Threshold de cancelamento proporcional à largura do composer, sempre entre
+// 60–90px — nunca um número mágico fixo amarrado a um aparelho específico.
+function micCancelThreshold(btn) {
+  const row = btn.closest(".composer-row");
+  const w = row ? row.clientWidth : 320;
+  return Math.min(90, Math.max(60, w * 0.2));
+}
+
+function setMicAria(prefix, state) {
+  const btn = document.getElementById(`${prefix}-mic-btn`);
+  if (!btn) return;
+  const labels = {
+    idle:           "Gravar áudio",
+    recording:      "Gravando áudio — solte para finalizar, deslize para cancelar",
+    "cancel-armed": "Solte para cancelar a gravação",
+  };
+  const titles = {
+    idle:           "Gravar áudio",
+    recording:      "Solte para finalizar",
+    "cancel-armed": "Cancelar gravação",
+  };
+  btn.setAttribute("aria-label", labels[state] || labels.idle);
+  btn.title = titles[state] || titles.idle;
+}
+
+// Feedback progressivo do arrasto — só transform/opacity/background via uma
+// custom property, nunca propriedades que disparam layout (sem layout thrashing).
+function updateMicGestureVisual(prefix, progress, armed) {
+  const bar = document.getElementById(`${prefix}-mic-recording-bar`);
+  const btn = document.getElementById(`${prefix}-mic-btn`);
+  if (bar) {
+    bar.style.setProperty("--mic-drag", progress);
+    bar.classList.toggle("mic-cancel-armed", armed);
+  }
+  if (btn) btn.style.setProperty("--mic-drag", progress);
+  const hintText = document.querySelector(`#${prefix}-mic-rec-hint .mic-rec-hint-text`);
+  if (hintText) hintText.textContent = armed ? "Solte para cancelar" : "Deslize para cancelar";
+  setMicAria(prefix, armed ? "cancel-armed" : "recording");
+}
+
+function resetMicGestureVisual(prefix) {
+  _micGesture[prefix] = null;
+  const btn = document.getElementById(`${prefix}-mic-btn`);
+  if (btn) {
+    btn.classList.remove("mic-btn-armed", "mic-btn-recording");
+    btn.style.removeProperty("--mic-drag");
+  }
+  const bar = document.getElementById(`${prefix}-mic-recording-bar`);
+  if (bar) {
+    bar.style.removeProperty("--mic-drag");
+    bar.classList.remove("mic-cancel-armed");
+  }
+  const hintText = document.querySelector(`#${prefix}-mic-rec-hint .mic-rec-hint-text`);
+  if (hintText) hintText.textContent = "Deslize para cancelar";
+  setMicAria(prefix, "idle");
+}
+
+function onMicPointerDown(event, prefix) {
+  if (event.pointerType !== "touch" && event.pointerType !== "pen") return; // mouse/teclado seguem via onclick
+  if (_micGesture[prefix]) return; // já existe um gesto em andamento — ignora um segundo dedo/pointer
+  if (!micGestureAvailable(prefix)) return;
+  event.preventDefault(); // suprime o click sintético pós-touch (evita handleMicClick duplicado)
+
+  const btn = event.currentTarget;
+  const g = { pointerId: event.pointerId, startX: event.clientX, startTime: Date.now(), dragPx: 0, released: false, forceCancel: false };
+  _micGesture[prefix] = g;
+  try { btn.setPointerCapture(event.pointerId); } catch { /* navegador sem suporte a capture — segue sem ele */ }
+  btn.classList.add("mic-btn-armed");
+  setMicAria(prefix, "recording");
+
+  handleMicClick(prefix).then(() => {
+    if (_micGesture[prefix] !== g) return; // este gesto já foi finalizado/substituído
+    if (!_micState[prefix]) { // getUserMedia/MediaRecorder falhou (ex.: permissão negada)
+      _micGesture[prefix] = null;
+      btn.classList.remove("mic-btn-armed");
+      setMicAria(prefix, "idle");
+      return;
+    }
+    if (g.released) { finishMicGesture(prefix, g); return; }
+    btn.classList.remove("mic-btn-armed");
+    btn.classList.add("mic-btn-recording");
+  });
+}
+
+function onMicPointerMove(event, prefix) {
+  const g = _micGesture[prefix];
+  if (!g || g.pointerId !== event.pointerId || !_micState[prefix]) return;
+  const leftDrag  = Math.max(0, g.startX - event.clientX); // só conta arrasto para a esquerda
+  g.dragPx = leftDrag;
+  const threshold = micCancelThreshold(event.currentTarget);
+  const progress  = Math.min(1, leftDrag / threshold);
+  updateMicGestureVisual(prefix, progress, progress >= 1);
+}
+
+function onMicPointerUp(event, prefix) {
+  const g = _micGesture[prefix];
+  if (!g || g.pointerId !== event.pointerId) return;
+  g.released = true;
+  try { event.currentTarget.releasePointerCapture(event.pointerId); } catch { /* pointer já pode ter sido liberado */ }
+  if (_micState[prefix]) finishMicGesture(prefix, g);
+  // senão, o .then() de handleMicClick() (em onMicPointerDown) finaliza assim que — ou se — a gravação iniciar de fato
+}
+
+function onMicPointerCancel(event, prefix) {
+  const g = _micGesture[prefix];
+  if (!g || g.pointerId !== event.pointerId) return;
+  g.released    = true;
+  g.forceCancel = true; // pointercancel sempre escolhe o caminho seguro — nunca envia nada
+  if (_micState[prefix]) finishMicGesture(prefix, g);
+}
+
+function finishMicGesture(prefix, g) {
+  const btn       = document.getElementById(`${prefix}-mic-btn`);
+  const threshold = btn ? micCancelThreshold(btn) : 76;
+  const elapsed   = Date.now() - g.startTime;
+  const shouldCancel = g.forceCancel || g.dragPx >= threshold || elapsed < MIC_GESTURE_MIN_HOLD_MS;
+  resetMicGestureVisual(prefix);
+  if (shouldCancel) cancelMicRecording(prefix);
+  else stopMicRecording(prefix); // finaliza → segue para o preview existente, nunca envia direto
 }
 
 // Caminhada mínima de boxes ISO-BMFF (MP4) — não é um parser completo, só o
@@ -10722,6 +10995,7 @@ function stopMicRecording(prefix) {
     const blob = new Blob(state.chunks, { type: state.sendMime });
     releaseMicStream(prefix);
     hideMicRecordingBar(prefix);
+    resetMicGestureVisual(prefix);
     if (!blob.size) {
       showToast("Gravação vazia — tente novamente.", "t-warn");
       return;
@@ -11493,6 +11767,18 @@ function insertEmoji(prefix, emoji) {
 function autoResize(el) {
   el.style.height = "auto";
   el.style.height = Math.min(el.scrollHeight, 110) + "px";
+  updateComposerSendState(el);
+}
+
+// Alterna a ação principal do composer entre MIC (campo vazio) e ENVIAR
+// (com conteúdo) — único ponto de chamada é autoResize(), acionado em todo
+// lugar que muda o valor do textarea: digitação, paste, emoji, mensagem
+// rápida e a limpeza após enviar (ver sendMessage). Nunca os dois visíveis
+// ao mesmo tempo — a troca é puramente CSS (.has-text), ver regras de
+// .composer-main .btn-mic/.btn-send.
+function updateComposerSendState(el) {
+  const row = el.closest(".composer-row");
+  if (row) row.classList.toggle("has-text", !!el.value.trim());
 }
 
 // ╔══════════════════════════════════════════════════════════════╗
@@ -11834,7 +12120,14 @@ async function refreshAfterResume(reason) {
 }
 
 document.addEventListener("visibilitychange", () => {
-  if (document.hidden) { stopAutoRefresh(); return; }
+  if (document.hidden) {
+    stopAutoRefresh();
+    // PWA indo para segundo plano/perdendo foco durante uma gravação: cancela
+    // com segurança em vez de deixar o MediaRecorder preso ou, pior, enviar
+    // algo sem confirmação do atendente ao voltar.
+    ["modal", "convs"].forEach(p => { if (_micState[p]) cancelMicRecording(p); });
+    return;
+  }
   refreshAfterResume("visibilitychange");
 });
 
@@ -13787,6 +14080,11 @@ function renderMobStageCards(tabId, stage) {
 
 function closeMobChat() {
   const prevPhone = openConvsPhone;
+  // Rede de segurança: sem isso, fechar o chat (botão Voltar) durante uma
+  // gravação apagava o DOM (main.innerHTML abaixo) mas deixava o MediaRecorder
+  // e o stream do microfone presos — o app "achava" que não estava mais
+  // gravando, mas o microfone continuava ligado. Nunca envia nada; só descarta.
+  resetMicComposer("convs");
   document.getElementById("view-convs").classList.remove("mob-chat-open");
   document.body.classList.remove("mob-chat-focus");
 
