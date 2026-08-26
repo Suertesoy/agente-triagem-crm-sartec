@@ -1711,6 +1711,17 @@
       gap: 10px;
       flex-shrink: 0;
     }
+    /* Ícone do botão Contato: some no desktop (mantém o botão-pílula textual
+       de sempre); vira o botão inteiro no mobile (ver @media max-width:768px). */
+    .contact-btn-icon { display: none; }
+    /* display:flex pertence à classe, não a um style="" inline — inline sempre
+       venceria a regra mobile que precisa transformar isto em display:contents
+       (ver @media max-width:768px), reproduzindo o mesmo bug de especificidade
+       já corrigido no próprio .convs-chat-hdr. */
+    #convs-chat-sub { display: flex; align-items: center; gap: 8px; }
+    /* Elemento de quebra de linha forçada do header mobile — invisível e sem
+       efeito no desktop (ver @media max-width:768px para o uso real). */
+    .hdr-line-break { display: none; }
 
     /* ── Barra de status da janela de 24h ── */
     .window-status-bar {
@@ -2074,15 +2085,24 @@
       text-overflow: ellipsis; white-space: nowrap;
     }
 
+    /* Ícone das ações de mensagem: some no desktop (mantém o texto de sempre,
+       revelado por :hover); vira o conteúdo inteiro do botão no mobile, onde
+       o texto cede lugar (ver @media max-width:768px). */
+    .bubble-action-icon { display: none; }
+    /* No desktop, display:contents repassa Responder/Copiar direto para
+       .bubble-wrap (coluna) — comportamento idêntico ao de antes de existir
+       este wrapper. No mobile vira uma linha compacta única (ver media query). */
+    .bubble-actions-wrap { display: contents; }
+
     /* ── Botão Responder nas bolhas do cliente ────────────────── */
     .bubble-reply-btn { display:none; font-size:.62rem; font-weight:600; background:none; border:1px solid var(--border); border-radius:5px; padding:2px 7px; color:var(--text-secondary); cursor:pointer; margin-top:3px; transition:background .12s,color .12s; align-self:flex-start; }
     .bubble-reply-btn:hover { background:#e8edf9; color:var(--brand-navy); }
-    .bubble-wrap.left:hover .bubble-reply-btn { display:block; }
+    .bubble-wrap.left:hover .bubble-reply-btn { display:inline-flex; align-items:center; gap:4px; }
 
     /* ── Botão Copiar texto — preserva quebras de linha via Clipboard API ── */
     .bubble-copy-btn { display:none; font-size:.62rem; font-weight:600; background:none; border:1px solid var(--border); border-radius:5px; padding:2px 7px; color:var(--text-secondary); cursor:pointer; margin-top:3px; transition:background .12s,color .12s; align-self:flex-start; }
     .bubble-copy-btn:hover { background:#e8edf9; color:var(--brand-navy); }
-    .bubble-wrap:hover .bubble-copy-btn { display:block; }
+    .bubble-wrap:hover .bubble-copy-btn { display:inline-flex; align-items:center; gap:4px; }
 
     /* ── Barra de resposta acima do composer ─────────────────── */
     .reply-bar { display:flex; align-items:center; gap:8px; padding:6px 12px; margin:0 0 2px; background:#eff2fb; border-left:3px solid var(--brand-navy); border-radius:6px; font-size:.78rem; color:var(--text-secondary); flex-shrink:0; }
@@ -4470,8 +4490,20 @@
       .composer-row textarea { min-height:46px; }
       .composer-tools button:active { background:var(--bg-sidebar,#eef1f8); }
       .btn-mic:active:not(.mic-btn-recording) { background:var(--bg-sidebar,#eef1f8); }
-      .bubble-reply-btn { display:block; }
-      .bubble-copy-btn { display:block; }
+      /* Responder/Copiar: ocultos por padrão no mobile — aparecem só quando o
+         atendente toca na mensagem (.mob-actions-open, ver appendBubble() +
+         closeAllBubbleActions()). Ícone substitui o texto (mesmo princípio de
+         .contact-btn-icon): compacto, sem repetir um rótulo grande embaixo de
+         cada mensagem do histórico inteiro. Os dois botões viram uma única
+         linha (.bubble-actions-wrap deixa de ser display:contents), em vez de
+         cada um empilhar sozinho (herdado de .bubble-wrap ser flex-column). */
+      .bubble-actions-wrap { display: flex; gap: 6px; align-self: flex-start; margin-top: 3px; }
+      .bubble-action-icon { display: inline-block; }
+      .bubble-action-label { display: none; }
+      .bubble-wrap:not(.mob-actions-open) .bubble-reply-btn,
+      .bubble-wrap:not(.mob-actions-open) .bubble-copy-btn { display: none !important; }
+      .bubble-wrap.mob-actions-open .bubble-reply-btn,
+      .bubble-wrap.mob-actions-open .bubble-copy-btn { display: inline-flex; align-items: center; justify-content: center; margin-top: 0; }
       /* Previne zoom automático do iOS em campos com font-size < 16px */
       .composer-row textarea,
       .caption-input,
@@ -4597,38 +4629,135 @@
       .modal-header h2 { font-size:.9rem; }
       .modal-hdr-btn { padding:4px 8px; font-size:.72rem; }
       .btn-contact-modal { padding:4px 8px !important; font-size:.72rem !important; margin-right:4px !important; }
-      /* Header da conversa: linha 1 prioritária (voltar/fechar + nome com ellipsis +
-         Resolver sempre visível), linha 2 secundária (telefone + copiar + categoria +
-         Contato). .info e .chat-hdr-identity viram display:contents só no mobile para
-         que seus filhos (nome, telefone, categoria) participem diretamente do flex do
-         header e possam ser reordenados sem duplicar HTML nem afetar o desktop (essa
-         regra só existe dentro do @media max-width:768px). */
+      /* Header da conversa: no máximo DUAS linhas úteis abaixo da safe area.
+         Linha 1: Voltar/Fechar + Nome (ellipsis) + Resolver — nunca encolhem.
+         Linha 2: Telefone + Copiar + Categoria + Contato — sempre presentes;
+         Etapa/pipeline entra na MESMA linha se houver espaço e é o único item
+         que trunca/cede espaço primeiro (min-width:0 + ellipsis), nunca força
+         uma terceira linha sozinho. .info/.chat-hdr-identity E .info-sub/
+         #convs-chat-sub viram display:contents só no mobile para que TODOS os
+         filhos (nome, telefone, categoria, etapa) participem diretamente do
+         flex do header e possam ser reordenados por prioridade sem duplicar
+         HTML nem afetar o desktop (regra só existe dentro do @media
+         max-width:768px). */
       .modal-header .info,
       .modal-header .chat-hdr-identity,
+      .modal-header .info-sub,
       .convs-chat-hdr .info,
-      .convs-chat-hdr .chat-hdr-identity { display: contents; }
+      .convs-chat-hdr .chat-hdr-identity,
+      .convs-chat-hdr #convs-chat-sub { display: contents; }
+      /* flex-basis:0 (não "auto"!) é essencial aqui: com "auto", o navegador usa
+         a largura INTRÍNSECA do texto completo (antes do ellipsis) para decidir
+         se cabe na linha — um nome longo então "reservava" espaço de sobra e
+         empurrava Resolver para a linha 2. Com base 0, o nome começa do zero e
+         só cresce para preencher o que sobrar depois de Voltar+Resolver, nunca
+         disputando espaço com eles na decisão de quebra de linha. */
       .modal-header #modal-chat-name,
-      .convs-chat-hdr #convs-chat-name { order: 1; flex: 1 1 auto; min-width: 0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+      .convs-chat-hdr #convs-chat-name { order: 1; flex: 1 1 0%; min-width: 0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
       .modal-header .btn-resolve-modal,
       .convs-chat-hdr .btn-resolve-chat { order: 2; flex-shrink: 0; }
+      /* Quebra de linha "dura" entre os dois grupos — um item invisível de
+         flex-basis:100% sempre força tudo que vem depois dele (order > 3)
+         para uma nova linha, independente de quanto espaço sobrou na linha 1.
+         Sem isso, o algoritmo de wrap empacota greedy por largura disponível:
+         qualquer variação de conteúdo (nome curto, categoria longa, etc.)
+         podia puxar Telefone — ou até Contato — de volta para a linha 1,
+         resultando ora em 3 linhas, ora em itens fora de ordem visual. */
+      .hdr-line-break { order: 3; flex-basis: 100%; height: 0; display: block; }
       .modal-header .copy-value-row,
-      .convs-chat-hdr .copy-value-row { order: 3; flex-shrink: 0; max-width: 100%; }
-      .modal-header .info-sub,
-      .convs-chat-hdr #convs-chat-sub { order: 4; display:flex; align-items:center; gap:8px; flex-shrink:1; min-width:0; }
+      .convs-chat-hdr .copy-value-row { order: 4; flex-shrink: 0; max-width: 100%; }
+      /* Categoria — prioridade 3 da linha 2 (depois de telefone+copiar). Como
+         último recurso em telas bem estreitas (320-360px), o próprio rótulo
+         trunca com ellipsis em vez de empurrar Contato para uma 3ª linha —
+         ainda aparece (prioridade preservada), só não sempre por extenso. */
+      .modal-header #modal-chat-badge,
+      .convs-chat-hdr .demand-tag { order: 5; flex-shrink: 0; }
+      .modal-header .demand-tag,
+      .convs-chat-hdr .demand-tag { box-sizing: border-box; max-width: 78px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+      /* Contato — prioridade 4: fica ANTES da etapa, nunca vira uma linha
+         sozinho (virou botão compacto ícone-only, ver .contact-btn-icon). */
       .modal-header .btn-contact-modal,
-      .convs-chat-hdr .btn-contact-chat { order: 5; flex-shrink: 0; margin-right:0 !important; }
+      .convs-chat-hdr .btn-contact-chat { order: 6; flex-shrink: 0; margin-right:0 !important; }
+      /* Etapa/pipeline — menor prioridade: some do dado, só cede espaço visual.
+         flex:1 1 0% consome o que sobrar; se não sobrar nada, trunca com
+         ellipsis em vez de empurrar Contato para uma nova linha. */
+      .modal-header #modal-pipeline-status,
+      .convs-chat-hdr .convs-pipeline-label {
+        order: 7; flex: 1 1 0%; min-width: 0;
+        overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+      }
       .convs-chat-hdr .btn-contact-chat,
       .convs-chat-hdr .btn-resolve-chat { padding:4px 8px !important; font-size:.72rem !important; }
-      .convs-chat-hdr { flex-wrap: wrap; }
+      /* Gap um pouco mais enxuto no header (10px→7px) — com 7-8 itens
+         competindo por 2 linhas em 320-390px, cada px de gap conta; ainda
+         confortável para leitura/toque. */
+      .convs-chat-hdr { flex-wrap: wrap; gap: 7px; }
       .convs-chat-hdr > div:first-of-type { display: contents; }
-      #modal-chat-phone, #convs-chat-phone { display:inline-block; max-width: 46vw; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; vertical-align:bottom; }
+      #modal-chat-phone, #convs-chat-phone { display:inline-block; max-width: 38vw; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; vertical-align:bottom; }
+      /* Copiar telefone: dentro do header especificamente (não afeta outros
+         usos de .copy-icon-btn no app) um pouco menor que o padrão mobile de
+         40px — libera espaço para Contato caber na linha 2 junto com
+         telefone+categoria, sem descer do mínimo confortável de toque. */
+      .convs-chat-hdr .copy-icon-btn { width: 32px; height: 32px; }
+      .convs-chat-hdr .copy-icon-btn svg { width: 13px; height: 13px; }
+      /* Contato: ícone-only no mobile (SVG > texto) — nunca mais ocupa uma
+         linha inteira sozinho. .contact-btn-icon fica display:none por padrão
+         (regra base, fora deste media query) — aqui é a única exceção onde
+         aparece. */
+      .modal-header .btn-contact-modal,
+      .convs-chat-hdr .btn-contact-chat {
+        width: 34px; height: 34px; padding: 0 !important;
+        display: inline-flex; align-items: center; justify-content: center;
+        border-radius: 50%;
+      }
+      .contact-btn-icon { display: inline-block; }
+      .modal-header .contact-btn-label,
+      .convs-chat-hdr .contact-btn-label { display: none; }
 
       /* ── Barras de status/atendente: mais compactas no mobile ── */
+      /* .ws-detail some no mobile — a barra superior vira só o STATUS ("Janela
+         encerrada."); a explicação completa + ação já existem na
+         .composer-lock-bar, logo abaixo do histórico, que é onde o atendente
+         realmente age. Apresentação apenas — updateWindowUI() não muda. */
       .window-status-bar { padding:4px 12px; font-size:.75rem; }
+      .ws-detail { display: none; }
       .active-attendant-bar { padding:3px 10px; font-size:.68rem; }
+      /* "Sem atendente"/"Fulano está cuidando" + "Assumir..." + "Me apresentar"
+         numa única região compacta em vez de duas barras full-width empilhadas.
+         Os dois elementos continuam DOM-separados (cada um com sua própria
+         visibilidade controlada por renderActiveAttendantNotice()/
+         setIntroRowVisible() — nenhuma lógica de negócio muda aqui) — só o
+         layout visual passa a ser lado a lado, quebrando para uma segunda
+         linha compacta (nunca full-width) quando não couber. */
+      .attendant-compact-row { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; }
+      /* flex-basis:0% pelo mesmo motivo do nome no header (ver comentário
+         acima): com "auto" a largura intrínseca do texto de status reservava
+         espaço de sobra e empurrava "Me apresentar" para uma linha própria. */
+      .attendant-compact-row .active-attendant-bar { flex: 1 1 0%; min-width: 0; border-bottom: none; }
+      .attendant-compact-row .active-attendant-bar > span:first-child { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+      .attendant-compact-row .mob-introduce-row { flex-shrink: 0; padding: 3px 10px 3px 0; }
+      .attendant-compact-row .mob-introduce-btn { width: auto; padding: 5px 12px; font-size: .68rem; white-space: nowrap; }
 
-      /* ── Resumo do atendente: altura limitada (colapsado por JS no mobile) ── */
-      #modal-summary-block { max-height:200px; overflow-y:auto; }
+      /* ── Resumo do atendente: inexistente no mobile (não apenas colapsado) —
+         decisão explícita de densidade. Sem display:none aqui, o próprio JS
+         (renderModal) alterna style.display="" quando há dados a resumir, o
+         que reabriria espaço; a regra abaixo sempre vence porque display:none
+         explícito de classe/id só perde para um display INLINE não-vazio, e
+         o "" que o JS grava limpa o inline em vez de reescrevê-lo. */
+      #modal-summary-block { display: none; }
+
+      /* ── Dados do pedido: compacto quando fechado (sem padding extra) ── */
+      .dados-pedido summary { padding: 7px 14px; }
+
+      /* ── Composer bloqueado (janela de 24h fechada): a barra de bloqueio já
+         traz a explicação + ação ("Enviar template"); toolbar/textarea/mic
+         desabilitados abaixo dela só duplicavam informação sem servir pra
+         nada, já que estão inertes. .composer-locked é alternada em
+         lockComposer()/lockComposerResolved()/unlockComposer() — mesma
+         condição que já decidia disabled=true, sem lógica nova. Some só a
+         LINHA de controles; a barra de bloqueio (irmã, fora do
+         .composer-row) continua visível normalmente. */
+      .composer.composer-locked .composer-row { display: none; }
 
       /* ── Composer: padding seguro para barra home do iOS ── */
       .composer { padding-bottom:calc(8px + env(safe-area-inset-bottom, 0px)); }
@@ -4659,7 +4788,6 @@
       /* ── Alvos de toque: ~40-44px de área tocável, ícone visual permanece pequeno ── */
       .copy-icon-btn { width:40px; height:40px; }
       .copy-icon-btn svg { width:15px; height:15px; }
-      .bubble-reply-btn, .bubble-copy-btn { padding:6px 10px; }
       .btn-tutorial { width:40px; height:40px; }
       .pftgl-btn { padding:8px 13px; }
       /* .contact-reopen-btn já abre o contato via bubbling do clique na linha (buildContactItem
@@ -4709,9 +4837,15 @@
       /* ── Filtros de conversa: fileira de ordenação também fixa (irmã de .convs-filter) ── */
       .conv-sort-tabs { flex-shrink:0; }
 
-      /* ── Ações de mensagem (Copiar texto/Responder): sempre visíveis no mobile
-         (sem hover), mas com peso visual reduzido — leem como metadado, não ruído. */
-      .bubble-reply-btn, .bubble-copy-btn { font-size:.58rem; opacity:.62; border-color:transparent; background:rgba(0,0,0,.035); }
+      /* ── Ações de mensagem (Copiar texto/Responder): ícone-only, redondo,
+         revelado por toque na mensagem (ver .mob-actions-open acima) — não
+         ficam mais permanentemente visíveis embaixo de cada bolha do
+         histórico. Opacidade cheia: já é uma revelação deliberada do
+         atendente, não precisa ler como metadado apagado. */
+      .bubble-reply-btn, .bubble-copy-btn {
+        border-color: transparent; background: rgba(0,0,0,.05);
+        width: 30px; height: 30px; padding: 0; border-radius: 50%;
+      }
 
       /* ── Chips de estágio do Kanban: fade nas bordas quando há overflow horizontal ── */
       .mob-stage-chips {
@@ -5745,6 +5879,7 @@
   <div class="modal-box">
     <div class="modal-header">
       <button class="modal-hdr-btn" onclick="closeModal()" aria-label="Fechar conversa">✕</button>
+      <span class="hdr-line-break" aria-hidden="true"></span>
       <div class="info">
         <div class="chat-hdr-identity">
           <h2 id="modal-chat-name">—</h2>
@@ -5758,7 +5893,7 @@
           <span id="modal-pipeline-status" style="opacity:.8"></span>
         </div>
       </div>
-      <button class="modal-hdr-btn btn-contact-modal" style="background:rgba(255,255,255,.15);border:1px solid rgba(255,255,255,.2);color:#fff;padding:5px 12px;border-radius:7px;cursor:pointer;font-size:.75rem;font-weight:700;transition:background .15s;margin-right:8px;" onclick="showContactFromModal()">Contato</button>
+      <button class="modal-hdr-btn btn-contact-modal" style="background:rgba(255,255,255,.15);border:1px solid rgba(255,255,255,.2);color:#fff;padding:5px 12px;border-radius:7px;cursor:pointer;font-size:.75rem;font-weight:700;transition:background .15s;margin-right:8px;" onclick="showContactFromModal()" aria-label="Abrir contato" title="Contato"><svg class="contact-btn-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" width="15" height="15"><circle cx="12" cy="8" r="4"></circle><path d="M4 21c0-4 4-7 8-7s8 3 8 7"></path></svg><span class="contact-btn-label">Contato</span></button>
       <button class="modal-hdr-btn btn-resolve-modal" onclick="resolveConversation('modal')">Resolver</button>
     </div>
 
@@ -5820,8 +5955,10 @@
       <div class="messages" id="modal-messages"></div>
 
       <div class="composer">
-        <div class="active-attendant-bar hidden" id="modal-aa-bar"></div>
-        <div class="mob-introduce-row" id="modal-mob-introduce-row"><button class="mob-introduce-btn" onclick="introduceAttendant('modal')">Me apresentar</button></div>
+        <div class="attendant-compact-row">
+          <div class="active-attendant-bar hidden" id="modal-aa-bar"></div>
+          <div class="mob-introduce-row" id="modal-mob-introduce-row"><button class="mob-introduce-btn" onclick="introduceAttendant('modal')">Me apresentar</button></div>
+        </div>
         <!-- Lock da janela de 24h — aparece quando janela está fechada/aguardando -->
         <div class="composer-lock-bar" id="modal-composer-lock" style="display:none"></div>
         <div class="reply-bar" id="modal-reply-bar" style="display:none">
@@ -6310,6 +6447,10 @@ const esc = (s) =>
 
 const COPY_ICON_SVG = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="9" y="9" width="11" height="11" rx="2"></rect><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path></svg>';
 const CHECK_ICON_SVG = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m5 12 4 4L19 6"></path></svg>';
+// Ícones compactos das ações de mensagem no mobile (Responder/Copiar) — mesmo
+// texto some, ícone SVG assume sozinho (ver .bubble-action-icon/.bubble-action-label).
+const BUBBLE_REPLY_ICON_SVG = '<svg class="bubble-action-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" width="13" height="13"><polyline points="9 17 4 12 9 7"></polyline><path d="M20 18v-2a4 4 0 0 0-4-4H4"></path></svg>';
+const BUBBLE_COPY_ICON_SVG = '<svg class="bubble-action-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" width="13" height="13"><rect x="9" y="9" width="11" height="11" rx="2"></rect><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path></svg>';
 
 function formatPhoneDisplay(raw) {
   const n = String(raw || "").replace(/\D/g, "");
@@ -9182,6 +9323,7 @@ async function openConvsChat(phone, redisKey, isArchive) {
   chatArea.innerHTML = `
     <div class="convs-chat-hdr">
       <button class="mob-back-btn" onclick="closeMobChat()" aria-label="Voltar"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" width="15" height="15"><path d="M15 18l-6-6 6-6"></path></svg> Voltar</button>
+      <span class="hdr-line-break" aria-hidden="true"></span>
       <div style="flex:1;min-width:0">
         <div class="chat-hdr-identity">
           <div id="convs-chat-name" style="font-size:1.25rem;font-weight:700;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">Carregando...</div>
@@ -9190,11 +9332,11 @@ async function openConvsChat(phone, redisKey, isArchive) {
             <button class="copy-icon-btn on-dark" id="convs-copy-phone" type="button" title="Copiar telefone" aria-label="Copiar telefone"></button>
           </div>
         </div>
-        <div id="convs-chat-sub" style="font-size:.7rem;opacity:.75;display:flex;gap:8px;margin-top:2px"></div>
+        <div id="convs-chat-sub" style="font-size:.7rem;opacity:.75;margin-top:2px"></div>
       </div>
-      <button class="btn-contact-chat" onclick="showContactFromChat('${esc(phone)}')"
+      <button class="btn-contact-chat" onclick="showContactFromChat('${esc(phone)}')" aria-label="Abrir contato" title="Contato"
         style="background:rgba(255,255,255,.15);border:1px solid rgba(255,255,255,.2);color:#fff;padding:5px 12px;border-radius:7px;cursor:pointer;font-size:.75rem;font-weight:700;transition:background .15s">
-        Contato
+        <svg class="contact-btn-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" width="15" height="15"><circle cx="12" cy="8" r="4"></circle><path d="M4 21c0-4 4-7 8-7s8 3 8 7"></path></svg><span class="contact-btn-label">Contato</span>
       </button>
       ${!isArchive ? `<button class="btn-resolve-chat" onclick="resolveConversation('convs')"
         style="background:var(--brand-red);border:none;color:#fff;padding:5px 12px;border-radius:7px;cursor:pointer;font-size:.75rem;font-weight:700">
@@ -9210,8 +9352,10 @@ async function openConvsChat(phone, redisKey, isArchive) {
       </div>
       <div class="messages" id="convs-messages" style="flex:1;overflow-y:auto;"></div>
       ${!isArchive ? `<div class="composer">
-        <div class="active-attendant-bar hidden" id="convs-aa-bar"></div>
-        <div class="mob-introduce-row" id="convs-mob-introduce-row"><button class="mob-introduce-btn" onclick="introduceAttendant('convs')">Me apresentar</button></div>
+        <div class="attendant-compact-row">
+          <div class="active-attendant-bar hidden" id="convs-aa-bar"></div>
+          <div class="mob-introduce-row" id="convs-mob-introduce-row"><button class="mob-introduce-btn" onclick="introduceAttendant('convs')">Me apresentar</button></div>
+        </div>
         <div class="img-preview-bar" id="convs-img-preview-bar">
           <img id="convs-img-thumb" src="" alt="preview">
           <input class="caption-input" id="convs-img-caption" placeholder="Legenda (opcional)">
@@ -9312,7 +9456,7 @@ function renderConvsChat(data) {
   if (subEl) {
     subEl.innerHTML = `
       <span class="demand-tag ${demandClass(data.demandType)}" style="font-size:.6rem;padding:1px 5px">${demandLabel(data.demandType)}</span>
-      <span>${pipelineLabel(data.pipelineStatus, data.clientType)}</span>
+      <span class="convs-pipeline-label">${pipelineLabel(data.pipelineStatus, data.clientType)}</span>
     `;
   }
 
@@ -9772,6 +9916,14 @@ document.addEventListener("keydown", (event) => {
   }
 });
 
+// Fecha a toolbar contextual de Responder/Copiar de qualquer bolha aberta no
+// mobile — chamada por um único listener global (registrado uma vez abaixo,
+// nunca por bolha) quando o atendente toca fora da mensagem.
+function closeAllBubbleActions() {
+  document.querySelectorAll(".bubble-wrap.mob-actions-open").forEach(w => w.classList.remove("mob-actions-open"));
+}
+document.addEventListener("click", closeAllBubbleActions);
+
 function appendBubble(container, msg, optimistic = false, history = null, historyIndex = null) {
   const { role, content, sentByHuman, mediaType, mediaData, mediaMimeType, mediaFilename,
           mediaUrl, mediaUnavailable, mediaDeleted, sentMedia, mediaStorageFailed,
@@ -10068,17 +10220,27 @@ function appendBubble(container, msg, optimistic = false, history = null, histor
     wrap.appendChild(_actRow);
   }
 
+  // Responder + Copiar texto — agrupados num wrapper que é display:contents
+  // no desktop (filhos viram diretos de .bubble-wrap, comportamento idêntico
+  // ao de sempre) e vira uma linha compacta única no mobile (ver
+  // .bubble-actions-wrap no CSS), em vez de cada botão empilhar na sua
+  // própria linha.
+  const actionsWrap = document.createElement("div");
+  actionsWrap.className = "bubble-actions-wrap";
+
   // Botão Responder: apenas em mensagens do cliente com metaMessageId
   if (role === "user" && msg.metaMessageId && !optimistic) {
     const replyBtn = document.createElement("button");
     replyBtn.className   = "bubble-reply-btn";
-    replyBtn.textContent = "Responder";
+    replyBtn.title        = "Responder";
+    replyBtn.setAttribute("aria-label", "Responder");
+    replyBtn.innerHTML   = `${BUBBLE_REPLY_ICON_SVG}<span class="bubble-action-label">Responder</span>`;
     replyBtn.onclick = (e) => {
       e.stopPropagation();
       const prefix = container.id === "modal-messages" ? "modal" : "convs";
       setReplyTarget(prefix, msg);
     };
-    wrap.appendChild(replyBtn);
+    actionsWrap.appendChild(replyBtn);
   }
 
   // Botão Copiar texto — usa o conteúdo RAW da mensagem via Clipboard API,
@@ -10086,13 +10248,31 @@ function appendBubble(container, msg, optimistic = false, history = null, histor
   if (!optimistic && typeof content === "string" && content.trim()) {
     const copyBtn = document.createElement("button");
     copyBtn.className   = "bubble-copy-btn";
-    copyBtn.textContent  = "Copiar texto";
     copyBtn.title        = "Copiar o texto original desta mensagem, preservando quebras de linha";
+    copyBtn.setAttribute("aria-label", "Copiar texto");
+    copyBtn.innerHTML   = `${BUBBLE_COPY_ICON_SVG}<span class="bubble-action-label">Copiar texto</span>`;
     copyBtn.onclick = (e) => {
       e.stopPropagation();
       copyBubbleText(content);
     };
-    wrap.appendChild(copyBtn);
+    actionsWrap.appendChild(copyBtn);
+  }
+
+  if (actionsWrap.children.length) {
+    wrap.appendChild(actionsWrap);
+    // Mobile: Responder/Copiar ficam ocultos até o atendente tocar na
+    // mensagem (ver .bubble-wrap.mob-actions-open no CSS +
+    // closeAllBubbleActions() global, registrado uma única vez no
+    // bootstrap). Desktop não muda — continua revelando por :hover, como
+    // sempre. Reaproveita os MESMOS handlers acima (copiar/responder);
+    // nenhuma lógica nova de reply/copy é criada aqui.
+    wrap.addEventListener("click", (e) => {
+      if (window.innerWidth > 768) return;
+      e.stopPropagation();
+      const wasOpen = wrap.classList.contains("mob-actions-open");
+      closeAllBubbleActions();
+      if (!wasOpen) wrap.classList.add("mob-actions-open");
+    });
   }
 
   // Marca a bolha com o ID da mensagem para permitir atualização cirúrgica de status
@@ -12473,6 +12653,7 @@ function lockComposerResolved(prefix, phone, clientType) {
   if (fileInput)  fileInput.disabled = true;
   if (quickMsgBtn) quickMsgBtn.disabled = true;
   if (micBtn)     micBtn.disabled = true;
+  textarea?.closest(".composer")?.classList.add("composer-locked");
   if (lockBar) {
     lockBar.style.display = "flex";
     lockBar.className = "composer-lock-bar resolved-lock";
@@ -12597,6 +12778,7 @@ function lockComposer(prefix, reason) {
   if (fileInput)  fileInput.disabled = true;
   if (quickMsgBtn) quickMsgBtn.disabled = true;
   if (micBtn)     micBtn.disabled = true;
+  textarea?.closest(".composer")?.classList.add("composer-locked");
 
   if (lockBar) {
     lockBar.style.display = "flex";
@@ -12761,7 +12943,7 @@ function unlockComposer(prefix) {
   if (quickMsgBtn) quickMsgBtn.disabled = false;
   if (micBtn)     micBtn.disabled = false;
   if (lockBar)    lockBar.style.display = "none";
-
+  textarea?.closest(".composer")?.classList.remove("composer-locked");
 }
 
 // onSendTemplate está definida na seção TEMPLATES WHATSAPP acima
