@@ -123,6 +123,17 @@
       color: #fca5a5;
       flex-shrink: 1;
     }
+    /* text-overflow:ellipsis não tem efeito num container flex (.wc-stat) —
+       precisa estar no próprio elemento de texto para reticências aparecerem
+       em vez de um corte seco em telas muito estreitas (320px). */
+    #closed-windows-count { display: inline-block; }
+    #waiting-count {
+      display: inline-block;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+      min-width: 0;
+    }
     .waiting-dot {
       width: 8px; height: 8px;
       border-radius: 50%;
@@ -4416,6 +4427,14 @@
       .convs-filter { flex-shrink: 0; overflow-x: auto; overscroll-behavior-x: contain; }
       .convs-list { flex: 1; min-height: 0; overflow-y: auto; -webkit-overflow-scrolling: touch; }
       /* Chat: header e composer fixos, mensagens rolam */
+      /* Rede de segurança: em telas muito baixas (celular em landscape), o
+         cabeçalho + avisos da conversa (ex.: aviso de "não assumida" + "Me
+         apresentar") já podem consumir quase toda a altura, sem sobrar
+         espaço para .messages encolher o suficiente — o composer ficava
+         inacessível abaixo da dobra, sem nenhum scroll para alcançá-lo.
+         Dá scroll vertical próprio ao corpo do chat como fallback; não afeta
+         o caso normal (onde o conteúdo nunca ultrapassa a altura). */
+      #convs-chat-body { overflow-y: auto; -webkit-overflow-scrolling: touch; }
       .convs-main { flex: 1; min-height: 0; overflow: hidden; flex-direction: column; box-sizing: border-box; }
       .window-status-bar { flex-shrink: 0; min-width: 0; overflow: hidden; }
       .messages { flex: 1; min-height: 0; overflow-y: auto; -webkit-overflow-scrolling: touch; }
@@ -5237,7 +5256,7 @@
         <span class="attendant-name" id="attendant-name">Perfil</span>
       </button>
       <div class="refresh-info">Atualiza em <span id="countdown">6</span>s<span id="refresh-state" class="refresh-state"></span></div>
-      <button class="btn-tutorial" onclick="restartOnboarding()" title="Ver tutorial desta tela">?</button>
+      <button class="btn-tutorial" onclick="restartOnboarding()" title="Ver tutorial desta tela" aria-label="Ver tutorial desta tela">?</button>
       <button class="btn-logout" onclick="logout()">Sair</button>
     </div>
   </div>
