@@ -231,6 +231,9 @@
       box-shadow: 0 1px 3px rgba(0,0,0,.15);
     }
     .attendant-name { max-width: 130px; overflow: hidden; text-overflow: ellipsis; }
+    /* Badge de chevron do avatar — só existe visualmente no mobile (ver
+       @media max-width:768px); no desktop o nome ao lado já comunica a ação. */
+    .attendant-chevron-badge { display: none; }
     .attendant-picker-box {
       background: #fff; border-radius: 14px;
       padding: 28px 24px 24px;
@@ -1342,6 +1345,33 @@
     .contacts-alpha-index a:hover { color: var(--brand-navy); background: rgba(26,42,94,.1); }
     @media (max-width: 768px) { .contacts-alpha-index { display: none !important; } }
 
+    /* ── Régua alfabética mobile (Contatos) ── */
+    .mob-alpha-rail { display: none; }
+    .mob-alpha-bubble { display: none; }
+    @media (max-width: 768px) {
+      body[data-mobile-view="contacts"] #contacts-list-wrap { position: relative; }
+      /* Espaço reservado na linha para a régua nunca cobrir chevron/telefone/copy/texto */
+      body[data-mobile-view="contacts"] .contact-item { padding-right: 34px; }
+      body[data-mobile-view="contacts"] .mob-alpha-rail {
+        display: flex; flex-direction: column; align-items: center; justify-content: space-between;
+        position: absolute; top: 2px; right: 0; bottom: 2px;
+        width: 22px; padding: 6px 6px; box-sizing: content-box;
+        touch-action: none; -webkit-tap-highlight-color: transparent; user-select: none;
+        z-index: 6;
+      }
+      .mar-letter { font-size: .5rem; font-weight: 700; color: var(--text-muted); line-height: 1; pointer-events: none; }
+      .mar-letter.mar-active { color: var(--brand-navy); }
+      .mob-alpha-bubble {
+        position: absolute; right: 36px; transform: translateY(-50%);
+        width: 52px; height: 52px; border-radius: 50% 50% 4px 50%;
+        background: rgba(26,42,94,.94); color: #fff;
+        font-size: 1.25rem; font-weight: 700;
+        align-items: center; justify-content: center;
+        z-index: 7; pointer-events: none; box-shadow: 0 4px 16px rgba(0,0,0,.28);
+      }
+      .mob-alpha-bubble.visible { display: flex; }
+    }
+
     /* ── Ordenação de conversas ── */
     .conv-sort-tabs {
       display: flex; gap: 4px; padding: 4px 8px 0;
@@ -1394,19 +1424,57 @@
     }
 
     .conv-item {
-      padding: 10px 12px;
       border-bottom: 1px solid var(--border);
       cursor: pointer;
-      touch-action: manipulation;
+      touch-action: pan-y; /* permite rolagem vertical nativa; swipe horizontal é tratado via Pointer Events (ver initConvSwipeActions()) */
       -webkit-tap-highlight-color: transparent;
-      transition: background .12s;
-      display: flex;
-      gap: 9px;
-      align-items: center;   /* avatar e meta ficam centralizados */
+      -webkit-touch-callout: none; /* evita o menu nativo de seleção/copiar do iOS competindo com o long-press do menu de opções */
       position: relative;
+      overflow: hidden; /* esconde .conv-swipe-actions até o conteúdo deslizar */
     }
     .conv-item:hover   { background: #eff2fb; }
     .conv-item.active  { background: #e8edf9; }
+    /* Conteúdo da linha vira uma camada opaca que desliza por cima de
+       .conv-swipe-actions — reaproveita padding/gap/display que antes viviam
+       direto em .conv-item (ver override mobile ".conv-swipe-content" abaixo). */
+    .conv-swipe-track {
+      display: flex;
+      width: 100%;
+    }
+    .conv-swipe-content {
+      box-sizing: border-box; /* flex-basis:100% precisa já incluir o padding, senão a linha "cresce" além dos 100% reais e desalinha .conv-swipe-actions ao abrir */
+      display: flex;
+      gap: 9px;
+      align-items: center;   /* avatar e meta ficam centralizados */
+      padding: 10px 12px;
+      flex: 1 0 100%;
+      min-width: 0;
+      background: var(--bg-card, #fff);
+      transition: background .12s;
+    }
+    .conv-item:hover .conv-swipe-content   { background: #eff2fb; }
+    .conv-item.active .conv-swipe-content  { background: #e8edf9; }
+    /* Ações reveladas pelo swipe — ficam "atrás" do conteúdo (mesma largura de
+       .conv-item, fora da área visível) até a linha deslizar para a esquerda. */
+    .conv-swipe-actions {
+      display: flex;
+      flex: 0 0 auto;
+      align-items: stretch;
+    }
+    .conv-swipe-btn {
+      box-sizing: border-box; /* width já inclui padding — mantém 2×66px = 132px em sincronia com o fallback --conv-swipe-w */
+      width: 66px;
+      min-height: 44px;
+      border: none;
+      display: flex; flex-direction: column; align-items: center; justify-content: center;
+      gap: 3px;
+      font-size: .6rem; font-weight: 700; color: #fff;
+      cursor: pointer; font-family: inherit;
+      padding: 0 4px;
+    }
+    .conv-swipe-btn:focus-visible { outline: 2px solid #fff; outline-offset: -3px; }
+    .conv-swipe-pin    { background: #b45309; }
+    .conv-swipe-unread { background: #1565c0; }
 
     .conv-avatar-wrap { position: relative; flex-shrink: 0; }
     .conv-avatar {
@@ -3634,7 +3702,7 @@
     .conv-pin-indicator {
       position: absolute;
       bottom: -2px; right: -3px;
-      font-size: .55rem;
+      color: #b45309;
       background: #fff;
       border-radius: 50%;
       width: 15px; height: 15px;
@@ -3645,6 +3713,13 @@
       line-height: 1;
       pointer-events: none;
     }
+    .conv-pin-indicator svg { width: 9px; height: 9px; }
+
+    /* Estado aberto do swipe: conteúdo desliza, ações ficam visíveis à direita.
+       Durante o arraste o próprio JS aplica transform inline (1:1 com o dedo);
+       esta classe cuida do snap final (aberto) e da transição ao fechar. */
+    .conv-swipe-track { transition: transform .18s ease; }
+    .conv-item.conv-swiped-open .conv-swipe-track { transform: translateX(var(--conv-swipe-w, -132px)); }
 
     /* Badge de status na aba Conversas */
     .conv-status-badge {
@@ -3691,8 +3766,10 @@
       transition: opacity .15s, background .12s;
     }
     .conv-item:hover .conv-menu-btn,
-    .conv-item.active .conv-menu-btn { opacity: 1; pointer-events: auto; }
+    .conv-item.active .conv-menu-btn,
+    .conv-menu-btn:focus-visible { opacity: 1; pointer-events: auto; }
     .conv-menu-btn:hover { background: rgba(0,0,0,.08); color: var(--text-primary); }
+    .conv-menu-btn:focus-visible { outline: 2px solid var(--brand-navy); outline-offset: 1px; }
 
     /* Badge de arquivada */
     .conv-archive-badge {
@@ -3715,8 +3792,10 @@
 
     /* Destaque de não lida */
     .conv-item.unread-item { background: #e8eaf6; }
+    .conv-item.unread-item .conv-swipe-content { background: #e8eaf6; }
     .conv-item.unread-item .conv-name { font-weight: 800; }
     .conv-item.unread-item:hover { background: #dde0f0; }
+    .conv-item.unread-item:hover .conv-swipe-content { background: #dde0f0; }
 
     /* Badge na aba Conversas */
     .convs-tab-badge {
@@ -4450,17 +4529,39 @@
       .header-center { display:none; }
       .header-nav-row { height:52px; padding:0 14px; gap:10px; }
       .refresh-info { display:none; }
-      .waiting-counter { font-size:.7rem;padding:3px 8px; }
+      /* Indicadores viram texto direto sobre o navy — sem "pill" translúcido
+         ocupando a largura só para conter texto. .wc-stat-closed já tem
+         border-left discreto (linha 120) que segue servindo de divisor. */
+      .waiting-counter { font-size:.74rem;font-weight:700;padding:0;background:none;border-radius:0;gap:8px; }
       /* Ajuda "?" e Sair saem da faixa fixa do header — viram itens do menu do
          avatar (#mob-attendant-menu, ver onAttendantChipTap()). Isso é o que
          libera a largura que hoje é dividida entre contador + avatar + 2 botões. */
       .btn-tutorial { display:none; }
       .btn-logout { display:none; }
       .attendant-name { display:none; }
-      /* Avatar vira o único controle do grupo direito — alvo de toque >=44px mesmo
-         com o avatar visual permanecendo compacto (padding é que cresce). */
-      .attendant-chip { padding:7px 10px; min-height:44px; min-width:44px; box-sizing:border-box; justify-content:center; }
-      .attendant-avatar { width:30px; height:30px; font-size:.7rem; }
+      /* Avatar vira o único controle do grupo direito — alvo de toque >=44px.
+         Chip agora É o círculo do avatar (sem padding/anel/sombra pesada
+         somados por cima) — o avatar passa a preencher quase todo o alvo de
+         toque em vez de flutuar pequeno dentro de um pill maior. */
+      .attendant-chip {
+        padding:0; width:44px; height:44px; min-height:44px; min-width:44px;
+        box-sizing:border-box; justify-content:center; border-radius:50%;
+        background:transparent; border:none; box-shadow:none; position:relative;
+      }
+      .attendant-chip:hover { background:rgba(255,255,255,.10); box-shadow:none; transform:none; }
+      .attendant-chip:active { background:rgba(255,255,255,.16); }
+      .attendant-avatar { width:44px; height:44px; font-size:.8rem; border:1.5px solid rgba(255,255,255,.55); box-shadow:none; }
+      /* Chevron discreto sobreposto ao avatar — indica que o toque abre um menu
+         (identidade + Trocar perfil + Ajuda + Sair, ver #mob-attendant-menu). */
+      .attendant-chevron-badge {
+        display:flex; align-items:center; justify-content:center;
+        position:absolute; bottom:-1px; right:-1px;
+        width:15px; height:15px; border-radius:50%;
+        background:var(--brand-navy-mid,#243880);
+        border:1.5px solid rgba(255,255,255,.9);
+        pointer-events:none;
+      }
+      .attendant-chevron-badge svg { width:9px; height:9px; }
       .btn-camera { display:flex; }
       .btn-introduce { display:none; }
       .mob-introduce-row { display:block; padding:6px 12px; flex-shrink:0; }
@@ -4486,7 +4587,13 @@
       .mob-nav-btn { flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:3px;background:none;border:none;color:rgba(255,255,255,.55);cursor:pointer;font-size:.6rem;font-weight:600;padding:0;transition:color .15s,background .15s;-webkit-tap-highlight-color:transparent; }
       /* Padding/radius sempre presentes (ativo e inativo) — só o background muda,
          então o rótulo não pula de posição ao trocar de aba (evita layout shift). */
-      .mob-nav-icon { font-size:1.1rem;line-height:1;padding:3px 16px;border-radius:10px;transition:background .15s; }
+      /* Causa raiz do ícone "sumido": um <svg> sem width/height nem regra CSS
+         irmã (todo outro ícone do app tem uma, ex. .copy-icon-btn svg) assume o
+         tamanho padrão de replaced element (300×150css), estourando o pill de
+         3px 16px e ficando clipado/invisível. display:flex aqui + svg 22px
+         resolve na raiz, sem precisar de outro SVG por cima. */
+      .mob-nav-icon { font-size:1.1rem;line-height:1;padding:3px 16px;border-radius:10px;transition:background .15s;display:flex;align-items:center;justify-content:center; }
+      .mob-nav-icon svg { width:22px;height:22px;display:block;flex-shrink:0; }
       .mob-nav-btn.active { color:#fff;background:none; }
       .mob-nav-btn.active .mob-nav-icon { background:rgba(255,255,255,.18); }
       /* Toast: acima da nav bar, largura segura */
@@ -4607,7 +4714,7 @@
       .conv-sort-compact:active { background: #f0f2fa; }
 
       /* ── Linha de conversa: mais alta (dedo) e com menos "badge soup" ── */
-      .conv-item { padding: 12px 14px; gap: 11px; }
+      .conv-swipe-content { padding: 12px 14px; gap: 11px; }
       .conv-avatar { width: 44px; height: 44px; font-size: .88rem; }
       .conv-name { font-size: .88rem; }
       .conv-time { font-size: .68rem; }
@@ -4761,16 +4868,27 @@
          sozinho (virou botão compacto ícone-only, ver .contact-btn-icon). */
       .modal-header .btn-contact-modal,
       .convs-chat-hdr .btn-contact-chat { order: 6; flex-shrink: 0; margin-right:0 !important; }
-      /* Etapa/pipeline — menor prioridade: some do dado, só cede espaço visual.
-         flex:1 1 0% consome o que sobrar; se não sobrar nada, trunca com
-         ellipsis em vez de empurrar Contato para uma nova linha. */
+      /* Etapa/pipeline: removida do header mobile por decisão de produto — já
+         pertence ao Kanban/card e ainda aparece lá e no desktop. O dado em si
+         não muda (data.pipelineStatus / pipelineLabel()), só deixa de ser
+         renderizado nesta view em telas ≤768px. Isso também é o que libera
+         espaço para telefone+categoria+contato caberem confortavelmente
+         numa única linha 2. */
       .modal-header #modal-pipeline-status,
-      .convs-chat-hdr .convs-pipeline-label {
-        order: 7; flex: 1 1 0%; min-width: 0;
-        overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
-      }
+      .convs-chat-hdr .convs-pipeline-label { display: none; }
       .convs-chat-hdr .btn-contact-chat,
       .convs-chat-hdr .btn-resolve-chat { padding:4px 8px !important; font-size:.72rem !important; }
+      /* Voltar: só a seta, sem pill de texto disputando espaço com o nome —
+         aria-label preserva o rótulo para leitor de tela, alvo de toque 44px
+         via padding em vez de largura fixa no texto. Escopo apenas ao header
+         do chat: .mob-back-btn de Detalhes do Contato (cd-wrap) não muda. */
+      .convs-chat-hdr .mob-back-btn {
+        background: none; padding: 0; gap: 0;
+        width: 44px; height: 44px; min-width: 44px;
+        border-radius: 50%; justify-content: center;
+      }
+      .convs-chat-hdr .mob-back-btn:active { background: rgba(255,255,255,.16); }
+      .convs-chat-hdr .mob-back-btn svg { width: 20px; height: 20px; }
       /* Gap um pouco mais enxuto no header (10px→7px) — com 7-8 itens
          competindo por 2 linhas em 320-390px, cada px de gap conta; ainda
          confortável para leitura/toque. */
@@ -5604,6 +5722,7 @@
       <button class="attendant-chip" id="attendant-chip" onclick="onAttendantChipTap()" title="Trocar perfil de atendimento" aria-haspopup="menu" aria-expanded="false">
         <span class="attendant-avatar" id="attendant-avatar">?</span>
         <span class="attendant-name" id="attendant-name">Perfil</span>
+        <span class="attendant-chevron-badge" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="3.5" stroke-linecap="round" stroke-linejoin="round"><path d="M6 9l6 6 6-6"></path></svg></span>
       </button>
       <div class="refresh-info">Atualiza em <span id="countdown">6</span>s<span id="refresh-state" class="refresh-state"></span></div>
       <button class="btn-tutorial" onclick="restartOnboarding()" title="Ver tutorial desta tela" aria-label="Ver tutorial desta tela">?</button>
@@ -5695,6 +5814,11 @@
     <div class="contacts-list-wrap" id="contacts-list-wrap">
       <div class="convs-list" id="convs-list"></div>
       <div class="contacts-alpha-index" id="contacts-alpha-index" style="display:none"></div>
+      <!-- Régua alfabética mobile (tap + drag) — reaproveita os mesmos anchors
+           #contacts-letter-${letra} de renderContactsList(), sem lista paralela.
+           Controlador único em initMobAlphaRail() (ver <script> principal). -->
+      <div class="mob-alpha-rail" id="mob-alpha-rail" role="navigation" aria-label="Índice alfabético"></div>
+      <div class="mob-alpha-bubble" id="mob-alpha-bubble" aria-hidden="true"></div>
     </div>
   </div>
   <div class="convs-main" id="convs-main">
@@ -6534,11 +6658,20 @@ let convFilter       = sessionStorage.getItem("sartec_conv_filter") || "all";
 let convSort         = sessionStorage.getItem("sartec_conv_sort")   || "recent";
 let convsSectionMode = 'convs';
 let _contactDetailPhone = null;
+// Fixar/Não-lida: preferência local do dispositivo (localStorage), não sincronizada
+// por atendente/perfil e sem mutação no Redis. Reaproveitada tal qual pelas ações
+// de swipe/long-press mobile (ver initConvSwipeActions()) — mesma fonte de verdade
+// usada pelo menu contextual de desktop (togglePin/toggleUnread/markAsRead), sem
+// segundo sistema paralelo. Poderá virar preferência por usuário após o Gate de
+// autenticação (hoje não há identidade de atendente segura no frontend).
 let pinnedConvs  = [];
 let unreadConvs  = [];
 let convCtxPhone = null;   // phone do card com menu aberto
 try { pinnedConvs = JSON.parse(localStorage.getItem("sartec_pinned_convs") || "[]"); } catch {}
 try { unreadConvs = JSON.parse(localStorage.getItem("sartec_unread_convs") || "[]"); } catch {}
+
+// Régua alfabética mobile (Contatos) — letras com contato existente na última renderização
+let mobAlphaExistingLetters = new Set();
 
 // store de mídia (PDF, planilhas) — evita base64 gigante em atributos HTML
 const mediaStore  = {};
@@ -9371,30 +9504,51 @@ function buildConvItem(c) {
   item.dataset.convKey   = convKey;
   item.dataset.isArchive = c.isArchive ? '1' : '';
 
+  // Ícone de pin: SVG linear (consistente com o resto do app), não emoji.
+  const pinIconSvg = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 21s7-7.5 7-12a7 7 0 1 0-14 0c0 4.5 7 12 7 12z"></path><circle cx="12" cy="9" r="2.5"></circle></svg>`;
+
   item.innerHTML = `
-    <div class="conv-avatar-wrap">
-      <div class="conv-avatar ${c.clientType === "pj" ? "pj" : ""}">${esc(initials(c.clientName))}</div>
-      ${isPinned ? `<span class="conv-pin-indicator" title="Fixada">📌</span>` : ""}
-    </div>
-    <div class="conv-info">
-      <div class="conv-name-row">
-        <span class="conv-name">${esc(c.clientName)}</span>
-        <span class="conv-time">${relTime(c.lastActivity || c.archivedAt)}</span>
+    <div class="conv-swipe-track">
+      <div class="conv-swipe-content">
+        <div class="conv-avatar-wrap">
+          <div class="conv-avatar ${c.clientType === "pj" ? "pj" : ""}">${esc(initials(c.clientName))}</div>
+          ${isPinned ? `<span class="conv-pin-indicator" title="Fixada">${pinIconSvg}</span>` : ""}
+        </div>
+        <div class="conv-info">
+          <div class="conv-name-row">
+            <span class="conv-name">${esc(c.clientName)}</span>
+            <span class="conv-time">${relTime(c.lastActivity || c.archivedAt)}</span>
+          </div>
+          <div class="conv-preview">${esc(c.lastMessage || "—")}</div>
+          <div class="conv-meta">
+            <span class="demand-tag ${demandClass(c.demandType)}"
+              style="font-size:.55rem;padding:1px 5px">${demandLabel(c.demandType)}</span>
+            ${windowBadge}
+            ${statusDot || ""}
+            ${newMsgBadge}
+            ${isArchiveConv ? `<span class="conv-archive-badge">📁 arquivada</span>` : ""}
+          </div>
+        </div>
+        ${isUnread ? `<span class="conv-unread-dot" title="Não lida"></span>` : ""}
+        ${!isArchiveConv ? `<button class="conv-menu-btn"
+          onclick="openConvMenu(event,'${esc(c.phone)}')"
+          title="Opções">⋮</button>` : ""}
       </div>
-      <div class="conv-preview">${esc(c.lastMessage || "—")}</div>
-      <div class="conv-meta">
-        <span class="demand-tag ${demandClass(c.demandType)}"
-          style="font-size:.55rem;padding:1px 5px">${demandLabel(c.demandType)}</span>
-        ${windowBadge}
-        ${statusDot || ""}
-        ${newMsgBadge}
-        ${isArchiveConv ? `<span class="conv-archive-badge">📁 arquivada</span>` : ""}
-      </div>
+      ${!isArchiveConv ? `<div class="conv-swipe-actions">
+        <button type="button" class="conv-swipe-btn conv-swipe-pin"
+          aria-label="${isPinned ? "Desafixar conversa" : "Fixar conversa"}"
+          onclick="event.stopPropagation();togglePin('${esc(c.phone)}')">
+          ${pinIconSvg.replace("<svg ", '<svg width="18" height="18" ')}
+          <span>${isPinned ? "Desafixar" : "Fixar"}</span>
+        </button>
+        <button type="button" class="conv-swipe-btn conv-swipe-unread"
+          aria-label="${isUnread ? "Marcar como lida" : "Marcar como não lida"}"
+          onclick="event.stopPropagation();toggleUnread('${esc(c.phone)}')">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" width="18" height="18">${isUnread ? '<path d="M20 6L9 17l-5-5"></path>' : '<circle cx="12" cy="12" r="5"></circle>'}</svg>
+          <span>${isUnread ? "Lida" : "Não lida"}</span>
+        </button>
+      </div>` : ""}
     </div>
-    ${isUnread ? `<span class="conv-unread-dot" title="Não lida"></span>` : ""}
-    ${!isArchiveConv ? `<button class="conv-menu-btn"
-      onclick="openConvMenu(event,'${esc(c.phone)}')"
-      title="Opções">⋮</button>` : ""}
   `;
   item.onclick = () => openConvsChat(c.phone, c.redisKey, c.isArchive);
   return item;
@@ -9437,7 +9591,7 @@ async function openConvsChat(phone, redisKey, isArchive) {
 
   chatArea.innerHTML = `
     <div class="convs-chat-hdr">
-      <button class="mob-back-btn" onclick="closeMobChat()" aria-label="Voltar"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" width="15" height="15"><path d="M15 18l-6-6 6-6"></path></svg> Voltar</button>
+      <button class="mob-back-btn" onclick="closeMobChat()" aria-label="Voltar"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" width="20" height="20"><path d="M15 18l-6-6 6-6"></path></svg></button>
       <span class="hdr-line-break" aria-hidden="true"></span>
       <div style="flex:1;min-width:0">
         <div class="chat-hdr-identity">
@@ -13820,6 +13974,7 @@ async function loadContacts() {
 function renderContactsList(contacts) {
   const list      = document.getElementById('convs-list');
   const alphaIdx  = document.getElementById('contacts-alpha-index');
+  const mobRail   = document.getElementById('mob-alpha-rail');
   if (!list) return;
   list.innerHTML = '';
   if (alphaIdx) { alphaIdx.innerHTML = ''; alphaIdx.style.display = 'none'; }
@@ -13829,6 +13984,8 @@ function renderContactsList(contacts) {
     list.innerHTML = `<div style="padding:24px;text-align:center;color:var(--text-muted);font-size:.82rem">${
       search ? `Nenhum resultado para "${esc(search)}"` : 'Nenhum contato encontrado.'
     }</div>`;
+    mobAlphaExistingLetters = new Set();
+    if (mobRail) mobRail.style.display = 'none';
     return;
   }
 
@@ -13881,6 +14038,104 @@ function renderContactsList(contacts) {
       alphaIdx.appendChild(a);
     });
   }
+
+  // Régua mobile: reaproveita os mesmos anchors #contacts-letter-${letra} acima —
+  // nenhuma lista paralela. mobAlphaExistingLetters alimenta o controlador único
+  // (ver initMobAlphaRail()) que decide o comportamento de letras sem contato.
+  mobAlphaExistingLetters = new Set(letters);
+  if (mobRail) mobRail.style.display = '';
+}
+
+// ╔══════════════════════════════════════════════════════════════╗
+// ║  RÉGUA ALFABÉTICA MOBILE (Contatos) — controlador único       ║
+// ╚══════════════════════════════════════════════════════════════╝
+// Um único pointerdown/move/up cobre as 27 letras (nenhum listener por letra).
+// Mapeia a posição Y do ponteiro para uma letra por proporção da altura da
+// régua, sempre soltando o dedo/mouse em alguma letra existente: busca a
+// letra existente mais próxima primeiro para a frente (A→Z), depois para trás
+// — nunca fica "sem reação" e nunca precisa de uma segunda fonte de dados
+// (usa os mesmos anchors #contacts-letter-${letra} de renderContactsList()).
+const MOB_ALPHA_LETTERS = "ABCDEFGHIJKLMNOPQRSTUVWXYZ".split("").concat(["#"]);
+
+function initMobAlphaRail() {
+  const rail   = document.getElementById("mob-alpha-rail");
+  const bubble = document.getElementById("mob-alpha-bubble");
+  const wrap   = document.getElementById("contacts-list-wrap");
+  if (!rail || !bubble || !wrap) return;
+
+  rail.innerHTML = MOB_ALPHA_LETTERS
+    .map(l => `<span class="mar-letter" data-letter="${l}">${l}</span>`)
+    .join("");
+
+  function letterAtY(clientY) {
+    const rect  = rail.getBoundingClientRect();
+    if (!rect.height) return null;
+    const ratio = Math.min(Math.max((clientY - rect.top) / rect.height, 0), 0.999);
+    return MOB_ALPHA_LETTERS[Math.floor(ratio * MOB_ALPHA_LETTERS.length)];
+  }
+
+  // Letra inexistente: pula para a mais próxima existente (primeiro adiante,
+  // senão para trás) — comportamento sempre previsível, nunca "não faz nada".
+  function nearestExistingLetter(letter) {
+    const idx = MOB_ALPHA_LETTERS.indexOf(letter);
+    if (idx < 0) return null;
+    for (let i = idx; i < MOB_ALPHA_LETTERS.length; i++) {
+      if (mobAlphaExistingLetters.has(MOB_ALPHA_LETTERS[i])) return MOB_ALPHA_LETTERS[i];
+    }
+    for (let i = idx - 1; i >= 0; i--) {
+      if (mobAlphaExistingLetters.has(MOB_ALPHA_LETTERS[i])) return MOB_ALPHA_LETTERS[i];
+    }
+    return null;
+  }
+
+  function setActiveMark(letter) {
+    rail.querySelectorAll(".mar-letter.mar-active").forEach(el => el.classList.remove("mar-active"));
+    rail.querySelector(`.mar-letter[data-letter="${letter}"]`)?.classList.add("mar-active");
+  }
+
+  function jumpTo(letter) {
+    const target = nearestExistingLetter(letter);
+    if (!target) return;
+    document.getElementById(`contacts-letter-${target}`)?.scrollIntoView({ behavior: "auto", block: "start" });
+  }
+
+  function showBubble(letter, clientY) {
+    bubble.textContent = letter;
+    bubble.classList.add("visible");
+    const wrapRect = wrap.getBoundingClientRect();
+    const top = Math.min(Math.max(clientY - wrapRect.top, 28), wrapRect.height - 28);
+    bubble.style.top = top + "px";
+  }
+  function hideBubble() { bubble.classList.remove("visible"); }
+
+  let activePointerId = null;
+
+  function handleMove(clientY) {
+    const letter = letterAtY(clientY);
+    if (!letter) return;
+    setActiveMark(letter);
+    showBubble(letter, clientY);
+    jumpTo(letter);
+  }
+
+  rail.addEventListener("pointerdown", e => {
+    activePointerId = e.pointerId;
+    rail.setPointerCapture(e.pointerId);
+    handleMove(e.clientY);
+    e.preventDefault();
+  });
+  rail.addEventListener("pointermove", e => {
+    if (e.pointerId !== activePointerId) return;
+    handleMove(e.clientY);
+  });
+  function endDrag(e) {
+    if (e.pointerId !== activePointerId) return;
+    activePointerId = null;
+    hideBubble();
+    setActiveMark(null);
+  }
+  rail.addEventListener("pointerup", endDrag);
+  rail.addEventListener("pointercancel", endDrag);
 }
 
 function buildContactItem(c) {
@@ -15011,6 +15266,7 @@ document.addEventListener("DOMContentLoaded", initAttendant);
 document.addEventListener("DOMContentLoaded", initPjLunchMode);
 document.addEventListener("DOMContentLoaded", initEmojiPickers);
 document.addEventListener("DOMContentLoaded", initQuickMessagesUI);
+document.addEventListener("DOMContentLoaded", initMobAlphaRail);
 document.addEventListener("DOMContentLoaded", function() {
   // Reflete escolha salva de ordenação de conversas
   document.getElementById("sort-btn-recent")?.classList.toggle("active", convSort === "recent");
@@ -15203,12 +15459,163 @@ document.addEventListener("DOMContentLoaded", function() {
   cl.addEventListener("touchstart", function(e) { _ty = e.touches[0].clientY; }, { passive: true });
   cl.addEventListener("touchend", function(e) {
     var item = e.target.closest(".conv-item");
-    if (!item || e.target.closest(".conv-menu-btn")) return;
+    if (!item || e.target.closest(".conv-menu-btn") || e.target.closest(".conv-swipe-btn")) return;
     if (Math.abs(e.changedTouches[0].clientY - _ty) >= 10) return;
+    // Swipe de ações (Fixar / Não lida — ver initConvSwipeActions()): uma linha
+    // aberta, ou um arraste horizontal recém-concluído, nunca deve navegar.
+    // pointerup dispara ANTES de touchend para o mesmo gesto — o touchend do
+    // próprio arraste que acabou de abrir a linha chega aqui com a classe já
+    // aplicada; só fechamos se for um toque separado numa linha que já estava
+    // aberta (não o desfecho do arraste que abriu). _convSwipeJustDragged()
+    // é essa distinção.
+    if (window._convSwipeShouldSuppressTap && window._convSwipeShouldSuppressTap(item)) {
+      if (!(window._convSwipeJustDragged && window._convSwipeJustDragged(item))) {
+        window._convSwipeCloseOpen && window._convSwipeCloseOpen();
+      }
+      e.preventDefault();
+      return;
+    }
     e.preventDefault();
     openConvsChat(item.dataset.phone, item.dataset.convKey, item.dataset.isArchive === "1");
   }, { passive: false });
 });
+
+// ╔══════════════════════════════════════════════════════════════╗
+// ║  INBOX MOBILE — SWIPE (Fixar / Não lida) + fallback long-press ║
+// ╚══════════════════════════════════════════════════════════════╝
+// Controlador único via Pointer Events delegado em #convs-list (nenhum
+// listener por linha). Detecta intenção horizontal só depois que
+// abs(deltaX) > abs(deltaY) e supera um pequeno threshold — até lá o scroll
+// vertical nativo (touch-action:pan-y em .conv-item) segue livre. Reaproveita
+// togglePin()/toggleUnread() e o menu contextual openConvMenu() já existentes
+// no desktop — nenhum sistema paralelo de pin/não-lida é criado aqui.
+function initConvSwipeActions() {
+  const list = document.getElementById("convs-list");
+  if (!list) return;
+
+  const H_THRESHOLD   = 8;     // px para decidir intenção horizontal x vertical
+  const LONG_PRESS_MS = 500;
+
+  let dragItem = null, dragTrack = null, dragOpenPx = 0;
+  let startX = 0, startY = 0, currentTx = 0;
+  let decided = false, dragging = false;
+  let openItem = null;
+  let suppressTapItem = null, suppressTapUntil = 0;
+  let longPressTimer = null;
+
+  function isMobile() { return window.innerWidth <= 768; }
+
+  function closeItem(item) {
+    if (!item) return;
+    item.classList.remove("conv-swiped-open");
+    const track = item.querySelector(".conv-swipe-track");
+    if (track) { track.style.transition = ""; track.style.transform = ""; }
+    if (openItem === item) openItem = null;
+  }
+  function closeOpen() { closeItem(openItem); }
+
+  function clearLongPress() {
+    if (longPressTimer) { clearTimeout(longPressTimer); longPressTimer = null; }
+  }
+  function resetDrag() {
+    dragItem = null; dragTrack = null; dragging = false; decided = false;
+  }
+
+  list.addEventListener("pointerdown", e => {
+    if (!isMobile()) return;
+    if (e.pointerType === "mouse" && e.button !== 0) return;
+    const item = e.target.closest(".conv-item");
+    if (!item) return;
+    if (openItem && openItem !== item) closeOpen();
+    if (e.target.closest(".conv-menu-btn") || e.target.closest(".conv-swipe-btn")) return;
+    if (item.dataset.isArchive === "1") return;
+    const track   = item.querySelector(".conv-swipe-track");
+    const actions = item.querySelector(".conv-swipe-actions");
+    if (!track || !actions) return;
+
+    dragItem   = item;
+    dragTrack  = track;
+    dragOpenPx = actions.offsetWidth || 132;
+    item.style.setProperty("--conv-swipe-w", `-${dragOpenPx}px`);
+    startX = e.clientX; startY = e.clientY;
+    decided = false; dragging = false;
+    currentTx = item.classList.contains("conv-swiped-open") ? -dragOpenPx : 0;
+    track.style.transition = "none";
+
+    // Fallback acessível sem swipe: pressionar e segurar abre o mesmo menu
+    // contextual do desktop (openConvMenu) — cancelado se virar swipe/scroll.
+    clearLongPress();
+    longPressTimer = setTimeout(() => {
+      longPressTimer = null;
+      resetDrag();
+      suppressTapItem = item; suppressTapUntil = Date.now() + 400;
+      openConvMenu({ stopPropagation(){}, currentTarget: item }, item.dataset.phone);
+    }, LONG_PRESS_MS);
+  }, { passive: true });
+
+  list.addEventListener("pointermove", e => {
+    if (!dragItem) return;
+    const dx = e.clientX - startX, dy = e.clientY - startY;
+    if (!decided) {
+      if (Math.abs(dx) > H_THRESHOLD && Math.abs(dx) > Math.abs(dy)) {
+        decided = true; dragging = true;
+        clearLongPress();
+        try { dragItem.setPointerCapture(e.pointerId); } catch {}
+      } else if (Math.abs(dy) > H_THRESHOLD) {
+        // Intenção vertical clara — cede para o scroll nativo da lista.
+        clearLongPress();
+        resetDrag();
+        return;
+      } else {
+        return;
+      }
+    }
+    if (!dragging) return;
+    const tx = Math.min(0, Math.max(-dragOpenPx, currentTx + dx));
+    dragTrack.style.transform = `translateX(${tx}px)`;
+    e.preventDefault();
+  }, { passive: false });
+
+  function endDrag(e) {
+    clearLongPress();
+    if (!dragItem) return;
+    const item = dragItem, track = dragTrack;
+    track.style.transition = "";
+    if (dragging) {
+      const dx = e.clientX - startX;
+      const finalTx = Math.min(0, Math.max(-dragOpenPx, currentTx + dx));
+      track.style.transform = "";
+      if (finalTx <= -dragOpenPx / 2) {
+        item.classList.add("conv-swiped-open");
+        openItem = item;
+      } else {
+        item.classList.remove("conv-swiped-open");
+        if (openItem === item) openItem = null;
+      }
+      suppressTapItem = item; suppressTapUntil = Date.now() + 300;
+    } else {
+      track.style.transform = "";
+    }
+    resetDrag();
+  }
+  list.addEventListener("pointerup", endDrag);
+  list.addEventListener("pointercancel", endDrag);
+
+  // Outro toque fora de qualquer linha fecha a que estiver aberta.
+  document.addEventListener("pointerdown", e => {
+    if (openItem && !e.target.closest(".conv-item")) closeOpen();
+  });
+
+  // Ponte para o handler de tap legado (touchend em #convs-list, ver acima):
+  // decide se um toque deve só fechar a linha aberta em vez de navegar.
+  window._convSwipeShouldSuppressTap = item =>
+    !!item && (item.classList.contains("conv-swiped-open") || (item === suppressTapItem && Date.now() < suppressTapUntil));
+  // true quando este touchend é o desfecho do PRÓPRIO arraste que acabou de
+  // abrir/fechar a linha (não um toque separado numa linha já aberta).
+  window._convSwipeJustDragged = item => item === suppressTapItem && Date.now() < suppressTapUntil;
+  window._convSwipeCloseOpen = closeOpen;
+}
+document.addEventListener("DOMContentLoaded", initConvSwipeActions);
 
 // ╔══════════════════════════════════════════════════════════════╗
 // ║  BUSCA DE CONTATOS                                           ║
