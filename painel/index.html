@@ -278,6 +278,9 @@
 
     .mob-new-fab { display:none; position:fixed; bottom:68px; right:16px; width:48px; height:48px; border-radius:50%; background:var(--accent,#2563eb); color:#fff; border:none; box-shadow:0 4px 16px rgba(15,23,42,.30); font-size:1.35rem; align-items:center; justify-content:center; cursor:pointer; z-index:390; transition:background .15s,box-shadow .15s; }
     .mob-new-fab:active { background:var(--accent-dark,#1d4ed8); }
+
+    /* ── Menu do avatar (mobile): identidade + Trocar perfil + Ajuda + Sair ── */
+    .mam-overlay, .mam-menu { display:none; }
     .mob-stage-mover { display:none; }
     .card-footer-timer { display:block; font-size:.58rem; font-weight:700; color:var(--text-secondary); white-space:nowrap; background:rgba(0,0,0,.05); border-radius:10px; padding:2px 7px; }
 
@@ -1257,6 +1260,14 @@
       pointer-events: none;
     }
     .convs-search-spinner.visible { display: block; }
+
+    /* Wrappers só existem para o layout mobile (busca+Nova conversa numa faixa,
+       filtros+ordenação noutra) — no desktop ficam display:contents (sem caixa
+       própria), então .convs-search/.convs-new-btn/.convs-filter/.conv-sort-tabs
+       continuam empilhados exatamente como antes, sem nenhuma mudança visual. */
+    .convs-search-row, .convs-filter-row { display: contents; }
+    .filter-pill-label-short { display: none; }
+    .conv-sort-compact { display: none; }
 
     .convs-list {
       flex: 1;
@@ -4440,9 +4451,16 @@
       .header-nav-row { height:52px; padding:0 14px; gap:10px; }
       .refresh-info { display:none; }
       .waiting-counter { font-size:.7rem;padding:3px 8px; }
-      .btn-logout { padding:4px 10px;font-size:.7rem; }
+      /* Ajuda "?" e Sair saem da faixa fixa do header — viram itens do menu do
+         avatar (#mob-attendant-menu, ver onAttendantChipTap()). Isso é o que
+         libera a largura que hoje é dividida entre contador + avatar + 2 botões. */
+      .btn-tutorial { display:none; }
+      .btn-logout { display:none; }
       .attendant-name { display:none; }
-      .attendant-chip { padding:4px 5px; }
+      /* Avatar vira o único controle do grupo direito — alvo de toque >=44px mesmo
+         com o avatar visual permanecendo compacto (padding é que cresce). */
+      .attendant-chip { padding:7px 10px; min-height:44px; min-width:44px; box-sizing:border-box; justify-content:center; }
+      .attendant-avatar { width:30px; height:30px; font-size:.7rem; }
       .btn-camera { display:flex; }
       .btn-introduce { display:none; }
       .mob-introduce-row { display:block; padding:6px 12px; flex-shrink:0; }
@@ -4466,8 +4484,11 @@
       #ob-wrap { display:none !important; }
       .mob-nav { display:flex;position:fixed;bottom:0;left:0;right:0;background:var(--brand-navy);border-top:1px solid rgba(255,255,255,.12);height:56px;align-items:stretch; }
       .mob-nav-btn { flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:3px;background:none;border:none;color:rgba(255,255,255,.55);cursor:pointer;font-size:.6rem;font-weight:600;padding:0;transition:color .15s,background .15s;-webkit-tap-highlight-color:transparent; }
-      .mob-nav-icon { font-size:1.1rem;line-height:1; }
-      .mob-nav-btn.active { color:#fff;background:rgba(255,255,255,.09); }
+      /* Padding/radius sempre presentes (ativo e inativo) — só o background muda,
+         então o rótulo não pula de posição ao trocar de aba (evita layout shift). */
+      .mob-nav-icon { font-size:1.1rem;line-height:1;padding:3px 16px;border-radius:10px;transition:background .15s; }
+      .mob-nav-btn.active { color:#fff;background:none; }
+      .mob-nav-btn.active .mob-nav-icon { background:rgba(255,255,255,.18); }
       /* Toast: acima da nav bar, largura segura */
       #toast-container { bottom:calc(56px + 12px);right:16px;max-width:calc(100vw - 32px); }
       .toast { max-width:calc(100vw - 32px); }
@@ -4547,10 +4568,72 @@
       /* Conversas sidebar: busca/filtros fixos, apenas lista rola */
       .convs-sidebar { flex: 1; min-height: 0; overflow: hidden; display: flex; flex-direction: column; box-sizing: border-box; }
       .convs-mode-bar { flex-shrink: 0; }
-      .convs-search { flex-shrink: 0; }
+      .convs-search { flex: 1; min-width: 0; padding: 0; border-bottom: none; }
       .convs-new-btn { flex-shrink: 0; }
-      .convs-filter { flex-shrink: 0; overflow-x: auto; overscroll-behavior-x: contain; }
+      .convs-filter { flex: 1; min-width: 0; padding: 0; border-bottom: none; overflow-x: auto; overscroll-behavior-x: contain; }
       .convs-list { flex: 1; min-height: 0; overflow-y: auto; -webkit-overflow-scrolling: touch; }
+
+      /* ── INBOX MOBILE ──────────────────────────────────────────────────
+         Antes: mode bar + busca + Nova conversa + filtros + ordenação eram
+         5 faixas cheias antes da 1ª conversa. Aqui viram 3 faixas compactas
+         (tabs / busca+novo / filtros+ordenação) — mesmos handlers e estado
+         JS de sempre, só reorganização visual. */
+      .convs-mode-bar { margin: 8px 12px 6px; padding: 3px; background: rgba(26,42,94,.07); border-radius: 10px; border-bottom: none; gap: 2px; }
+      .convs-mode-btn { padding: 7px 0; font-size: .74rem; border-radius: 8px; background: transparent; color: var(--text-secondary); }
+      .convs-mode-btn:hover { background: rgba(255,255,255,.5); color: var(--text-secondary); }
+      .convs-mode-btn.active { background: #fff; color: var(--brand-navy); box-shadow: 0 1px 3px rgba(15,23,42,.12); }
+      .convs-mode-btn.active:hover { background: #fff; color: var(--brand-navy); }
+
+      /* Busca + Nova conversa: uma única faixa (wrappers são display:contents no desktop) */
+      .convs-search-row { flex-shrink: 0; display: flex; align-items: center; gap: 8px; padding: 0 12px 8px; }
+      .convs-new-btn {
+        width: 44px; height: 44px; min-width: 44px; border-radius: 50%;
+        padding: 0; margin: 0; gap: 0;
+      }
+      .convs-new-btn svg { width: 19px; height: 19px; margin: 0 !important; }
+      .convs-new-btn-label { display: none; }
+
+      /* Filtros + ordenação: uma única faixa; pills rolam na horizontal se necessário */
+      .convs-filter-row { flex-shrink: 0; display: flex; align-items: center; gap: 6px; padding: 0 12px 8px; }
+      .filter-pill-label-full { display: none; }
+      .filter-pill-label-short { display: inline; }
+      .conv-sort-tabs { display: none; }
+      .conv-sort-compact {
+        display: flex; align-items: center; gap: 4px; flex-shrink: 0;
+        border: 1px solid var(--border); border-radius: 14px; background: #fff;
+        color: var(--text-secondary); font-size: .68rem; font-weight: 600;
+        padding: 5px 10px; cursor: pointer; white-space: nowrap;
+      }
+      .conv-sort-compact:active { background: #f0f2fa; }
+
+      /* ── Linha de conversa: mais alta (dedo) e com menos "badge soup" ── */
+      .conv-item { padding: 12px 14px; gap: 11px; }
+      .conv-avatar { width: 44px; height: 44px; font-size: .88rem; }
+      .conv-name { font-size: .88rem; }
+      .conv-time { font-size: .68rem; }
+      .conv-preview { font-size: .78rem; }
+      .conv-item.unread-item .conv-preview { color: var(--text-primary); font-weight: 600; }
+      .conv-meta { gap: 6px; margin-top: 1px; }
+      /* Categoria: texto colorido sem pill cheia — mantém a cor semântica, tira o peso visual.
+         !important vence o style inline de font-size/padding já aplicado no HTML (buildConvItem). */
+      .conv-item .conv-meta .demand-tag {
+        background: transparent !important; padding: 0 !important; border-radius: 0 !important;
+        font-weight: 700 !important; font-size: .64rem !important; margin-bottom: 0 !important;
+      }
+      /* Resolvido: texto discreto — não compete mais com categoria/não-lida como badge verde cheio */
+      .conv-item .conv-status-badge.conv-resolved {
+        background: none; color: var(--text-muted); padding: 0; font-weight: 600;
+        text-transform: none; letter-spacing: 0; font-size: .66rem;
+      }
+      .conv-item .conv-status-badge.conv-resolved::before { content: "✓ "; }
+      /* Não lida: "N nova(s)" encolhe para um ponto vermelho — o texto continua
+         no DOM (leitor de tela lê normalmente via processCardNewMsg), só o
+         glifo visual some (font-size:0), sem duplicar markup/JS por viewport. */
+      .conv-item .conv-new-msg-badge {
+        display: inline-block; font-size: 0; line-height: 0;
+        width: 9px; height: 9px; min-width: 9px; padding: 0;
+        border-radius: 50%; background: #ef4444; vertical-align: middle;
+      }
       /* Chat: header e composer fixos, mensagens rolam */
       /* Rede de segurança: em telas muito baixas (celular em landscape), o
          cabeçalho + avisos da conversa (ex.: aviso de "não assumida" + "Me
@@ -4874,6 +4957,23 @@
       .mob-new-fab { right: calc(16px + env(safe-area-inset-right, 0px)); }
       .modal-header { padding-left: calc(10px + env(safe-area-inset-left, 0px)); padding-right: calc(10px + env(safe-area-inset-right, 0px)); }
       .convs-chat-hdr { padding-left: calc(16px + env(safe-area-inset-left, 0px)); padding-right: calc(16px + env(safe-area-inset-right, 0px)); }
+
+      /* ── Menu do avatar: popover compacto ancorado no canto superior direito ── */
+      .mam-overlay.open { display:block; position:fixed; inset:0; background:rgba(15,23,42,.28); z-index:560; }
+      .mam-menu {
+        position:fixed; top:calc(var(--mob-header-h) + 6px);
+        right:calc(10px + env(safe-area-inset-right, 0px));
+        z-index:561; background:#fff; border-radius:12px;
+        box-shadow:0 8px 28px rgba(15,23,42,.25); min-width:190px;
+        overflow:hidden; padding:6px; box-sizing:border-box;
+      }
+      .mam-menu.open { display:block; }
+      .mam-header { display:flex; align-items:center; gap:9px; padding:8px 10px 10px; border-bottom:1px solid var(--border); margin-bottom:4px; }
+      .mam-avatar { width:32px; height:32px; border-radius:50%; background:#3b82f6; color:#fff; font-size:.72rem; font-weight:800; display:flex; align-items:center; justify-content:center; flex-shrink:0; }
+      .mam-name { font-size:.82rem; font-weight:700; color:var(--text-primary); overflow:hidden; text-overflow:ellipsis; white-space:nowrap; min-width:0; }
+      .mam-item { display:block; width:100%; text-align:left; background:none; border:none; padding:10px; font-size:.82rem; font-weight:600; color:var(--text-primary); border-radius:8px; cursor:pointer; font-family:inherit; }
+      .mam-item:active { background:var(--bg-sidebar,#eef1f8); }
+      .mam-item-danger { color:#b91c1c; }
     }
 
     /* ══════════════════════════════════════════════════
@@ -5501,7 +5601,7 @@
       </div>
     </div>
     <div class="header-right">
-      <button class="attendant-chip" id="attendant-chip" onclick="openAttendantPicker()" title="Trocar perfil de atendimento">
+      <button class="attendant-chip" id="attendant-chip" onclick="onAttendantChipTap()" title="Trocar perfil de atendimento" aria-haspopup="menu" aria-expanded="false">
         <span class="attendant-avatar" id="attendant-avatar">?</span>
         <span class="attendant-name" id="attendant-name">Perfil</span>
       </button>
@@ -5564,25 +5664,33 @@
       <button class="convs-mode-btn active" id="mode-btn-convs" onclick="setConvsMode('convs')">Conversas</button>
       <button class="convs-mode-btn" id="mode-btn-contacts" onclick="setConvsMode('contacts')">Contatos</button>
     </div>
-    <div class="convs-search">
-      <input type="search" id="convs-search-input" placeholder="Buscar por nome ou número..." oninput="handleConvsSearch()">
-      <span class="convs-search-spinner" id="convs-search-spinner" aria-hidden="true"></span>
+    <div class="convs-search-row">
+      <div class="convs-search">
+        <input type="search" id="convs-search-input" placeholder="Buscar por nome ou número..." oninput="handleConvsSearch()">
+        <span class="convs-search-spinner" id="convs-search-spinner" aria-hidden="true"></span>
+      </div>
+      <button class="convs-new-btn" onclick="openNewConvoModal()" aria-label="Nova conversa"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" width="15" height="15" style="vertical-align:-2px;margin-right:2px"><path d="M12 5v14M5 12h14"></path></svg><span class="convs-new-btn-label"> Nova conversa</span></button>
     </div>
-    <button class="convs-new-btn" onclick="openNewConvoModal()"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" width="15" height="15" style="vertical-align:-2px;margin-right:2px"><path d="M12 5v14M5 12h14"></path></svg> Nova conversa</button>
-    <div class="convs-filter">
-      <button class="filter-pill active-all" id="pill-all" onclick="setConvFilter('all')">
-        Todas <span class="filter-pill-count" id="pill-count-all">0</span>
+    <div class="convs-filter-row">
+      <div class="convs-filter">
+        <button class="filter-pill active-all" id="pill-all" onclick="setConvFilter('all')">
+          Todas <span class="filter-pill-count" id="pill-count-all">0</span>
+        </button>
+        <button class="filter-pill" id="pill-pf" onclick="setConvFilter('pf')">
+          <span class="filter-pill-label-full">Pessoa Física</span><span class="filter-pill-label-short">PF</span> <span class="filter-pill-count" id="pill-count-pf">0</span>
+        </button>
+        <button class="filter-pill" id="pill-pj" onclick="setConvFilter('pj')">
+          <span class="filter-pill-label-full">Pessoa Jurídica</span><span class="filter-pill-label-short">PJ</span> <span class="filter-pill-count" id="pill-count-pj">0</span>
+        </button>
+      </div>
+      <div class="conv-sort-tabs" id="conv-sort-tabs">
+        <button class="conv-sort-btn active" id="sort-btn-recent" onclick="setConvSort('recent')">Recentes</button>
+        <button class="conv-sort-btn" id="sort-btn-az" onclick="setConvSort('az')">A-Z</button>
+      </div>
+      <button class="conv-sort-compact" id="conv-sort-compact-btn" onclick="toggleConvSortMobile()" aria-label="Ordenado por recentes. Toque para ordenar por A-Z">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" width="14" height="14"><path d="M7 4v16M7 4l-3 3M7 4l3 3M17 20V4M17 20l3-3M17 20l-3-3"></path></svg>
+        <span id="conv-sort-compact-label">Recentes</span>
       </button>
-      <button class="filter-pill" id="pill-pf" onclick="setConvFilter('pf')">
-        Pessoa Física <span class="filter-pill-count" id="pill-count-pf">0</span>
-      </button>
-      <button class="filter-pill" id="pill-pj" onclick="setConvFilter('pj')">
-        Pessoa Jurídica <span class="filter-pill-count" id="pill-count-pj">0</span>
-      </button>
-    </div>
-    <div class="conv-sort-tabs" id="conv-sort-tabs">
-      <button class="conv-sort-btn active" id="sort-btn-recent" onclick="setConvSort('recent')">Recentes</button>
-      <button class="conv-sort-btn" id="sort-btn-az" onclick="setConvSort('az')">A-Z</button>
     </div>
     <div class="contacts-list-wrap" id="contacts-list-wrap">
       <div class="convs-list" id="convs-list"></div>
@@ -7563,17 +7671,24 @@ function updateHeader(convs) {
 
   const waiting = scopedConvs.filter(c => c.status === "aguardando_humano" && !c.isArchive).length;
 
-  document.getElementById("waiting-count").textContent =
-    activeCount === 0 ? "Nenhum atendimento ativo" :
-    activeCount === 1 ? "1 atendimento ativo" :
-    `${activeCount} atendimentos ativos`;
+  // Mobile: rótulo curto ("N ativos"/"N fechadas") — o número domina, sem
+  // depender de ellipsis para caber ("11 atendimentos at..." não cabia).
+  // Desktop mantém a frase completa, sem nenhuma mudança de comportamento.
+  const _isMobHdr = window.innerWidth <= 768;
+  document.getElementById("waiting-count").textContent = _isMobHdr
+    ? (activeCount === 0 ? "Nenhum ativo" : `${activeCount} ativo${activeCount === 1 ? "" : "s"}`)
+    : (activeCount === 0 ? "Nenhum atendimento ativo" :
+       activeCount === 1 ? "1 atendimento ativo" :
+       `${activeCount} atendimentos ativos`);
 
   document.getElementById("waiting-dot").style.display = waiting > 0 ? "block" : "none";
 
   const closedEl = document.getElementById("closed-windows-count");
   if (closedEl) {
     if (closedCount > 0) {
-      closedEl.textContent = closedCount === 1 ? "1 janela fechada" : `${closedCount} janelas fechadas`;
+      closedEl.textContent = _isMobHdr
+        ? `${closedCount} fechada${closedCount === 1 ? "" : "s"}`
+        : (closedCount === 1 ? "1 janela fechada" : `${closedCount} janelas fechadas`);
       closedEl.style.display = "";
     } else {
       closedEl.style.display = "none";
@@ -13647,9 +13762,25 @@ function setConvSort(sort) {
   document.querySelectorAll(".conv-sort-btn").forEach(b => {
     b.classList.toggle("active", b.id === `sort-btn-${sort}`);
   });
+  syncConvSortCompactUI(sort);
   const list = document.getElementById("convs-list");
   if (list) list._lastSig = null; // força re-render
   renderConvsList(allConversationsList);
+}
+
+// Botão único de ordenação do mobile (ícone + rótulo do estado atual) — reusa
+// o mesmo setConvSort()/estado do desktop, só alterna entre os dois valores.
+function toggleConvSortMobile() {
+  setConvSort(convSort === "az" ? "recent" : "az");
+}
+
+function syncConvSortCompactUI(sort) {
+  const label = document.getElementById("conv-sort-compact-label");
+  if (label) label.textContent = sort === "az" ? "A-Z" : "Recentes";
+  const btn = document.getElementById("conv-sort-compact-btn");
+  if (btn) btn.setAttribute("aria-label", sort === "az"
+    ? "Ordenado por A-Z. Toque para ordenar por recentes"
+    : "Ordenado por recentes. Toque para ordenar por A-Z");
 }
 
 async function loadContacts() {
@@ -14805,6 +14936,43 @@ function closeAttendantPicker() {
   if (m) m.classList.add("hidden");
 }
 
+// Avatar do header: no mobile abre o menu compacto (identidade + Trocar perfil +
+// Ajuda + Sair), liberando "?" e "Sair" da faixa fixa do header. No desktop
+// mantém o comportamento de sempre (seletor de atendente).
+function onAttendantChipTap() {
+  if (window.innerWidth <= 768) toggleMobAttendantMenu();
+  else openAttendantPicker();
+}
+
+function toggleMobAttendantMenu() {
+  const menu = document.getElementById("mob-attendant-menu");
+  if (!menu) return;
+  if (menu.classList.contains("open")) closeMobAttendantMenu();
+  else openMobAttendantMenu();
+}
+
+function openMobAttendantMenu() {
+  const menu    = document.getElementById("mob-attendant-menu");
+  const overlay = document.getElementById("mob-attendant-menu-overlay");
+  if (!menu) return;
+  const att = getCurrentAttendant();
+  if (att) {
+    const nameEl   = document.getElementById("mam-name");
+    const avatarEl = document.getElementById("mam-avatar");
+    if (nameEl)   nameEl.textContent = att.name;
+    if (avatarEl) { avatarEl.textContent = att.initials; avatarEl.style.background = att.color; }
+  }
+  menu.classList.add("open");
+  overlay?.classList.add("open");
+  document.getElementById("attendant-chip")?.setAttribute("aria-expanded", "true");
+}
+
+function closeMobAttendantMenu() {
+  document.getElementById("mob-attendant-menu")?.classList.remove("open");
+  document.getElementById("mob-attendant-menu-overlay")?.classList.remove("open");
+  document.getElementById("attendant-chip")?.setAttribute("aria-expanded", "false");
+}
+
 function initAttendant() {
   // migração: corrige "Ilza" → "Ilsa" em registros antigos no localStorage
   const raw = localStorage.getItem("sartec_current_attendant");
@@ -14847,6 +15015,7 @@ document.addEventListener("DOMContentLoaded", function() {
   // Reflete escolha salva de ordenação de conversas
   document.getElementById("sort-btn-recent")?.classList.toggle("active", convSort === "recent");
   document.getElementById("sort-btn-az")?.classList.toggle("active",     convSort === "az");
+  syncConvSortCompactUI(convSort);
 
   // Dica de onboarding sobre edição de cards
   if (!localStorage.getItem("sartec_onboarding_dblclick_v2")) {
@@ -16573,6 +16742,18 @@ function orgPrintList() { orgGenerateOrgFile(); }
     <h3 class="attendant-picker-title">Quem está atendendo agora?</h3>
     <div class="attendant-picker-grid" id="attendant-picker-grid"></div>
   </div>
+</div>
+
+<!-- ══════ MENU DO AVATAR (mobile) — identidade / Trocar perfil / Ajuda / Sair ══════ -->
+<div id="mob-attendant-menu-overlay" class="mam-overlay" onclick="closeMobAttendantMenu()"></div>
+<div id="mob-attendant-menu" class="mam-menu" role="menu" aria-label="Menu do atendente">
+  <div class="mam-header">
+    <span class="mam-avatar" id="mam-avatar"></span>
+    <span class="mam-name" id="mam-name"></span>
+  </div>
+  <button class="mam-item" role="menuitem" onclick="closeMobAttendantMenu();openAttendantPicker();">Trocar perfil</button>
+  <button class="mam-item" role="menuitem" onclick="closeMobAttendantMenu();openMobileHelp();">Ajuda</button>
+  <button class="mam-item mam-item-danger" role="menuitem" onclick="closeMobAttendantMenu();logout();">Sair</button>
 </div>
 
 <!-- ══════ MODAL PF/PJ ══════ -->
