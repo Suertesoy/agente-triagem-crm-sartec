@@ -2910,12 +2910,13 @@
       50%      { box-shadow: 0 0 0 7px rgba(211,51,51,0); }
     }
 
-    /* ── Ação principal dinâmica: MIC quando o texto está vazio, ENVIAR quando
-       há conteúdo — nunca os dois ao mesmo tempo (display:none remove do fluxo
-       e da árvore de acessibilidade). Classe .has-text é alternada em
-       updateComposerSendState(), chamada de dentro de autoResize() — único
-       ponto por onde o valor do textarea muda (digitação, paste, emoji,
-       mensagem rápida, envio, limpeza). ── */
+    /* ── Ação principal dinâmica: MIC quando não há texto nem mídia pendente,
+       ENVIAR quando há texto OU mídia (PDF/imagem/fila) OU envio em andamento
+       — nunca os dois ao mesmo tempo (display:none remove do fluxo e da
+       árvore de acessibilidade). Classe .has-text é alternada em
+       updateComposerSendState(), chamada de autoResize() (digitação, paste,
+       emoji, mensagem rápida, limpeza) e também de renderImageQueue/
+       renderDocQueue/sendMessage sempre que a mídia pendente muda. ── */
     .composer-main .btn-send { display: none; }
     .composer-row.has-text .composer-main .btn-mic { display: none; }
     .composer-row.has-text .composer-main .btn-send { display: inline-block; }
@@ -11586,7 +11587,12 @@ function renderImageQueue(prefix) {
   if (!bar) return;
   const imgs = pendingImages[prefix] || [];
   bar.innerHTML = "";
-  if (!imgs.length) { bar.classList.remove("visible"); updateMediaButtonsState(prefix); return; }
+  if (!imgs.length) {
+    bar.classList.remove("visible");
+    updateMediaButtonsState(prefix);
+    updateComposerSendState(prefix);
+    return;
+  }
   bar.classList.add("visible");
   imgs.forEach((item) => {
     const wrap = document.createElement("div");
@@ -11611,6 +11617,7 @@ function renderImageQueue(prefix) {
   cnt.textContent = imgs.length === 1 ? "1 foto selecionada" : `${imgs.length} fotos selecionadas`;
   bar.appendChild(cnt);
   updateMediaButtonsState(prefix);
+  updateComposerSendState(prefix);
 }
 
 // ── Seleção de imagem/arquivo ─────────────────────────────────────────────────
@@ -11792,6 +11799,7 @@ async function sendMessage(prefix) {
     if (btn) btn.disabled = false;
     if (input) input.focus();
     updateMediaButtonsState(prefix);
+    updateComposerSendState(prefix);
   }
 }
 
@@ -12038,6 +12046,7 @@ function renderDocQueue(prefix) {
     bar.classList.remove("visible");
     bar.innerHTML = "";
     updateMediaButtonsState(prefix);
+    updateComposerSendState(prefix);
     return;
   }
 
@@ -12081,6 +12090,7 @@ function renderDocQueue(prefix) {
   bar.appendChild(cnt);
 
   updateMediaButtonsState(prefix);
+  updateComposerSendState(prefix);
 }
 
 // ── Envio sequencial de documentos (um por request) ──────────────────────────
@@ -12219,15 +12229,30 @@ function autoResize(el) {
   updateComposerSendState(el);
 }
 
-// Alterna a ação principal do composer entre MIC (campo vazio) e ENVIAR
-// (com conteúdo) — único ponto de chamada é autoResize(), acionado em todo
-// lugar que muda o valor do textarea: digitação, paste, emoji, mensagem
-// rápida e a limpeza após enviar (ver sendMessage). Nunca os dois visíveis
-// ao mesmo tempo — a troca é puramente CSS (.has-text), ver regras de
-// .composer-main .btn-mic/.btn-send.
-function updateComposerSendState(el) {
-  const row = el.closest(".composer-row");
-  if (row) row.classList.toggle("has-text", !!el.value.trim());
+// Alterna a ação principal do composer entre MIC (campo vazio e sem mídia
+// pendente) e ENVIAR (texto digitado, OU qualquer mídia pendente — PDF,
+// imagem única ou fila de imagens —, OU envio em andamento). Chamado de
+// autoResize() (digitação, paste, emoji, mensagem rápida, limpeza do texto)
+// e também de todo ponto que muda a mídia pendente sem tocar no textarea
+// (renderImageQueue, renderDocQueue, fim do envio em sendMessage) — antes só
+// considerava o texto, então anexar um PDF/imagem com o campo vazio escondia
+// o Enviar (mic ficava no lugar) mesmo com arquivo pronto para envio. Nunca
+// os dois visíveis ao mesmo tempo — a troca é puramente CSS (.has-text), ver
+// regras de .composer-main .btn-mic/.btn-send.
+function updateComposerSendState(target) {
+  const prefix = typeof target === "string"
+    ? target
+    : target?.id?.replace(/-msg-input$/, "");
+  if (!prefix) return;
+  const input = document.getElementById(`${prefix}-msg-input`);
+  const row   = input?.closest(".composer-row");
+  if (!input || !row) return;
+  const hasContent = !!input.value.trim()
+    || !!pendingMedia[prefix]
+    || (pendingImages[prefix]?.length > 0)
+    || (pendingDocuments[prefix]?.length > 0)
+    || !!_isSending[prefix];
+  row.classList.toggle("has-text", hasContent);
 }
 
 // ╔══════════════════════════════════════════════════════════════╗
